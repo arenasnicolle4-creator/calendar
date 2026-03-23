@@ -27,7 +27,8 @@ export async function POST(req: Request) {
 export async function GET() {
   try {
     const results = await syncAllAccounts()
-    const totalImported = results.reduce((sum, r) => sum + (r.imported || 0), 0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const totalImported = results.reduce((sum, r: any) => sum + (r.imported || 0), 0)
     return NextResponse.json({ ok: true, totalImported, accounts: results })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
