@@ -96,8 +96,17 @@ const PROPERTY_SHORT_NAMES: Record<string, string> = {
 
 function getShortName(label: string): string {
   if (PROPERTY_SHORT_NAMES[label]) return PROPERTY_SHORT_NAMES[label]
-  // For addresses, use as-is (they're already short enough)
-  return label.split('|')[0].split('•')[0].trim()
+  // Strip "Subject: New Cleaning project available at " prefix if present
+  let clean = label
+    .replace(/^Subject:\s*/i, '')
+    .replace(/^New Cleaning project available at\s*/i, '')
+    .replace(/^Fwd?:\s*/i, '')
+  // For addresses, use just the street portion before the city
+  const commaIdx = clean.indexOf(',')
+  if (commaIdx > -1 && clean.includes('Anchorage')) {
+    clean = clean.substring(0, commaIdx).trim()
+  }
+  return clean.split('|')[0].split('•')[0].trim()
 }
 
 export function jobFromParsed(parsed: ParsedJob): object | null {
@@ -107,15 +116,22 @@ export function jobFromParsed(parsed: ParsedJob): object | null {
   const endTime = parsed.endTime ? new Date(parsed.endTime) : new Date(startTime.getTime() + 3 * 3600000)
 
   const address = parsed.address
-  // Use address as property label so all jobs at same address get same color
-  const propertyLabel = address.split(',')[0].trim()
-  const displayName = getShortName(propertyLabel)
+  // Clean up address — strip any "Subject:" or forwarding artifacts
+  const cleanAddress = address
+    .replace(/^Subject:\s*/i, '')
+    .replace(/^New Cleaning project available at\s*/i, '')
+    .replace(/^Fwd?:\s*/i, '')
+    .trim()
+  // Use street portion as property label (consistent across all jobs at same address)
+  const streetOnly = cleanAddress.split(',')[0].trim()
+  const propertyLabel = streetOnly
+  const displayName = getShortName(streetOnly)
 
   return {
     platform: 'turno',
     displayName,
     customerName: parsed.hostName || 'Unknown Host',
-    address,
+    address: cleanAddress,
     propertyLabel,
     checkoutTime: startTime,
     checkinTime: endTime,
