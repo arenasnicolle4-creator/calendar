@@ -2,61 +2,34 @@
 // app/dashboard/page.tsx
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 interface Job {
-  id: string
-  platform: string
-  displayName: string
-  customerName: string | null
-  address: string
-  propertyLabel: string
-  checkoutTime: string
-  checkinTime: string | null
-  nextGuests: string | null
-  nextGuestCount: number | null
-  sqft: number | null
-  beds: number | null
-  baths: number | null
-  worth: number | null
-  notes: string | null
-  cleanerIds: string
-  duties: string
+  id: string; platform: string; displayName: string; customerName: string | null
+  address: string; propertyLabel: string; checkoutTime: string; checkinTime: string | null
+  nextGuests: string | null; nextGuestCount: number | null; sqft: number | null
+  beds: number | null; baths: number | null; worth: number | null; notes: string | null
+  cleanerIds: string; duties: string
+}
+interface Cleaner { id: string; name: string; color: string }
+interface GmailAccount { id: string; email: string; lastSynced: string | null }
+
+// ── COLOR PALETTE for property assignment ─────────────────────────────────────
+const COLOR_PALETTE = [
+  '#0e7490','#0891b2','#06b6d4','#0d9488','#059669','#65a30d',
+  '#ca8a04','#ea580c','#dc2626','#e11d48','#9333ea','#7c3aed',
+  '#2563eb','#1d4ed8','#0369a1','#047857','#b45309','#c2410c',
+]
+
+const PLAT_COLORS: Record<string, {bg:string;text:string;border:string;dot:string}> = {
+  airbnb:   {bg:'#fce7eb',text:'#be123c',border:'#fbcfe8',dot:'#e11d48'},
+  jobber:   {bg:'#e0f2fe',text:'#0369a1',border:'#bae6fd',dot:'#0891b2'},
+  turno:    {bg:'#ede9fe',text:'#6d28d9',border:'#ddd6fe',dot:'#7c3aed'},
+  hostaway: {bg:'#fff7ed',text:'#c2410c',border:'#fed7aa',dot:'#ea580c'},
 }
 
-interface Cleaner {
-  id: string
-  name: string
-  color: string
-}
-
-interface GmailAccount {
-  id: string
-  email: string
-  lastSynced: string | null
-}
-
-// ── COLORS ────────────────────────────────────────────────────────────────────
-const PROP_COLORS = ['#e07b5a','#5a8fd4','#6dbf82','#c97fd4','#d4a843','#5abfbf','#d46b8a','#7a9e5a','#a07ad4','#d47a43','#5a9ed4','#bf6d6d']
-const propColorMap: Record<string, string> = {}
-let propColorIdx = 0
-function getPropColor(name: string) {
-  if (!propColorMap[name]) propColorMap[name] = PROP_COLORS[propColorIdx++ % PROP_COLORS.length]
-  return propColorMap[name]
-}
-
-const PLAT_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-  airbnb:  { bg: '#ff385c22', text: '#ff6b7a', border: '#ff385c44', dot: '#ff385c' },
-  jobber:  { bg: '#00c3ff22', text: '#5dd5ff', border: '#00c3ff44', dot: '#00c3ff' },
-  turno:   { bg: '#a78bfa22', text: '#a78bfa', border: '#a78bfa44', dot: '#a78bfa' },
-  hostaway:{ bg: '#d9770622', text: '#fb923c', border: '#d9770644', dot: '#fb923c' },
-}
-function platStyle(p: string) {
-  const c = PLAT_COLORS[p] || PLAT_COLORS.turno
-  return { background: c.bg, color: c.text, border: `1px solid ${c.border}` }
-}
-
-const PROPERTY_SHORT_NAMES: Record<string, string> = {
+const PROPERTY_SHORT_NAMES: Record<string,string> = {
   'WildAboutAnchorage | HotTub | Patio | ChefsKitchen': 'WildAboutAnchorage',
   'Meridian Suite at North Star Lodge • HotTub • View': 'Meridian Suite',
   'North Star Lodge - TOP TWO UNITS': 'North Star Lodge\nTop Two Units',
@@ -64,295 +37,185 @@ const PROPERTY_SHORT_NAMES: Record<string, string> = {
   'Polaris Suite at North Star Lodge • Hot Tub • View': 'Polaris Suite',
 }
 
-function shortName(propertyLabel: string): string {
-  if (PROPERTY_SHORT_NAMES[propertyLabel]) return PROPERTY_SHORT_NAMES[propertyLabel]
-  // Fallback: strip everything after | or • and trim
-  return propertyLabel.split('|')[0].split('•')[0].trim()
+function shortName(label: string) {
+  if (PROPERTY_SHORT_NAMES[label]) return PROPERTY_SHORT_NAMES[label]
+  return label.split('|')[0].split('•')[0].trim()
 }
 
-const MAX_VISIBLE_JOBS = 2
+// Per-property color storage (persisted to localStorage)
+function loadColorMap(): Record<string,string> {
+  if (typeof window === 'undefined') return {}
+  try { return JSON.parse(localStorage.getItem('propColors') || '{}') } catch { return {} }
+}
+function saveColorMap(map: Record<string,string>) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('propColors', JSON.stringify(map))
+}
+
+let _colorMap: Record<string,string> = {}
+let _colorIdx = 0
+function getPropColor(label: string, colorMap: Record<string,string>): string {
+  if (colorMap[label]) return colorMap[label]
+  const color = COLOR_PALETTE[_colorIdx++ % COLOR_PALETTE.length]
+  return color
+}
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
-function fmt(d: string | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-function fmtDate(d: string | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-}
-function fmtRelative(d: string | null) {
+function fmt(d: string|null) { return d ? new Date(d).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—' }
+function fmtD(d: string|null) { return d ? new Date(d).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : '—' }
+function fmtRel(d: string|null) {
   if (!d) return 'Never'
-  const diff = Date.now() - new Date(d).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'Just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
+  const m = Math.floor((Date.now()-new Date(d).getTime())/60000)
+  if (m<1) return 'Just now'; if (m<60) return `${m}m ago`
+  const h=Math.floor(m/60); if (h<24) return `${h}h ago`
+  return `${Math.floor(h/24)}d ago`
 }
-function jobCleanerIds(job: Job): string[] {
-  try { return JSON.parse(job.cleanerIds) } catch { return [] }
-}
-function jobDuties(job: Job): string[] {
-  try { return JSON.parse(job.duties) } catch { return [] }
-}
-function sameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
-function getWeekStart(d: Date) {
-  const r = new Date(d); r.setDate(r.getDate() - r.getDay()); r.setHours(0,0,0,0); return r
-}
+function jobCleanerIds(j: Job): string[] { try { return JSON.parse(j.cleanerIds) } catch { return [] } }
+function jobDuties(j: Job): string[] { try { return JSON.parse(j.duties) } catch { return [] } }
+function sameDay(a: Date, b: Date) { return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate() }
+function getWeekStart(d: Date) { const r=new Date(d); r.setDate(r.getDate()-r.getDay()); r.setHours(0,0,0,0); return r }
+const MAX_VISIBLE = 2
 
-// ── MAIN COMPONENT ────────────────────────────────────────────────────────────
+// ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const router = useRouter()
   const [jobs, setJobs] = useState<Job[]>([])
   const [cleaners, setCleaners] = useState<Cleaner[]>([])
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccount[]>([])
-  const [view, setView] = useState<'day' | 'week' | 'month'>('month')
+  const [view, setView] = useState<'day'|'week'|'month'>('month')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [activePlatforms, setActivePlatforms] = useState(new Set(['airbnb','jobber','turno','hostaway']))
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  const [selectedJob, setSelectedJob] = useState<Job|null>(null)
   const [showGmailPanel, setShowGmailPanel] = useState(false)
-  const [syncing, setSyncing] = useState<string | null>(null)
-  const [syncMsg, setSyncMsg] = useState<string | null>(null)
-  const [dutyChecks, setDutyChecks] = useState<Record<number, boolean>>({})
+  const [showColorPanel, setShowColorPanel] = useState(false)
+  const [syncing, setSyncing] = useState<string|null>(null)
+  const [syncMsg, setSyncMsg] = useState<string|null>(null)
+  const [dutyChecks, setDutyChecks] = useState<Record<number,boolean>>({})
   const [editingLabel, setEditingLabel] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
-  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({})
+  const [expandedDays, setExpandedDays] = useState<Record<string,boolean>>({})
+  const [colorMap, setColorMap] = useState<Record<string,string>>({})
+  const today = new Date()
+  const HS=7, HE=21, HOURS=HE-HS
 
-  // Check URL params on load
   useEffect(() => {
+    setColorMap(loadColorMap())
     const params = new URLSearchParams(window.location.search)
     const connected = params.get('connected')
     const error = params.get('error')
-    if (connected) {
-      setSyncMsg(`✓ Connected ${connected}`)
-      window.history.replaceState({}, '', '/dashboard')
-      loadGmailAccounts()
-      // Auto-sync new account
-      setTimeout(() => syncAll(), 1000)
-    }
-    if (error) {
-      setSyncMsg(`Error: ${error.replace(/_/g, ' ')}`)
-      window.history.replaceState({}, '', '/dashboard')
-    }
+    if (connected) { setSyncMsg(`✓ Connected ${connected}`); window.history.replaceState({},'','/dashboard'); loadGmailAccounts(); setTimeout(()=>syncAll(),1000) }
+    if (error) { setSyncMsg(`Error: ${error.replace(/_/g,' ')}`); window.history.replaceState({},'','/dashboard') }
   }, [])
 
-  const loadJobs = useCallback(async () => {
-    const res = await fetch('/api/jobs')
-    if (res.ok) setJobs(await res.json())
-  }, [])
+  const loadJobs = useCallback(async () => { const r=await fetch('/api/jobs'); if(r.ok) setJobs(await r.json()) }, [])
+  const loadCleaners = useCallback(async () => { const r=await fetch('/api/cleaners'); if(r.ok) setCleaners(await r.json()) }, [])
+  const loadGmailAccounts = useCallback(async () => { const r=await fetch('/api/gmail/accounts'); if(r.ok) setGmailAccounts(await r.json()) }, [])
 
-  const loadCleaners = useCallback(async () => {
-    const res = await fetch('/api/cleaners')
-    if (res.ok) setCleaners(await res.json())
-  }, [])
+  useEffect(() => { loadJobs(); loadCleaners(); loadGmailAccounts() }, [loadJobs,loadCleaners,loadGmailAccounts])
+  useEffect(() => { const t=setInterval(()=>syncAll(),24*60*60*1000); return ()=>clearInterval(t) }, [])
 
-  const loadGmailAccounts = useCallback(async () => {
-    const res = await fetch('/api/gmail/accounts')
-    if (res.ok) setGmailAccounts(await res.json())
-  }, [])
-
-  useEffect(() => {
-    loadJobs()
-    loadCleaners()
-    loadGmailAccounts()
-  }, [loadJobs, loadCleaners, loadGmailAccounts])
-
-  // Auto-sync every 10 minutes
-  useEffect(() => {
-    const interval = setInterval(() => syncAll(), 10 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  async function connectGmail() {
-    const res = await fetch('/api/gmail/accounts', { method: 'POST' })
-    const { url } = await res.json()
-    window.location.href = url
+  function assignColor(label: string, color: string) {
+    const next = { ...colorMap, [label]: color }
+    setColorMap(next); saveColorMap(next)
   }
 
-  async function disconnectGmail(id: string) {
-    await fetch(`/api/gmail/accounts/${id}`, { method: 'DELETE' })
-    loadGmailAccounts()
-  }
-
+  async function connectGmail() { const r=await fetch('/api/gmail/accounts',{method:'POST'}); const {url}=await r.json(); window.location.href=url }
+  async function disconnectGmail(id: string) { await fetch(`/api/gmail/accounts/${id}`,{method:'DELETE'}); loadGmailAccounts() }
   async function syncAccount(id: string, email: string) {
-    setSyncing(id)
-    setSyncMsg(null)
-    try {
-      const res = await fetch(`/api/gmail/sync?id=${id}`, { method: 'POST' })
-      const data = await res.json()
-      setSyncMsg(`✓ Synced ${email} — ${data.imported} new job(s) found`)
-      loadJobs()
-      loadGmailAccounts()
-    } catch {
-      setSyncMsg(`Error syncing ${email}`)
-    }
+    setSyncing(id); setSyncMsg(null)
+    try { const r=await fetch(`/api/gmail/sync?id=${id}`,{method:'POST'}); const d=await r.json(); setSyncMsg(`✓ Synced ${email} — ${d.imported} new job(s)`); loadJobs(); loadGmailAccounts() }
+    catch { setSyncMsg(`Error syncing ${email}`) }
     setSyncing(null)
   }
-
   async function syncAll() {
-    setSyncing('all')
-    setSyncMsg(null)
-    try {
-      const res = await fetch('/api/gmail/sync', { method: 'POST' })
-      const data = await res.json()
-      const total = Array.isArray(data) ? data.reduce((s: number, r: { imported?: number }) => s + (r.imported || 0), 0) : 0
-      setSyncMsg(total > 0 ? `✓ Synced all accounts — ${total} new job(s)` : '✓ All accounts synced — no new jobs')
-      loadJobs()
-      loadGmailAccounts()
-    } catch {
-      setSyncMsg('Sync error')
-    }
-    setSyncing(null)
-    setTimeout(() => setSyncMsg(null), 5000)
+    setSyncing('all'); setSyncMsg(null)
+    try { const r=await fetch('/api/gmail/sync',{method:'POST'}); const d=await r.json(); const total=Array.isArray(d)?d.reduce((s:number,x:any)=>s+(x.imported||0),0):0; setSyncMsg(total>0?`✓ ${total} new job(s) synced`:'✓ All up to date'); loadJobs(); loadGmailAccounts() }
+    catch { setSyncMsg('Sync error') }
+    setSyncing(null); setTimeout(()=>setSyncMsg(null),5000)
   }
-
   async function updateJob(id: string, data: Partial<Job>) {
-    await fetch(`/api/jobs/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    loadJobs()
-    if (selectedJob?.id === id) setSelectedJob(prev => prev ? { ...prev, ...data } : null)
+    await fetch(`/api/jobs/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    loadJobs(); if(selectedJob?.id===id) setSelectedJob(prev=>prev?{...prev,...data}:null)
   }
+  async function deleteJob(id: string) { await fetch(`/api/jobs/${id}`,{method:'DELETE'}); setSelectedJob(null); loadJobs() }
+  async function handleLogout() { await fetch('/api/auth/login',{method:'DELETE'}); router.push('/login') }
 
-  async function deleteJob(id: string) {
-    await fetch(`/api/jobs/${id}`, { method: 'DELETE' })
-    setSelectedJob(null)
-    loadJobs()
-  }
+  const visibleJobs = jobs.filter(j=>activePlatforms.has(j.platform))
+  function jobsOnDay(date: Date) { return visibleJobs.filter(j=>sameDay(new Date(j.checkoutTime),date)) }
+  function dayKey(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` }
 
-  // ── FILTERED JOBS ──────────────────────────────────────────────────────────
-  const visibleJobs = jobs.filter(j => activePlatforms.has(j.platform))
-
-  function jobsOnDay(date: Date) {
-    return visibleJobs.filter(j => sameDay(new Date(j.checkoutTime), date))
-  }
-
-  // ── NAVIGATION ─────────────────────────────────────────────────────────────
   function navigate(dir: number) {
-    setCurrentDate(prev => {
-      const d = new Date(prev)
-      if (view === 'month') return new Date(d.getFullYear(), d.getMonth() + dir, 1)
-      if (view === 'week') { d.setDate(d.getDate() + dir * 7); return d }
-      d.setDate(d.getDate() + dir); return d
+    setCurrentDate(prev=>{
+      const d=new Date(prev)
+      if(view==='month') return new Date(d.getFullYear(),d.getMonth()+dir,1)
+      if(view==='week'){d.setDate(d.getDate()+dir*7);return d}
+      d.setDate(d.getDate()+dir);return d
     })
   }
 
   function periodLabel() {
-    if (view === 'month') return currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    if (view === 'week') {
-      const ws = getWeekStart(currentDate)
-      const we = new Date(ws); we.setDate(we.getDate() + 6)
-      return `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-    }
-    return currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    if(view==='month') return currentDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})
+    if(view==='week'){const ws=getWeekStart(currentDate),we=new Date(ws);we.setDate(we.getDate()+6);return `${ws.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${we.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`}
+    return currentDate.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})
   }
 
-  function togglePlatform(p: string) {
-    setActivePlatforms(prev => {
-      const next = new Set(prev)
-      next.has(p) ? next.delete(p) : next.add(p)
-      return next
-    })
-  }
+  function jobColor(j: Job) { return colorMap[j.propertyLabel] || getPropColor(j.propertyLabel, colorMap) }
 
-  // ── CALENDAR RENDERS ───────────────────────────────────────────────────────
-  const today = new Date()
-  const HS = 7, HE = 21, HOURS = HE - HS
-
-  function JobChip({ job }: { job: Job }) {
-    const c = getPropColor(job.propertyLabel)
-    return (
-      <div
-        onClick={() => { setSelectedJob(job); setDutyChecks({}) }}
-        style={{ background: `${c}22`, color: c, border: `1px solid ${c}44` }}
-        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer mb-0.5 overflow-hidden hover:brightness-125 transition-all"
-      >
-        <span className="truncate flex-1">{job.displayName}</span>
-        <span className="opacity-70 whitespace-nowrap shrink-0">{fmt(job.checkoutTime)}</span>
-      </div>
-    )
-  }
-
+  // ── MONTH VIEW ───────────────────────────────────────────────────────────────
   function MonthView() {
-    const year = currentDate.getFullYear(), month = currentDate.getMonth()
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const startDow = firstDay.getDay()
-    const todayStr = today.toDateString()
-    const days: JSX.Element[] = []
+    const yr=currentDate.getFullYear(),mo=currentDate.getMonth()
+    const first=new Date(yr,mo,1),last=new Date(yr,mo+1,0),dow=first.getDay(),ts=today.toDateString()
+    const days: React.ReactElement[] = []
 
-    function dayKey(date: Date) { return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}` }
-    function toggleDay(dk: string, e: React.MouseEvent) {
-      e.stopPropagation()
-      setExpandedDays(prev => ({ ...prev, [dk]: !prev[dk] }))
+    for(let i=0;i<dow;i++){
+      const d=new Date(yr,mo,-dow+i+1)
+      days.push(<div key={`pre-${i}`} style={{height:130,background:'var(--surface)',opacity:0.5,padding:'6px 7px'}}><div style={{fontSize:11,color:'var(--text-dim)',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center'}}>{d.getDate()}</div></div>)
     }
 
-    // Leading blanks
-    for (let i = 0; i < startDow; i++) {
-      const d = new Date(year, month, -startDow + i + 1)
-      days.push(
-        <div key={`pre-${i}`} className="bg-[#1a1a1a] opacity-40" style={{ height: 130 }}>
-          <div className="text-[11px] font-semibold text-[#444] w-5 h-5 flex items-center justify-center p-1.5 pt-1.5">{d.getDate()}</div>
-        </div>
-      )
-    }
-
-    for (let day = 1; day <= lastDay.getDate(); day++) {
-      const cellDate = new Date(year, month, day)
-      const isToday = cellDate.toDateString() === todayStr
-      const dayJobs = jobsOnDay(cellDate)
-      const dk = dayKey(cellDate)
-      const isExpanded = !!expandedDays[dk]
-      const showAll = isExpanded || dayJobs.length <= MAX_VISIBLE_JOBS
-      const visibleJobs2 = showAll ? dayJobs : dayJobs.slice(0, MAX_VISIBLE_JOBS)
-      const hiddenCount = showAll ? 0 : dayJobs.length - MAX_VISIBLE_JOBS
+    for(let day=1;day<=last.getDate();day++){
+      const cd=new Date(yr,mo,day),isT=cd.toDateString()===ts,dk=dayKey(cd),isExp=!!expandedDays[dk]
+      const dayJobs=jobsOnDay(cd),showAll=isExp||dayJobs.length<=MAX_VISIBLE
+      const visible=showAll?dayJobs:dayJobs.slice(0,MAX_VISIBLE),hidden=showAll?0:dayJobs.length-MAX_VISIBLE
 
       days.push(
-        <div
-          key={day}
-          className={`flex flex-col overflow-hidden transition-colors p-1.5 ${isToday ? 'bg-[#1f1c17]' : 'bg-[#1a1a1a] hover:bg-[#222]'} ${isExpanded ? 'z-10 shadow-2xl' : ''}`}
-          style={{ height: isExpanded ? 'auto' : 130, minHeight: 130, position: isExpanded ? 'relative' : undefined }}
-        >
-          <div className={`text-[11px] font-semibold w-5 h-5 flex items-center justify-center mb-1 shrink-0 ${isToday ? 'bg-[#e8d5a3] text-[#1a1500] rounded-full' : 'text-[#888]'}`}>
-            {day}
-          </div>
-          <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
-            {visibleJobs2.map(j => {
-              const c = getPropColor(j.propertyLabel)
-              const name = shortName(j.propertyLabel)
-              return (
-                <div
-                  key={j.id}
-                  onClick={() => { setSelectedJob(j); setDutyChecks({}) }}
-                  style={{ background: `${c}22`, color: c, border: `1px solid ${c}44` }}
-                  className="px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:brightness-125 transition-all shrink-0 overflow-hidden"
-                  title={shortName(j.propertyLabel)}
-                >
-                  <span className="opacity-70 mr-1 text-[9px]">{fmt(j.checkoutTime)}</span>
-                  <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' } as React.CSSProperties}>
-                    {name}
-                  </span>
+        <div key={day} style={{
+          height:isExp?'auto':130,minHeight:130,
+          background:isT?'#e8f7fb':'var(--surface)',
+          padding:'6px 7px',display:'flex',flexDirection:'column',
+          boxShadow:isT?'inset 0 0 0 1.5px var(--cyan-mid)':undefined,
+          position:isExp?'relative':undefined,zIndex:isExp?10:undefined,
+          transition:'background 0.1s',cursor:'default'
+        }}>
+          <div style={{
+            fontSize:11,fontWeight:600,width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',
+            borderRadius:'50%',marginBottom:4,flexShrink:0,
+            background:isT?'var(--cyan-dark)':'transparent',
+            color:isT?'#fff':'var(--text-muted)'
+          }}>{day}</div>
+          <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden'}}>
+            {visible.map(j=>{
+              const c=jobColor(j),name=shortName(j.propertyLabel)
+              return(
+                <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
+                  style={{padding:'2px 6px 3px',borderRadius:5,cursor:'pointer',fontSize:10,fontWeight:500,
+                    background:`${c}18`,color:c,border:`1px solid ${c}30`,flexShrink:0,lineHeight:1.3,
+                    display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',wordBreak:'break-word'
+                  } as React.CSSProperties}>
+                  <span style={{fontSize:9,opacity:0.7,marginRight:3}}>{fmt(j.checkoutTime)}</span>{name}
                 </div>
               )
             })}
-            {!showAll && hiddenCount > 0 && (
-              <button
-                onClick={(e) => toggleDay(dk, e)}
-                className="mt-0.5 py-0.5 px-1.5 rounded text-[10px] font-semibold bg-[#2c2c2c] text-[#888] border border-[#333] hover:text-[#f0ede8] hover:bg-[#333] transition-colors text-center shrink-0"
-              >
-                ▾ {hiddenCount} more
+            {!showAll&&hidden>0&&(
+              <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:true}))}}
+                style={{marginTop:2,padding:'1px 6px',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer',
+                  background:'var(--surface2)',color:'var(--text-muted)',border:'1px solid var(--border)',flexShrink:0}}>
+                ▾ {hidden} more
               </button>
             )}
-            {isExpanded && dayJobs.length > MAX_VISIBLE_JOBS && (
-              <button
-                onClick={(e) => toggleDay(dk, e)}
-                className="mt-0.5 py-0.5 px-1.5 rounded text-[10px] font-semibold bg-[#2c2c2c] text-[#888] border border-[#333] hover:text-[#f0ede8] hover:bg-[#333] transition-colors text-center shrink-0"
-              >
+            {isExp&&dayJobs.length>MAX_VISIBLE&&(
+              <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:false}))}}
+                style={{marginTop:2,padding:'1px 6px',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer',
+                  background:'var(--cyan-pale)',color:'var(--cyan-dark)',border:'1px solid var(--border)',flexShrink:0}}>
                 ▴ show less
               </button>
             )}
@@ -361,75 +224,52 @@ export default function Dashboard() {
       )
     }
 
-    // Trailing blanks
-    const trailing = (startDow + lastDay.getDate()) % 7
-    if (trailing) for (let i = 1; i <= 7 - trailing; i++) {
-      days.push(
-        <div key={`post-${i}`} className="bg-[#1a1a1a] opacity-40" style={{ height: 130 }}>
-          <div className="text-[11px] font-semibold text-[#444] w-5 h-5 flex items-center justify-center p-1.5 pt-1.5">{i}</div>
-        </div>
-      )
-    }
+    const tr=(dow+last.getDate())%7
+    if(tr) for(let i=1;i<=7-tr;i++) days.push(<div key={`post-${i}`} style={{height:130,background:'var(--surface)',opacity:0.5,padding:'6px 7px'}}><div style={{fontSize:11,color:'var(--text-dim)',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center'}}>{i}</div></div>)
 
-    return (
-      <div className="grid grid-cols-7 gap-px bg-[#2e2e2e] rounded-xl overflow-visible">
-        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
-          <div key={d} className="bg-[#1a1a1a] py-2 text-center text-[10px] font-semibold uppercase tracking-widest text-[#444]">{d}</div>
+    return(
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:'var(--border)',borderRadius:14,overflow:'visible',boxShadow:'var(--shadow-sm)'}}>
+        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>(
+          <div key={d} style={{background:'var(--surface2)',padding:'8px 0',textAlign:'center',fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:1,color:'var(--text-dim)'}}>{d}</div>
         ))}
         {days}
       </div>
     )
   }
 
+  // ── WEEK VIEW ────────────────────────────────────────────────────────────────
   function WeekView() {
-    const ws = getWeekStart(currentDate)
-    const todayStr = today.toDateString()
-    return (
-      <div className="grid border border-[#2e2e2e] rounded-xl overflow-hidden" style={{ gridTemplateColumns: '54px repeat(7,1fr)' }}>
-        <div className="bg-[#1a1a1a] border-b border-[#2e2e2e]" />
-        {Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(ws); d.setDate(ws.getDate() + i)
-          const isT = d.toDateString() === todayStr
-          return (
-            <div key={i} className="bg-[#1a1a1a] p-2 text-center border-b border-l border-[#2e2e2e]">
-              <div className="text-[9px] uppercase tracking-widest text-[#444] font-semibold">{d.toLocaleDateString('en-US',{weekday:'short'})}</div>
-              <div className={`font-serif text-xl leading-tight ${isT ? 'text-[#e8d5a3]' : 'text-[#f0ede8]'}`}>{d.getDate()}</div>
-            </div>
-          )
-        })}
-        {/* Time col */}
-        <div className="bg-[#1a1a1a] border-r border-[#2e2e2e]">
-          {Array.from({ length: HOURS }, (_, h) => {
-            const hr = HS + h
-            const label = hr === 12 ? '12 PM' : hr < 12 ? `${hr} AM` : `${hr-12} PM`
-            return <div key={h} className="h-14 flex items-start pt-1 px-1.5 text-[9px] text-[#444] border-t border-[#2e2e2e]">{label}</div>
-          })}
+    const ws=getWeekStart(currentDate),ts=today.toDateString()
+    return(
+      <div style={{display:'grid',gridTemplateColumns:'54px repeat(7,1fr)',borderRadius:14,overflow:'hidden',border:'1px solid var(--border)',boxShadow:'var(--shadow-sm)'}}>
+        <div style={{background:'var(--surface2)',borderBottom:'1px solid var(--border)'}}/>
+        {Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(ws.getDate()+i);const iT=d.toDateString()===ts;return(
+          <div key={i} style={{background:'var(--surface2)',padding:'8px 6px',textAlign:'center',borderBottom:'1px solid var(--border)',borderLeft:'1px solid var(--border)'}}>
+            <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:1,color:'var(--text-dim)',fontWeight:600}}>{d.toLocaleDateString('en-US',{weekday:'short'})}</div>
+            <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:iT?'var(--cyan-dark)':'var(--text)',lineHeight:1.1}}>{d.getDate()}</div>
+          </div>
+        )})}
+        <div style={{background:'var(--surface)',borderRight:'1px solid var(--border)'}}>
+          {Array.from({length:HOURS},(_,h)=>{const hr=HS+h;const l=hr===12?'12 PM':hr<12?`${hr} AM`:`${hr-12} PM`;return<div key={h} style={{height:56,display:'flex',alignItems:'flex-start',padding:'3px 6px 0',fontSize:9,color:'var(--text-dim)',borderTop:'1px solid var(--border-light)'}}>{l}</div>})}
         </div>
-        {Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(ws); d.setDate(ws.getDate() + i)
-          const dayJobs = jobsOnDay(d)
-          return (
-            <div key={i} className="relative border-l border-[#2e2e2e] bg-[#1a1a1a]" style={{ minHeight: HOURS * 56 }}>
-              {Array.from({ length: HOURS }, (_, h) => (
-                <div key={h} className="absolute left-0 right-0 border-t border-[#2e2e2e]" style={{ top: h * 56, height: 56 }} />
-              ))}
-              {dayJobs.map(j => {
-                const co = new Date(j.checkoutTime)
-                const ci = j.checkinTime ? new Date(j.checkinTime) : new Date(co.getTime() + 3 * 3600000)
-                const top = Math.max(0, (co.getHours() + co.getMinutes() / 60 - HS) * 56)
-                const height = Math.max(28, ((ci.getTime() - co.getTime()) / 3600000) * 56)
-                const c = getPropColor(j.propertyLabel)
-                const cl = cleaners.find(x => jobCleanerIds(j).includes(x.id))
-                return (
-                  <div
-                    key={j.id}
-                    onClick={() => { setSelectedJob(j); setDutyChecks({}) }}
-                    style={{ top, height, background: `${c}22`, color: c, border: `1px solid ${c}44` }}
-                    className="absolute left-0.5 right-0.5 rounded px-1.5 py-1 cursor-pointer hover:brightness-125 overflow-hidden z-10 transition-all"
-                  >
-                    <div className="text-[11px] font-semibold overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as React.CSSProperties}>{shortName(j.propertyLabel)}</div>
-                    <div className="text-[9px] opacity-80">{fmt(j.checkoutTime)}{j.checkinTime ? ` – ${fmt(j.checkinTime)}` : ''}</div>
-                    {cl && <div className="text-[9px] opacity-60">{cl.name}</div>}
+        {Array.from({length:7},(_,i)=>{
+          const d=new Date(ws);d.setDate(ws.getDate()+i);const dayJobs=jobsOnDay(d)
+          return(
+            <div key={i} style={{position:'relative',borderLeft:'1px solid var(--border)',background:'var(--surface)',minHeight:HOURS*56}}>
+              {Array.from({length:HOURS},(_,h)=><div key={h} style={{position:'absolute',left:0,right:0,top:h*56,borderTop:'1px solid var(--border-light)',height:56}}/>)}
+              {dayJobs.map(j=>{
+                const co=new Date(j.checkoutTime),ci=j.checkinTime?new Date(j.checkinTime):new Date(co.getTime()+3*3600000)
+                const top=Math.max(0,(co.getHours()+co.getMinutes()/60-HS)*56),ht=Math.max(32,((ci.getTime()-co.getTime())/3600000)*56)
+                const c=jobColor(j),cl=cleaners.find(x=>jobCleanerIds(j).includes(x.id))
+                return(
+                  <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
+                    style={{position:'absolute',left:3,right:3,top,height:ht,borderRadius:6,padding:'4px 7px',cursor:'pointer',
+                      background:`${c}18`,color:c,border:`1px solid ${c}30`,overflow:'hidden',zIndex:2,transition:'filter 0.1s'}}
+                    onMouseEnter={e=>(e.currentTarget.style.filter='brightness(0.9)')}
+                    onMouseLeave={e=>(e.currentTarget.style.filter='')}>
+                    <div style={{fontWeight:600,fontSize:11,whiteSpace:'pre-line',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'} as React.CSSProperties}>{shortName(j.propertyLabel)}</div>
+                    <div style={{fontSize:9,opacity:0.8}}>{fmt(j.checkoutTime)}{j.checkinTime?` – ${fmt(j.checkinTime)}`:''}</div>
+                    {cl&&<div style={{fontSize:9,opacity:0.65}}>{cl.name}</div>}
                   </div>
                 )
               })}
@@ -440,43 +280,32 @@ export default function Dashboard() {
     )
   }
 
+  // ── DAY VIEW ─────────────────────────────────────────────────────────────────
   function DayView() {
-    const dayJobs = jobsOnDay(currentDate)
-    return (
+    const dayJobs=jobsOnDay(currentDate)
+    return(
       <>
-        <div className="text-center mb-4">
-          <h2 className="font-serif text-2xl">{currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</h2>
+        <div style={{textAlign:'center',marginBottom:16}}>
+          <h2 style={{fontFamily:'Fraunces,serif',fontSize:26,fontWeight:400,color:'var(--text)'}}>{currentDate.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</h2>
         </div>
-        <div className="grid border border-[#2e2e2e] rounded-xl overflow-hidden" style={{ gridTemplateColumns: '54px 1fr' }}>
-          <div className="bg-[#1a1a1a] border-r border-[#2e2e2e]">
-            {Array.from({ length: HOURS }, (_, h) => {
-              const hr = HS + h
-              const label = hr === 12 ? '12 PM' : hr < 12 ? `${hr} AM` : `${hr-12} PM`
-              return <div key={h} className="h-14 flex items-start pt-1 px-1.5 text-[9px] text-[#444] border-t border-[#2e2e2e]">{label}</div>
-            })}
+        <div style={{display:'grid',gridTemplateColumns:'54px 1fr',border:'1px solid var(--border)',borderRadius:14,overflow:'hidden',boxShadow:'var(--shadow-sm)'}}>
+          <div style={{background:'var(--surface2)',borderRight:'1px solid var(--border)'}}>
+            {Array.from({length:HOURS},(_,h)=>{const hr=HS+h;const l=hr===12?'12 PM':hr<12?`${hr} AM`:`${hr-12} PM`;return<div key={h} style={{height:56,display:'flex',alignItems:'flex-start',padding:'3px 6px 0',fontSize:9,color:'var(--text-dim)',borderTop:'1px solid var(--border-light)'}}>{l}</div>})}
           </div>
-          <div className="relative bg-[#1a1a1a]" style={{ minHeight: HOURS * 56 }}>
-            {Array.from({ length: HOURS }, (_, h) => (
-              <div key={h} className="absolute left-0 right-0 border-t border-[#2e2e2e]" style={{ top: h * 56, height: 56 }} />
-            ))}
-            {dayJobs.map(j => {
-              const co = new Date(j.checkoutTime)
-              const ci = j.checkinTime ? new Date(j.checkinTime) : new Date(co.getTime() + 3 * 3600000)
-              const top = Math.max(0, (co.getHours() + co.getMinutes() / 60 - HS) * 56)
-              const height = Math.max(44, ((ci.getTime() - co.getTime()) / 3600000) * 56)
-              const c = getPropColor(j.propertyLabel)
-              const cl = cleaners.find(x => jobCleanerIds(j).includes(x.id))
-              return (
-                <div
-                  key={j.id}
-                  onClick={() => { setSelectedJob(j); setDutyChecks({}) }}
-                  style={{ top, height, background: `${c}22`, color: c, borderLeft: `3px solid ${c}` }}
-                  className="absolute left-2 right-2 rounded px-2.5 py-1.5 cursor-pointer hover:brightness-125 z-10 transition-all"
-                >
-                  <div className="font-semibold text-sm whitespace-pre-line">{shortName(j.propertyLabel)}</div>
-                  <div className="text-[10px] opacity-70">{j.address}</div>
-                  <div className="text-[10px] opacity-75 mt-0.5">{fmt(j.checkoutTime)}{j.checkinTime ? ` → ${fmt(j.checkinTime)}` : ''}</div>
-                  {cl && <div className="text-[10px] opacity-60">👤 {cl.name}</div>}
+          <div style={{position:'relative',background:'var(--surface)',minHeight:HOURS*56}}>
+            {Array.from({length:HOURS},(_,h)=><div key={h} style={{position:'absolute',left:0,right:0,top:h*56,borderTop:'1px solid var(--border-light)',height:56}}/>)}
+            {dayJobs.map(j=>{
+              const co=new Date(j.checkoutTime),ci=j.checkinTime?new Date(j.checkinTime):new Date(co.getTime()+3*3600000)
+              const top=Math.max(0,(co.getHours()+co.getMinutes()/60-HS)*56),ht=Math.max(44,((ci.getTime()-co.getTime())/3600000)*56)
+              const c=jobColor(j),cl=cleaners.find(x=>jobCleanerIds(j).includes(x.id))
+              return(
+                <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
+                  style={{position:'absolute',left:10,right:10,top,height:ht,borderRadius:8,padding:'8px 12px',cursor:'pointer',
+                    background:`${c}18`,color:c,borderLeft:`3px solid ${c}`,zIndex:2}}>
+                  <div style={{fontWeight:600,fontSize:14,whiteSpace:'pre-line'}}>{shortName(j.propertyLabel)}</div>
+                  <div style={{fontSize:11,opacity:0.7,marginTop:1}}>{j.address}</div>
+                  <div style={{fontSize:11,opacity:0.75,marginTop:2}}>{fmt(j.checkoutTime)}{j.checkinTime?` → ${fmt(j.checkinTime)}`:''}</div>
+                  {cl&&<div style={{fontSize:11,opacity:0.6}}>👤 {cl.name}</div>}
                 </div>
               )
             })}
@@ -486,246 +315,180 @@ export default function Dashboard() {
     )
   }
 
-  // ── JOB MODAL ──────────────────────────────────────────────────────────────
+  // ── JOB MODAL ────────────────────────────────────────────────────────────────
   function JobModal() {
-    if (!selectedJob) return null
-    const j = selectedJob
-    const c = getPropColor(j.propertyLabel)
-    const assignedCleaners = jobCleanerIds(j).map(id => cleaners.find(cl => cl.id === id)).filter(Boolean) as Cleaner[]
-    const duties = jobDuties(j)
-    const platLabel = j.platform.charAt(0).toUpperCase() + j.platform.slice(1)
+    if(!selectedJob) return null
+    const j=selectedJob,c=jobColor(j),duties=jobDuties(j)
+    const assigned=jobCleanerIds(j).map(id=>cleaners.find(cl=>cl.id===id)).filter(Boolean) as Cleaner[]
+    const platLabel=j.platform.charAt(0).toUpperCase()+j.platform.slice(1)
+    const pc=PLAT_COLORS[j.platform]||PLAT_COLORS.turno
+    const name=shortName(j.propertyLabel)
 
-    async function saveLabel() {
-      if (labelDraft.trim()) await updateJob(j.id, { displayName: labelDraft.trim(), propertyLabel: labelDraft.trim() })
-      setEditingLabel(false)
-    }
-
-    async function assignCleaner(cleanerId: string) {
-      if (!cleanerId) return
-      const ids = jobCleanerIds(j)
-      if (ids.includes(cleanerId)) return
-      await updateJob(j.id, { cleanerIds: JSON.stringify([...ids, cleanerId]) })
-    }
-
-    async function removeCleaner(cleanerId: string) {
-      const ids = jobCleanerIds(j).filter(id => id !== cleanerId)
-      await updateJob(j.id, { cleanerIds: JSON.stringify(ids) })
-    }
-
-    return (
-      <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedJob(null)}>
-        <div className="bg-[#1a1a1a] border border-[#2e2e2e] rounded-2xl w-full max-w-lg max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-
+    return(
+      <div style={{position:'fixed',inset:0,background:'rgba(10,40,50,0.4)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setSelectedJob(null)}>
+        <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:18,width:'100%',maxWidth:540,maxHeight:'88vh',overflowY:'auto',boxShadow:'var(--shadow-lg)'}} onClick={e=>e.stopPropagation()}>
           {/* Header */}
-          <div className="p-5 pb-4 border-b border-[#2e2e2e] sticky top-0 bg-[#1a1a1a] rounded-t-2xl flex justify-between items-start">
-            <div className="flex-1 min-w-0 pr-3">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2" style={platStyle(j.platform)}>
-                {platLabel}
-              </span>
-              {editingLabel ? (
-                <input
-                  autoFocus
-                  defaultValue={j.displayName}
-                  onChange={e => setLabelDraft(e.target.value)}
-                  onBlur={saveLabel}
-                  onKeyDown={e => e.key === 'Enter' && saveLabel()}
-                  className="block w-full bg-[#222] border border-[#e8d5a3] rounded-lg px-2 py-1 text-lg font-serif text-[#f0ede8] outline-none"
-                />
-              ) : (
-                <div className="font-serif text-xl leading-snug cursor-pointer group" onDoubleClick={() => { setEditingLabel(true); setLabelDraft(j.displayName) }}>
-                  {shortName(j.propertyLabel)}
-                  <span className="text-[11px] text-[#444] ml-2 group-hover:text-[#888] transition-colors">✎</span>
+          <div style={{padding:'18px 22px 14px',borderBottom:'1px solid var(--border)',position:'sticky',top:0,background:'var(--surface)',borderRadius:'18px 18px 0 0',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div style={{flex:1,minWidth:0,paddingRight:12}}>
+              <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 10px',borderRadius:20,fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:6,background:pc.bg,color:pc.text,border:`1px solid ${pc.border}`}}>{platLabel}</span>
+              {editingLabel?(
+                <input autoFocus defaultValue={name.replace(/\n/g,' ')} onChange={e=>setLabelDraft(e.target.value)}
+                  onBlur={async()=>{if(labelDraft.trim())await updateJob(j.id,{displayName:labelDraft.trim()});setEditingLabel(false)}}
+                  onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}}
+                  style={{display:'block',width:'100%',background:'var(--surface2)',border:`1.5px solid ${c}`,borderRadius:8,padding:'4px 8px',fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',outline:'none'}}/>
+              ):(
+                <div style={{fontFamily:'Fraunces,serif',fontSize:20,lineHeight:1.2,color:'var(--text)',cursor:'pointer',whiteSpace:'pre-line'}}
+                  onDoubleClick={()=>{setEditingLabel(true);setLabelDraft(name.replace(/\n/g,' '))}}>
+                  {name} <span style={{fontSize:11,opacity:0.3,fontFamily:'DM Sans,sans-serif'}}>✎</span>
                 </div>
               )}
-              <div className="text-xs text-[#888] mt-0.5">{j.customerName} · {j.address}</div>
+              <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{j.customerName} · {j.address}</div>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <button onClick={() => { if (confirm('Delete this job?')) deleteJob(j.id) }} className="w-7 h-7 border border-[#2e2e2e] rounded-lg bg-[#222] text-[#888] hover:text-[#e07b5a] flex items-center justify-center text-xs transition-colors">🗑</button>
-              <button onClick={() => setSelectedJob(null)} className="w-7 h-7 border border-[#2e2e2e] rounded-lg bg-[#222] text-[#888] hover:text-[#f0ede8] flex items-center justify-center text-sm transition-colors">✕</button>
+            <div style={{display:'flex',gap:6,flexShrink:0}}>
+              <button onClick={()=>setShowColorPanel(true)} style={{width:30,height:30,borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}} title="Change color">🎨</button>
+              <button onClick={()=>{if(confirm('Delete this job?'))deleteJob(j.id)}} style={{width:30,height:30,borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:'var(--text-muted)'}}>🗑</button>
+              <button onClick={()=>setSelectedJob(null)} style={{width:30,height:30,borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:'var(--text-muted)'}}>✕</button>
             </div>
           </div>
 
-          <div className="p-5 space-y-5">
+          <div style={{padding:'18px 22px'}}>
             {/* Schedule */}
-            <div>
-              <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Schedule</div>
-              <div className="bg-[#222] rounded-xl p-3 flex items-center">
-                <div className="flex-1">
-                  <div className="text-[9px] uppercase tracking-wider text-[#444] mb-1">Checkout / Start</div>
-                  <div className="text-sm font-semibold">{fmt(j.checkoutTime)}</div>
-                  <div className="text-[10px] text-[#888]">{fmtDate(j.checkoutTime)}</div>
-                </div>
-                <div className="text-[#444] px-3 text-base">→</div>
-                <div className="flex-1">
-                  <div className="text-[9px] uppercase tracking-wider text-[#444] mb-1">{j.platform === 'jobber' ? 'End Time' : 'Next Check-in'}</div>
-                  <div className="text-sm font-semibold">{j.checkinTime ? fmt(j.checkinTime) : '—'}</div>
-                  <div className="text-[10px] text-[#888]">{j.checkinTime ? fmtDate(j.checkinTime) : 'Not set'}</div>
-                </div>
+            <Section title="Schedule">
+              <div style={{background:'var(--surface2)',borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',border:'1px solid var(--border-light)'}}>
+                <TBI label="Checkout / Start" value={fmt(j.checkoutTime)} sub={fmtD(j.checkoutTime)}/>
+                <div style={{color:'var(--text-dim)',fontSize:16,padding:'0 10px'}}>→</div>
+                <TBI label={j.platform==='jobber'?'End Time':'Next Check-in'} value={j.checkinTime?fmt(j.checkinTime):'—'} sub={j.checkinTime?fmtD(j.checkinTime):'Not set'}/>
               </div>
-            </div>
+            </Section>
 
             {/* Next guests */}
-            {j.nextGuests && (
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Next Guests</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-[#222] rounded-xl p-3">
-                    <div className="text-[9px] uppercase tracking-wider text-[#444] mb-1">Guest Name</div>
-                    <div className="text-sm font-medium">{j.nextGuests}</div>
-                  </div>
-                  <div className="bg-[#222] rounded-xl p-3">
-                    <div className="text-[9px] uppercase tracking-wider text-[#444] mb-1">Guest Count</div>
-                    <div className="font-serif text-xl">{j.nextGuestCount ?? '—'}</div>
-                  </div>
+            {j.nextGuests&&(
+              <Section title="Next Guests">
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  <IC label="Guest Name" value={j.nextGuests}/>
+                  <IC label="Guest Count" value={String(j.nextGuestCount??'—')} large/>
                 </div>
-              </div>
+              </Section>
             )}
 
             {/* Property details */}
-            {(j.sqft || j.beds) && (
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Property Details</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {j.sqft && <div className="bg-[#222] rounded-xl p-3"><div className="text-[9px] uppercase tracking-wider text-[#444] mb-1">Sq Ft</div><div className="font-serif text-xl">{j.sqft.toLocaleString()}</div></div>}
-                  {j.beds && <div className="bg-[#222] rounded-xl p-3"><div className="text-[9px] uppercase tracking-wider text-[#444] mb-1">Beds / Baths</div><div className="font-serif text-xl">{j.beds}bd / {j.baths}ba</div></div>}
-                  {j.worth && <div className="bg-[#222] rounded-xl p-3 col-span-2"><div className="text-[9px] uppercase tracking-wider text-[#444] mb-1">Job Value</div><span className="inline-flex items-center gap-1 bg-[#1f2e1a] text-[#6dbf82] border border-[#2e4a26] rounded-lg px-2 py-1 text-sm font-semibold">💵 ${j.worth}</span></div>}
+            {(j.sqft||j.beds)&&(
+              <Section title="Property Details">
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {j.sqft&&<IC label="Sq Ft" value={j.sqft.toLocaleString()} large/>}
+                  {j.beds&&<IC label="Beds / Baths" value={`${j.beds}bd / ${j.baths}ba`} large/>}
+                  {j.worth&&<div style={{gridColumn:'1/-1',background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
+                    <div style={{fontSize:9,color:'var(--text-dim)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3}}>Job Value</div>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:4,background:'#f0fdf4',color:'#166534',border:'1px solid #bbf7d0',borderRadius:7,padding:'3px 10px',fontSize:13,fontWeight:600}}>💵 ${j.worth}</span>
+                  </div>}
                 </div>
-              </div>
+              </Section>
             )}
 
             {/* Duties */}
-            {duties.length > 0 && (
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Duties / Line Items</div>
-                <div className="bg-[#222] rounded-xl overflow-hidden">
-                  {duties.map((d, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-2 border-b border-[#2e2e2e] last:border-0 text-xs cursor-pointer hover:bg-[#2a2a2a]" onClick={() => setDutyChecks(prev => ({ ...prev, [i]: !prev[i] }))}>
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center text-[9px] shrink-0 transition-all ${dutyChecks[i] ? 'bg-[#2c2c2c] border-[#444] text-[#e8d5a3]' : 'border-[#2e2e2e]'}`}>
-                        {dutyChecks[i] ? '✓' : ''}
+            {duties.length>0&&(
+              <Section title="Duties / Line Items">
+                <div style={{background:'var(--surface2)',borderRadius:10,overflow:'hidden',border:'1px solid var(--border-light)'}}>
+                  {duties.map((d,i)=>(
+                    <div key={i} onClick={()=>setDutyChecks(p=>({...p,[i]:!p[i]}))}
+                      style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:i<duties.length-1?'1px solid var(--border-light)':'none',fontSize:12,cursor:'pointer',background:dutyChecks[i]?'var(--surface3)':'transparent'}}>
+                      <div style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${dutyChecks[i]?'var(--cyan-dark)':'var(--border)'}`,background:dutyChecks[i]?'var(--cyan-dark)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'white',flexShrink:0,transition:'all 0.1s'}}>
+                        {dutyChecks[i]&&'✓'}
                       </div>
-                      <span className={dutyChecks[i] ? 'line-through text-[#555]' : ''}>{d}</span>
+                      <span style={{textDecoration:dutyChecks[i]?'line-through':'none',color:dutyChecks[i]?'var(--text-dim)':'var(--text)'}}>{d}</span>
                     </div>
                   ))}
                 </div>
-              </div>
+              </Section>
             )}
+
+            {/* Color */}
+            <Section title="Property Color">
+              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                {COLOR_PALETTE.map(col=>(
+                  <button key={col} onClick={()=>assignColor(j.propertyLabel,col)}
+                    style={{width:24,height:24,borderRadius:6,background:col,border:colorMap[j.propertyLabel]===col?`3px solid var(--text)`:'2px solid transparent',cursor:'pointer',transition:'transform 0.1s'}}
+                    onMouseEnter={e=>(e.currentTarget.style.transform='scale(1.2)')}
+                    onMouseLeave={e=>(e.currentTarget.style.transform='')}/>
+                ))}
+              </div>
+            </Section>
 
             {/* Cleaners */}
-            <div>
-              <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Assigned Cleaners</div>
-              <div className="flex gap-2 flex-wrap mb-2">
-                {assignedCleaners.map(cl => (
-                  <span key={cl.id} style={{ background: `${cl.color}22`, color: cl.color, border: `1px solid ${cl.color}44` }} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium">
+            <Section title="Assigned Cleaners">
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                {assigned.map(cl=>(
+                  <span key={cl.id} style={{background:`${cl.color}18`,color:cl.color,border:`1px solid ${cl.color}30`,borderRadius:20,padding:'3px 10px',fontSize:11,fontWeight:500,display:'inline-flex',alignItems:'center',gap:5}}>
                     {cl.name}
-                    <span className="cursor-pointer opacity-60 hover:opacity-100" onClick={() => removeCleaner(cl.id)}>✕</span>
+                    <span onClick={async()=>{const ids=jobCleanerIds(j).filter(id=>id!==cl.id);await updateJob(j.id,{cleanerIds:JSON.stringify(ids)})}} style={{cursor:'pointer',opacity:0.5,fontSize:11}}>✕</span>
                   </span>
                 ))}
-                {assignedCleaners.length === 0 && <span className="text-xs text-[#555]">No cleaners assigned</span>}
+                {assigned.length===0&&<span style={{fontSize:12,color:'var(--text-dim)'}}>No cleaners assigned</span>}
               </div>
-              <div className="flex gap-2">
-                <select
-                  className="flex-1 bg-[#222] border border-[#2e2e2e] rounded-lg px-2.5 py-2 text-xs text-[#f0ede8] outline-none focus:border-[#c4a882]"
-                  onChange={e => { assignCleaner(e.target.value); e.target.value = '' }}
-                  defaultValue=""
-                >
-                  <option value="">Add cleaner...</option>
-                  {cleaners.filter(cl => !jobCleanerIds(j).includes(cl.id)).map(cl => (
-                    <option key={cl.id} value={cl.id}>{cl.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+              <select defaultValue="" onChange={async e=>{const id=e.target.value;if(!id)return;const ids=[...jobCleanerIds(j),id];await updateJob(j.id,{cleanerIds:JSON.stringify(ids)});e.target.value=''}}
+                style={{background:'var(--surface2)',border:'1.5px solid var(--border)',borderRadius:8,padding:'8px 12px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:12,cursor:'pointer',outline:'none',width:'100%'}}>
+                <option value="">Add cleaner...</option>
+                {cleaners.filter(cl=>!jobCleanerIds(j).includes(cl.id)).map(cl=><option key={cl.id} value={cl.id}>{cl.name}</option>)}
+              </select>
+            </Section>
 
             {/* Notes */}
-            <div>
-              <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Notes</div>
-              <textarea
-                defaultValue={j.notes || ''}
-                onBlur={e => updateJob(j.id, { notes: e.target.value })}
-                placeholder="Add notes..."
-                className="w-full bg-[#222] border border-[#2e2e2e] rounded-xl px-3 py-2.5 text-xs text-[#f0ede8] placeholder-[#444] outline-none focus:border-[#c4a882] resize-y min-h-[60px]"
-              />
-            </div>
+            <Section title="Notes">
+              <textarea defaultValue={j.notes||''} onBlur={e=>updateJob(j.id,{notes:e.target.value})} placeholder="Add notes..."
+                style={{width:'100%',background:'var(--surface2)',border:'1.5px solid var(--border)',borderRadius:8,padding:'10px 12px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:12,resize:'vertical',minHeight:65,outline:'none'}}
+                onFocus={e=>(e.target.style.borderColor='var(--cyan-dark)')} onBlurCapture={e=>(e.target.style.borderColor='var(--border)')}/>
+            </Section>
           </div>
         </div>
       </div>
     )
   }
 
-  // ── GMAIL PANEL ────────────────────────────────────────────────────────────
+  // ── GMAIL PANEL ──────────────────────────────────────────────────────────────
   function GmailPanel() {
-    return (
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setShowGmailPanel(false)}>
-        <div className="bg-[#1a1a1a] border border-[#2e2e2e] rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-          <div className="p-5 pb-4 border-b border-[#2e2e2e] flex justify-between items-start">
+    return(
+      <div style={{position:'fixed',inset:0,background:'rgba(10,40,50,0.4)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setShowGmailPanel(false)}>
+        <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:18,width:'100%',maxWidth:520,maxHeight:'85vh',overflowY:'auto',boxShadow:'var(--shadow-lg)'}} onClick={e=>e.stopPropagation()}>
+          <div style={{padding:'20px 24px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div>
-              <h2 className="font-serif text-xl">Gmail Accounts</h2>
-              <p className="text-xs text-[#888] mt-1">Connected Gmail inboxes that auto-sync Turno job emails</p>
+              <h2 style={{fontFamily:'Fraunces,serif',fontSize:20,fontWeight:400,color:'var(--text)'}}>Gmail Accounts</h2>
+              <p style={{fontSize:12,color:'var(--text-muted)',marginTop:3}}>Connected inboxes that auto-sync Turno job emails</p>
             </div>
-            <button onClick={() => setShowGmailPanel(false)} className="w-7 h-7 border border-[#2e2e2e] rounded-lg bg-[#222] text-[#888] hover:text-[#f0ede8] flex items-center justify-center text-sm">✕</button>
+            <button onClick={()=>setShowGmailPanel(false)} style={{width:28,height:28,border:'1px solid var(--border)',borderRadius:8,background:'var(--surface2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:'var(--text-muted)'}}>✕</button>
           </div>
-
-          <div className="p-5 space-y-4">
-            {syncMsg && (
-              <div className={`px-3 py-2.5 rounded-xl text-xs border ${syncMsg.startsWith('✓') ? 'bg-[#6dbf8222] text-[#6dbf82] border-[#6dbf8233]' : 'bg-[#e07b5a22] text-[#e07b5a] border-[#e07b5a33]'}`}>
-                {syncMsg}
+          <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
+            {syncMsg&&<div style={{padding:'10px 14px',borderRadius:8,fontSize:12,background:syncMsg.startsWith('✓')?'#f0fdf4':'#fef2f2',color:syncMsg.startsWith('✓')?'#166534':'#dc2626',border:`1px solid ${syncMsg.startsWith('✓')?'#bbf7d0':'#fecaca'}`}}>{syncMsg}</div>}
+            {gmailAccounts.length===0&&<div style={{background:'var(--surface2)',borderRadius:10,padding:16,textAlign:'center',fontSize:13,color:'var(--text-dim)'}}>No Gmail accounts connected yet.</div>}
+            {gmailAccounts.map(acc=>(
+              <div key={acc.id} style={{background:'var(--surface2)',borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,border:'1px solid var(--border-light)'}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>{acc.email}</div>
+                  <div style={{fontSize:10,color:'var(--text-dim)',marginTop:2}}>Last synced: {fmtRel(acc.lastSynced)}</div>
+                </div>
+                <div style={{display:'flex',gap:6,flexShrink:0}}>
+                  <button onClick={()=>syncAccount(acc.id,acc.email)} disabled={syncing===acc.id||syncing==='all'}
+                    style={{padding:'6px 12px',fontSize:11,fontWeight:600,borderRadius:7,background:'var(--cyan-pale)',color:'var(--cyan-dark)',border:'1px solid #b2e9f5',cursor:'pointer',opacity:syncing===acc.id?0.5:1}}>
+                    {syncing===acc.id?'Syncing...':'⟳ Sync'}
+                  </button>
+                  <button onClick={()=>{if(confirm(`Disconnect ${acc.email}?`))disconnectGmail(acc.id)}}
+                    style={{padding:'6px 12px',fontSize:11,fontWeight:600,borderRadius:7,background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',cursor:'pointer'}}>
+                    Disconnect
+                  </button>
+                </div>
               </div>
-            )}
-
-            {/* Connected accounts */}
-            {gmailAccounts.length > 0 ? (
-              <div className="space-y-2">
-                <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444]">Connected Accounts</div>
-                {gmailAccounts.map(acc => (
-                  <div key={acc.id} className="bg-[#222] rounded-xl p-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{acc.email}</div>
-                      <div className="text-[10px] text-[#555] mt-0.5">Last synced: {fmtRelative(acc.lastSynced)}</div>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={() => syncAccount(acc.id, acc.email)}
-                        disabled={syncing === acc.id || syncing === 'all'}
-                        className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-[#a78bfa22] text-[#a78bfa] border border-[#a78bfa44] disabled:opacity-50 hover:bg-[#a78bfa33] transition-colors"
-                      >
-                        {syncing === acc.id ? '⟳ Syncing...' : '⟳ Sync'}
-                      </button>
-                      <button
-                        onClick={() => { if (confirm(`Disconnect ${acc.email}?`)) disconnectGmail(acc.id) }}
-                        className="px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-[#e07b5a22] text-[#e07b5a] border border-[#e07b5a44] hover:bg-[#e07b5a33] transition-colors"
-                      >
-                        Disconnect
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-[#222] rounded-xl p-4 text-center text-sm text-[#555]">
-                No Gmail accounts connected yet.
-              </div>
-            )}
-
-            {/* Connect new */}
-            <button
-              onClick={connectGmail}
-              className="w-full py-3 rounded-xl bg-[#a78bfa22] text-[#a78bfa] border border-[#a78bfa44] text-sm font-semibold hover:bg-[#a78bfa33] transition-colors flex items-center justify-center gap-2"
-            >
-              <span>+</span> Connect Gmail Account
+            ))}
+            <button onClick={connectGmail}
+              style={{width:'100%',padding:'11px',borderRadius:10,background:'var(--cyan-dark)',color:'white',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:600,cursor:'pointer'}}>
+              + Connect Gmail Account
             </button>
-
-            {gmailAccounts.length > 1 && (
-              <button
-                onClick={() => syncAll()}
-                disabled={syncing === 'all'}
-                className="w-full py-2.5 rounded-xl bg-[#222] text-[#888] border border-[#2e2e2e] text-xs font-semibold hover:text-[#f0ede8] transition-colors disabled:opacity-50"
-              >
-                {syncing === 'all' ? '⟳ Syncing all...' : '⟳ Sync All Accounts'}
+            {gmailAccounts.length>1&&(
+              <button onClick={()=>syncAll()} disabled={syncing==='all'}
+                style={{width:'100%',padding:'9px',borderRadius:10,background:'var(--surface2)',color:'var(--text-muted)',border:'1px solid var(--border)',fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:500,cursor:'pointer'}}>
+                {syncing==='all'?'Syncing all...':'⟳ Sync All Accounts'}
               </button>
             )}
-
-            <div className="bg-[#222] rounded-xl p-3 text-xs text-[#555] leading-relaxed">
-              <strong className="text-[#888]">How it works:</strong> CleanSync checks these inboxes every 10 minutes for Turno job notification emails and automatically adds them to your calendar. You can connect multiple Gmail accounts — like <span className="text-[#888]">akcleaningsucasa@gmail.com</span> and any other that receives Turno emails.
+            <div style={{background:'var(--cyan-bg)',borderRadius:10,padding:'12px 14px',fontSize:11,color:'var(--text-muted)',lineHeight:1.6,border:'1px solid #cef0f7'}}>
+              <strong style={{color:'var(--cyan-dark)'}}>Auto-sync:</strong> CleanSync checks these inboxes daily at 8am Alaska time for new Turno job emails and adds them to your calendar automatically.
             </div>
           </div>
         </div>
@@ -733,46 +496,79 @@ export default function Dashboard() {
     )
   }
 
-  // ── RENDER ─────────────────────────────────────────────────────────────────
-  const allPlatforms = ['airbnb','jobber','turno','hostaway']
-  const propNames = [...new Set(visibleJobs.map(j => j.propertyLabel))].sort()
+  // ── HELPER COMPONENTS ────────────────────────────────────────────────────────
+  function Section({title,children}:{title:string;children:React.ReactNode}) {
+    return(
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>{title}</div>
+        {children}
+      </div>
+    )
+  }
+  function TBI({label,value,sub}:{label:string;value:string;sub:string}) {
+    return(
+      <div style={{flex:1}}>
+        <div style={{fontSize:9,color:'var(--text-dim)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:2}}>{label}</div>
+        <div style={{fontSize:14,fontWeight:600,color:'var(--text)'}}>{value}</div>
+        <div style={{fontSize:10,color:'var(--text-muted)'}}>{sub}</div>
+      </div>
+    )
+  }
+  function IC({label,value,large}:{label:string;value:string;large?:boolean}) {
+    return(
+      <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
+        <div style={{fontSize:9,color:'var(--text-dim)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3}}>{label}</div>
+        <div style={{fontSize:large?18:13,fontWeight:large?400:500,fontFamily:large?'Fraunces,serif':'DM Sans,sans-serif',color:'var(--text)'}}>{value}</div>
+      </div>
+    )
+  }
 
-  return (
-    <div className="flex flex-col h-screen overflow-hidden">
+  // ── SIDEBAR ──────────────────────────────────────────────────────────────────
+  const propNames=[...new Set(Array.from(visibleJobs.map(j=>j.propertyLabel)))].sort()
+  const allPlatforms=['airbnb','jobber','turno','hostaway']
+
+  return(
+    <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:'var(--bg)'}}>
       {/* HEADER */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-[#2e2e2e] bg-[#1a1a1a] sticky top-0 z-40 gap-3 flex-wrap shrink-0">
-        <div className="font-serif text-lg text-[#e8d5a3]">CleanSync <em className="text-[#888] text-sm not-italic">pro</em></div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => navigate(-1)} className="w-8 h-8 border border-[#2e2e2e] rounded-lg bg-[#222] text-[#f0ede8] flex items-center justify-center hover:bg-[#2c2c2c] transition-colors text-lg">‹</button>
-          <span className="font-serif text-sm min-w-[150px] text-center">{periodLabel()}</span>
-          <button onClick={() => navigate(1)} className="w-8 h-8 border border-[#2e2e2e] rounded-lg bg-[#222] text-[#f0ede8] flex items-center justify-center hover:bg-[#2c2c2c] transition-colors text-lg">›</button>
-          <div className="flex bg-[#222] rounded-lg p-0.5 gap-0.5">
-            {(['day','month','week'] as const).map(v => (
-              <button key={v} onClick={() => setView(v)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all capitalize ${view === v ? 'bg-[#2c2c2c] text-[#f0ede8]' : 'text-[#888] hover:text-[#f0ede8]'}`}>{v}</button>
+      <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 24px',borderBottom:'1px solid var(--border)',background:'var(--surface)',boxShadow:'var(--shadow-sm)',position:'sticky',top:0,zIndex:40,gap:12,flexWrap:'wrap'}}>
+        <div style={{fontFamily:'Fraunces,serif',fontSize:20,fontWeight:400,color:'var(--cyan-dark)',letterSpacing:'-0.3px'}}>
+          CleanSync <span style={{fontSize:14,color:'var(--text-dim)',fontStyle:'italic'}}>pro</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <button onClick={()=>navigate(-1)} style={{width:32,height:32,border:'1px solid var(--border)',borderRadius:7,background:'var(--surface2)',color:'var(--text)',fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+          <span style={{fontFamily:'Fraunces,serif',fontSize:15,minWidth:160,textAlign:'center',color:'var(--text)'}}>{periodLabel()}</span>
+          <button onClick={()=>navigate(1)} style={{width:32,height:32,border:'1px solid var(--border)',borderRadius:7,background:'var(--surface2)',color:'var(--text)',fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+          <div style={{display:'flex',background:'var(--surface2)',borderRadius:8,padding:3,gap:2,border:'1px solid var(--border)'}}>
+            {(['day','month','week'] as const).map(v=>(
+              <button key={v} onClick={()=>setView(v)} style={{padding:'5px 12px',borderRadius:6,border:'none',background:view===v?'white':'transparent',color:view===v?'var(--cyan-dark)':'var(--text-muted)',fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:view===v?600:400,cursor:'pointer',boxShadow:view===v?'var(--shadow-sm)':'none',transition:'all 0.15s',textTransform:'capitalize'}}>{v}</button>
             ))}
           </div>
-          <button onClick={() => setShowGmailPanel(true)} className="px-3 py-1.5 rounded-lg bg-[#a78bfa22] text-[#a78bfa] border border-[#a78bfa44] text-xs font-semibold hover:bg-[#a78bfa33] transition-colors flex items-center gap-1.5">
-            ✉ Gmail {gmailAccounts.length > 0 && <span className="bg-[#a78bfa] text-[#1a1a1a] rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">{gmailAccounts.length}</span>}
+          <button onClick={()=>setShowGmailPanel(true)} style={{padding:'6px 12px',borderRadius:8,background:'var(--cyan-pale)',color:'var(--cyan-dark)',border:'1px solid #b2e9f5',fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+            ✉ Gmail {gmailAccounts.length>0&&<span style={{background:'var(--cyan-dark)',color:'white',borderRadius:'50%',width:16,height:16,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{gmailAccounts.length}</span>}
+          </button>
+          <button onClick={handleLogout} style={{padding:'6px 12px',borderRadius:8,background:'var(--surface2)',color:'var(--text-muted)',border:'1px solid var(--border)',fontFamily:'DM Sans,sans-serif',fontSize:12,cursor:'pointer'}}>
+            Sign out
           </button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
         {/* SIDEBAR */}
-        <aside className="w-52 shrink-0 bg-[#1a1a1a] border-r border-[#2e2e2e] p-4 overflow-y-auto flex flex-col gap-5">
+        <aside style={{width:210,minWidth:210,background:'var(--surface)',borderRight:'1px solid var(--border)',padding:'16px 13px',overflowY:'auto',display:'flex',flexDirection:'column',gap:20}}>
           {/* Sync status */}
-          {gmailAccounts.length > 0 && (
+          {gmailAccounts.length>0&&(
             <div>
-              <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Auto-Sync</div>
-              <div className="bg-[#222] rounded-lg p-2.5 text-[10px] text-[#555]">
-                {gmailAccounts.map(acc => (
-                  <div key={acc.id} className="flex items-center justify-between gap-1 mb-1 last:mb-0">
-                    <span className="truncate text-[#888]">{acc.email.split('@')[0]}</span>
-                    <span className="shrink-0 text-[#444]">{fmtRelative(acc.lastSynced)}</span>
+              <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Auto-Sync</div>
+              <div style={{background:'var(--cyan-bg)',borderRadius:8,padding:'10px 12px',fontSize:10,border:'1px solid #cef0f7'}}>
+                {gmailAccounts.map(acc=>(
+                  <div key={acc.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,marginBottom:4,lastChild:{marginBottom:0}}}>
+                    <span style={{color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acc.email.split('@')[0]}</span>
+                    <span style={{color:'var(--text-dim)',flexShrink:0}}>{fmtRel(acc.lastSynced)}</span>
                   </div>
                 ))}
-                <button onClick={() => syncAll()} disabled={syncing === 'all'} className="w-full mt-2 py-1 rounded bg-[#2c2c2c] text-[#888] hover:text-[#f0ede8] text-[10px] font-medium transition-colors disabled:opacity-50">
-                  {syncing === 'all' ? '⟳ Syncing...' : '⟳ Sync Now'}
+                <button onClick={()=>syncAll()} disabled={syncing==='all'}
+                  style={{width:'100%',marginTop:6,padding:'4px 0',borderRadius:6,background:'var(--cyan-dark)',color:'white',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:10,fontWeight:600,cursor:'pointer',opacity:syncing==='all'?0.5:1}}>
+                  {syncing==='all'?'Syncing...':'⟳ Sync Now'}
                 </button>
               </div>
             </div>
@@ -780,30 +576,27 @@ export default function Dashboard() {
 
           {/* Platforms */}
           <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Platforms</div>
-            <div className="flex flex-col gap-1">
-              {allPlatforms.map(p => {
-                const col = PLAT_COLORS[p]
-                const active = activePlatforms.has(p)
-                return (
-                  <div key={p} onClick={() => togglePlatform(p)} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer text-xs font-medium transition-colors ${active ? 'bg-[#222]' : 'opacity-40'}`}>
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: col.dot }} />
-                    <span className="capitalize">{p}</span>
-                    {active && <span className="ml-auto text-[#e8d5a3] text-[10px]">✓</span>}
-                  </div>
-                )
-              })}
+            <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Platforms</div>
+            <div style={{display:'flex',flexDirection:'column',gap:3}}>
+              {allPlatforms.map(p=>{const pc=PLAT_COLORS[p],active=activePlatforms.has(p);return(
+                <div key={p} onClick={()=>setActivePlatforms(prev=>{const n=new Set(prev);n.has(p)?n.delete(p):n.add(p);return n})}
+                  style={{display:'flex',alignItems:'center',gap:7,padding:'6px 8px',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:500,background:active?'var(--surface2)':'transparent',opacity:active?1:0.4,transition:'all 0.1s'}}>
+                  <div style={{width:7,height:7,borderRadius:'50%',background:pc.dot,flexShrink:0}}/>
+                  <span style={{textTransform:'capitalize',color:'var(--text)'}}>{p}</span>
+                  {active&&<span style={{marginLeft:'auto',fontSize:10,color:'var(--cyan-dark)'}}>✓</span>}
+                </div>
+              )})}
             </div>
           </div>
 
           {/* Cleaners */}
           <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Cleaners</div>
-            <div className="flex flex-col gap-1">
-              {cleaners.map(cl => (
-                <div key={cl.id} className="flex items-center gap-2 px-1.5 py-1 text-[11px] text-[#888]">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0" style={{ background: cl.color }}>
-                    {cl.name.split(' ').map((w: string) => w[0]).join('')}
+            <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Cleaners</div>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              {cleaners.map(cl=>(
+                <div key={cl.id} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',fontSize:11,color:'var(--text-muted)'}}>
+                  <div style={{width:22,height:22,borderRadius:'50%',background:cl.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'white',flexShrink:0}}>
+                    {cl.name.split(' ').map((w:string)=>w[0]).join('')}
                   </div>
                   {cl.name}
                 </div>
@@ -811,15 +604,15 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Properties legend */}
-          {propNames.length > 0 && (
+          {/* Properties */}
+          {propNames.length>0&&(
             <div>
-              <div className="text-[9px] font-semibold uppercase tracking-[1.5px] text-[#444] mb-2">Properties</div>
-              <div className="flex flex-col gap-1 max-h-52 overflow-y-auto">
-                {propNames.map(p => (
-                  <div key={p} className="flex items-center gap-2 text-[11px] text-[#888]">
-                    <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: getPropColor(p) }} />
-                    <span className="truncate leading-tight">{shortName(p)}</span>
+              <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Properties</div>
+              <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:260,overflowY:'auto'}}>
+                {propNames.map(p=>(
+                  <div key={p} style={{display:'flex',alignItems:'flex-start',gap:7,fontSize:11,color:'var(--text-muted)'}}>
+                    <div style={{width:10,height:10,borderRadius:3,background:colorMap[p]||getPropColor(p,colorMap),flexShrink:0,marginTop:1}}/>
+                    <span style={{lineHeight:1.3}}>{shortName(p)}</span>
                   </div>
                 ))}
               </div>
@@ -828,16 +621,15 @@ export default function Dashboard() {
         </aside>
 
         {/* MAIN */}
-        <main className="flex-1 overflow-y-auto p-5">
-          {view === 'month' && <MonthView />}
-          {view === 'week' && <WeekView />}
-          {view === 'day' && <DayView />}
+        <main style={{flex:1,overflowY:'auto',padding:20}}>
+          {view==='month'&&<MonthView/>}
+          {view==='week'&&<WeekView/>}
+          {view==='day'&&<DayView/>}
         </main>
       </div>
 
-      {/* MODALS */}
-      {selectedJob && <JobModal />}
-      {showGmailPanel && <GmailPanel />}
+      {selectedJob&&<JobModal/>}
+      {showGmailPanel&&<GmailPanel/>}
     </div>
   )
 }
