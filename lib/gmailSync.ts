@@ -24,16 +24,18 @@ export function getGmailAuthUrl(state?: string) {
   })
 }
 
-// Recursively extract plain and HTML text from all MIME parts
+// Recursively pull all text and html from MIME parts
 function extractParts(payload: any): { plain: string; html: string } {
   let plain = ''
   let html = ''
   if (!payload) return { plain, html }
+
   if (payload.body?.data) {
-    const decoded = Buffer.from(payload.body.data, 'base64').toString('utf-8')
+    const decoded = Buffer.from(payload.body.data, 'base64url').toString('utf-8')
     if (payload.mimeType === 'text/plain') plain += decoded
     if (payload.mimeType === 'text/html') html += decoded
   }
+
   if (payload.parts && Array.isArray(payload.parts)) {
     for (const part of payload.parts) {
       const sub = extractParts(part)
@@ -41,31 +43,47 @@ function extractParts(payload: any): { plain: string; html: string } {
       html += sub.html
     }
   }
+
   return { plain, html }
 }
 
-// Parse Turno job details from HTML email body
-function parseTurnoHTML(html: string, messageId: string, accountEmail: string): ParsedJob | null {
-  if (!html || !html.toLowerCase().includes('turno')) return null
-  if (!html.includes('Start Time') && !html.includes('Start\u00a0Time')) return null
-
-  // Convert HTML to readable text preserving structure
-  const text = html
-    .replace(/<br\s*\/?>/gi, '\n')
+// Convert Turno HTML email to plain text preserving field structure
+function htmlToText(html: string): string {
+  return html
+    // Table cells and rows → newlines/spaces
     .replace(/<\/tr>/gi, '\n')
     .replace(/<\/td>/gi, ' ')
     .replace(/<\/th>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n')
+    // Decode HTML entities
     .replace(/&nbsp;/gi, ' ')
     .replace(/&#160;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&#8226;/gi, '•')
+    .replace(/&bull;/gi, '•')
+    .replace(/&#x2022;/gi, '•')
+    .replace(/&middot;/gi, '·')
+    // Strip all remaining tags
     .replace(/<[^>]+>/g, '')
+    // Normalize whitespace
     .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+// Parse Turno job from text (works for both plain text and HTML-converted-to-text)
+function parseTurnoText(text: string, messageId: string, accountEmail: string): ParsedJob | null {
+  if (!text) return null
+  const lower = text.toLowerCase()
+  if (!lower.includes('turno')) return null
+  if (!lower.includes('start time') && !lower.includes('start\u00a0time')) return null
 
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
 
@@ -78,51 +96,94 @@ function parseTurnoHTML(html: string, messageId: string, accountEmail: string): 
   let bathrooms: number | null = null
   let checklist: string | null = null
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    // Property label — "Cleaning XYZ" 
     if (!propertyLabel && /^Cleaning\s+\S/.test(line)) {
       propertyLabel = line.replace(/^Cleaning\s+/, '').trim()
     }
-    if (!address && (line.includes('Anchorage') || line.includes(', AK')) && !line.startsWith('Cleaning')) {
-      address = line.split('Host:')[0].trim()
+
+    // Address — contains city/state, not the property line
+    if (!address) {
+      if ((line.includes('Anchorage') || line.includes(', AK') || line.includes('#Unit')) 
+          && !line.startsWith('Cleaning')
+          && !lower.includes('start time')
+          && !lower.includes('end time')) {
+        // Strip host info if concatenated on same line
+        const hostIdx = line.indexOf('Host:')
+        address = (hostIdx > -1 ? line.substring(0, hostIdx) : line).trim()
+        // Also grab host from same line
+        if (!hostName && hostIdx > -1) {
+          hostName = line.substring(hostIdx).replace(/Host:\s*/i, '').trim()
+        }
+      }
     }
+
+    // Host on its own line
     if (!hostName) {
-      const m = line.match(/Host[:\s]+(.+)/i)
+      const m = line.match(/Host:\s*(.+)/i)
       if (m) hostName = m[1].split('\t')[0].trim()
     }
+
+    // Start Time — handle formats like "Start Time: Fri, Mar 6 2026 11:00 AM"
     if (!startTime) {
       const m = line.match(/Start\s*Time[:\s]+(.+)/i)
       if (m) {
-        const p = new Date(m[1].trim())
-        if (!isNaN(p.getTime())) startTime = p.toISOString()
+        const dateStr = m[1].trim()
+        // Try direct parse
+        let parsed = new Date(dateStr)
+        // If direct parse fails, try stripping day name
+        if (isNaN(parsed.getTime())) {
+          const stripped = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+          parsed = new Date(stripped)
+        }
+        if (!isNaN(parsed.getTime())) startTime = parsed.toISOString()
       }
     }
+
+    // End Time
     if (!endTime) {
       const m = line.match(/End\s*Time[:\s]+(.+)/i)
       if (m) {
-        const p = new Date(m[1].trim())
-        if (!isNaN(p.getTime())) endTime = p.toISOString()
+        const dateStr = m[1].trim()
+        let parsed = new Date(dateStr)
+        if (isNaN(parsed.getTime())) {
+          const stripped = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+          parsed = new Date(stripped)
+        }
+        if (!isNaN(parsed.getTime())) endTime = parsed.toISOString()
       }
     }
+
+    // Bedrooms
     if (bedrooms === null) {
       const m = line.match(/Bedroom[s]?\s*[:\s]+(\d+)/i)
       if (m) bedrooms = parseInt(m[1])
     }
+
+    // Bathrooms
     if (bathrooms === null) {
       const m = line.match(/Bathroom[s]?\s*[:\s]+(\d+\.?\d*)/i)
       if (m) bathrooms = parseFloat(m[1])
     }
+
+    // Checklist
     if (!checklist) {
       const m = line.match(/Checklist[:\s]+(.+)/i)
-      if (m) checklist = m[1].trim()
+      if (m && !m[1].toLowerCase().includes('too many')) {
+        checklist = m[1].trim()
+      }
     }
   }
 
+  // Need at least a start time to create a job
   if (!startTime) return null
   if (!address && !propertyLabel) return null
 
   return {
     address: address || propertyLabel || 'Unknown',
-    hostName,
+    hostName: hostName || null,
     startTime,
     endTime,
     bedrooms,
@@ -155,6 +216,7 @@ export async function syncGmailAccount(accountId: string) {
 
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
+  // Get already-imported IDs
   const existingIds = await prisma.job.findMany({
     where: { gmailAccountId: accountId, gmailMessageId: { not: null } },
     select: { gmailMessageId: true },
@@ -173,6 +235,7 @@ export async function syncGmailAccount(accountId: string) {
   for (const msg of messages) {
     if (!msg.id || seen.has(msg.id)) continue
 
+    // Get full message with all MIME parts
     const full = await gmail.users.messages.get({
       userId: 'me',
       id: msg.id,
@@ -183,18 +246,22 @@ export async function syncGmailAccount(accountId: string) {
 
     let parsed: ParsedJob | null = null
 
-    // Try HTML first — Turno info@turno.com emails have details in HTML
-    if (html) parsed = parseTurnoHTML(html, msg.id, account.email)
-
-    // Fall back to plain text — noreply@turno.com emails have details in plain text
-    if (!parsed && plain) {
-      const { parseTurnoEmail } = await import('./parseEmail')
-      parsed = parseTurnoEmail(plain, msg.id, account.email)
+    // Try plain text first — if it has "Start Time" in it, use it directly
+    if (plain && plain.toLowerCase().includes('start time')) {
+      parsed = parseTurnoText(plain, msg.id, account.email)
     }
 
+    // Fall back to HTML converted to text
+    if (!parsed && html) {
+      const htmlAsText = htmlToText(html)
+      parsed = parseTurnoText(htmlAsText, msg.id, account.email)
+    }
+
+    // Skip if we couldn't parse a valid date
     if (!parsed) continue
 
     const jobData = jobFromParsed(parsed)
+    if (!jobData) continue // skip if no valid start time
 
     try {
       await prisma.job.create({
