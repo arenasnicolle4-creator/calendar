@@ -185,12 +185,12 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
     startTime,
     endTime,
     bedrooms,
-    beds,
+    beds: beds ?? null,
     bathrooms,
     checklist,
     gmailMessageId: messageId,
     gmailAccountEmail: accountEmail,
-  }
+  } as import('./parseEmail').ParsedJob
 }
 
 export async function syncGmailAccount(accountId: string) {
@@ -257,8 +257,9 @@ export async function syncGmailAccount(accountId: string) {
     if (!jobData) continue
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.job.create({
-        data: { ...jobData, gmailAccountId: accountId, gmailMessageId: msg.id },
+        data: { ...(jobData as any), gmailAccountId: accountId, gmailMessageId: msg.id },
       })
       imported++
     } catch {
