@@ -24,18 +24,16 @@ export function getGmailAuthUrl(state?: string) {
   })
 }
 
-// Recursively pull all text and html from MIME parts
+// Recursively pull all MIME parts
 function extractParts(payload: any): { plain: string; html: string } {
   let plain = ''
   let html = ''
   if (!payload) return { plain, html }
-
   if (payload.body?.data) {
-    const decoded = Buffer.from(payload.body.data, 'base64url').toString('utf-8')
+    const decoded = Buffer.from(payload.body.data, 'base64').toString('utf-8')
     if (payload.mimeType === 'text/plain') plain += decoded
     if (payload.mimeType === 'text/html') html += decoded
   }
-
   if (payload.parts && Array.isArray(payload.parts)) {
     for (const part of payload.parts) {
       const sub = extractParts(part)
@@ -43,47 +41,17 @@ function extractParts(payload: any): { plain: string; html: string } {
       html += sub.html
     }
   }
-
   return { plain, html }
 }
 
-// Convert Turno HTML email to plain text preserving field structure
-function htmlToText(html: string): string {
-  return html
-    // Table cells and rows → newlines/spaces
-    .replace(/<\/tr>/gi, '\n')
-    .replace(/<\/td>/gi, ' ')
-    .replace(/<\/th>/gi, ' ')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<\/div>/gi, '\n')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<\/h[1-6]>/gi, '\n')
-    // Decode HTML entities
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&#160;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&#8226;/gi, '•')
-    .replace(/&bull;/gi, '•')
-    .replace(/&#x2022;/gi, '•')
-    .replace(/&middot;/gi, '·')
-    // Strip all remaining tags
-    .replace(/<[^>]+>/g, '')
-    // Normalize whitespace
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n[ \t]+/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-// Parse Turno job from text (works for both plain text and HTML-converted-to-text)
+// Parse Turno job details from plain text body
+// Works for both direct turno emails AND forwarded versions
 function parseTurnoText(text: string, messageId: string, accountEmail: string): ParsedJob | null {
   if (!text) return null
   const lower = text.toLowerCase()
   if (!lower.includes('turno')) return null
-  if (!lower.includes('start time') && !lower.includes('start\u00a0time')) return null
+  // Must have start time to be a valid job email
+  if (!lower.includes('start time')) return null
 
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
 
@@ -96,47 +64,43 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
   let bathrooms: number | null = null
   let checklist: string | null = null
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-
-    // Property label — "Cleaning XYZ" 
-    if (!propertyLabel && /^Cleaning\s+\S/.test(line)) {
+  for (const line of lines) {
+    // Property label from "Cleaning X" line
+    if (!propertyLabel && /^Cleaning\s+\S/.test(line) && !line.toLowerCase().includes('project')) {
       propertyLabel = line.replace(/^Cleaning\s+/, '').trim()
     }
 
-    // Address — contains city/state, not the property line
-    if (!address) {
-      if ((line.includes('Anchorage') || line.includes(', AK') || line.includes('#Unit')) 
-          && !line.startsWith('Cleaning')
-          && !lower.includes('start time')
-          && !lower.includes('end time')) {
-        // Strip host info if concatenated on same line
-        const hostIdx = line.indexOf('Host:')
-        address = (hostIdx > -1 ? line.substring(0, hostIdx) : line).trim()
-        // Also grab host from same line
-        if (!hostName && hostIdx > -1) {
-          hostName = line.substring(hostIdx).replace(/Host:\s*/i, '').trim()
-        }
+    // Address — has Anchorage or AK, not a Cleaning line, not a time line
+    if (!address && 
+        (line.includes('Anchorage') || line.includes(', AK') || line.match(/\d{4}\s+\w/)) &&
+        !line.startsWith('Cleaning') &&
+        !line.toLowerCase().includes('start time') &&
+        !line.toLowerCase().includes('end time') &&
+        !line.toLowerCase().includes('copyright') &&
+        !line.toLowerCase().includes('bishop')) {
+      const hostIdx = line.indexOf('Host:')
+      address = (hostIdx > -1 ? line.substring(0, hostIdx) : line).trim()
+      // Grab host from same line if concatenated
+      if (!hostName && hostIdx > -1) {
+        hostName = line.substring(hostIdx).replace(/Host:\s*/i, '').replace(/\*/g, '').trim()
       }
     }
 
-    // Host on its own line
+    // Host on its own line — strip markdown bold asterisks
     if (!hostName) {
-      const m = line.match(/Host:\s*(.+)/i)
-      if (m) hostName = m[1].split('\t')[0].trim()
+      const m = line.match(/Host:\s*\*?(.+?)\*?$/i)
+      if (m) hostName = m[1].trim()
     }
 
-    // Start Time — handle formats like "Start Time: Fri, Mar 6 2026 11:00 AM"
+    // Start Time — format: "Start Time: Sat, Jun 20 2026 11:00 AM"
     if (!startTime) {
-      const m = line.match(/Start\s*Time[:\s]+(.+)/i)
+      const m = line.match(/Start\s*Time:\s*(.+)/i)
       if (m) {
         const dateStr = m[1].trim()
-        // Try direct parse
         let parsed = new Date(dateStr)
-        // If direct parse fails, try stripping day name
+        // Strip day name if parse fails e.g. "Sat, Jun 20 2026" → "Jun 20 2026"
         if (isNaN(parsed.getTime())) {
-          const stripped = dateStr.replace(/^[A-Za-z]+,\s*/, '')
-          parsed = new Date(stripped)
+          parsed = new Date(dateStr.replace(/^[A-Za-z]+,?\s*/, ''))
         }
         if (!isNaN(parsed.getTime())) startTime = parsed.toISOString()
       }
@@ -144,40 +108,39 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
 
     // End Time
     if (!endTime) {
-      const m = line.match(/End\s*Time[:\s]+(.+)/i)
+      const m = line.match(/End\s*Time:\s*(.+)/i)
       if (m) {
         const dateStr = m[1].trim()
         let parsed = new Date(dateStr)
         if (isNaN(parsed.getTime())) {
-          const stripped = dateStr.replace(/^[A-Za-z]+,\s*/, '')
-          parsed = new Date(stripped)
+          parsed = new Date(dateStr.replace(/^[A-Za-z]+,?\s*/, ''))
         }
         if (!isNaN(parsed.getTime())) endTime = parsed.toISOString()
       }
     }
 
-    // Bedrooms
+    // Bedrooms — "Bedrooms: 4 Beds: 5" or "Bedrooms: 4"
     if (bedrooms === null) {
-      const m = line.match(/Bedroom[s]?\s*[:\s]+(\d+)/i)
+      const m = line.match(/Bedroom[s]?:\s*(\d+)/i)
       if (m) bedrooms = parseInt(m[1])
     }
 
-    // Bathrooms
+    // Bathrooms — "Bathrooms: 2.5" or on same line as bedrooms
     if (bathrooms === null) {
-      const m = line.match(/Bathroom[s]?\s*[:\s]+(\d+\.?\d*)/i)
+      const m = line.match(/Bathroom[s]?:\s*(\d+\.?\d*)/i)
       if (m) bathrooms = parseFloat(m[1])
     }
 
     // Checklist
     if (!checklist) {
-      const m = line.match(/Checklist[:\s]+(.+)/i)
+      const m = line.match(/Checklist:\s*(.+)/i)
       if (m && !m[1].toLowerCase().includes('too many')) {
         checklist = m[1].trim()
       }
     }
   }
 
-  // Need at least a start time to create a job
+  // Must have start time
   if (!startTime) return null
   if (!address && !propertyLabel) return null
 
@@ -216,52 +179,52 @@ export async function syncGmailAccount(accountId: string) {
 
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
-  // Get already-imported IDs
+  // Get already-imported message IDs
   const existingIds = await prisma.job.findMany({
     where: { gmailAccountId: accountId, gmailMessageId: { not: null } },
     select: { gmailMessageId: true },
   })
   const seen = new Set(existingIds.map(j => j.gmailMessageId))
 
-  const res = await gmail.users.messages.list({
-    userId: 'me',
-    q: 'from:turno.com subject:"New Cleaning project available"',
-    maxResults: 100,
-  })
+  // Search for BOTH direct Turno emails AND forwarded versions
+  const queries = [
+    'from:turno.com subject:"New Cleaning project available"',
+    'subject:"Fwd: New Cleaning project available" "Start Time"',
+    'subject:"FW: New Cleaning project available" "Start Time"',
+  ]
 
-  const messages = res.data.messages || []
+  const allMessages: Array<{id: string}> = []
+  for (const q of queries) {
+    const res = await gmail.users.messages.list({
+      userId: 'me',
+      q,
+      maxResults: 100,
+    })
+    for (const msg of res.data.messages || []) {
+      if (msg.id && !allMessages.find(m => m.id === msg.id)) {
+        allMessages.push({ id: msg.id })
+      }
+    }
+  }
+
   let imported = 0
 
-  for (const msg of messages) {
-    if (!msg.id || seen.has(msg.id)) continue
+  for (const msg of allMessages) {
+    if (seen.has(msg.id)) continue
 
-    // Get full message with all MIME parts
     const full = await gmail.users.messages.get({
       userId: 'me',
       id: msg.id,
       format: 'full',
     })
 
-    const { plain, html } = extractParts(full.data.payload)
+    const { plain } = extractParts(full.data.payload)
 
-    let parsed: ParsedJob | null = null
-
-    // Try plain text first — if it has "Start Time" in it, use it directly
-    if (plain && plain.toLowerCase().includes('start time')) {
-      parsed = parseTurnoText(plain, msg.id, account.email)
-    }
-
-    // Fall back to HTML converted to text
-    if (!parsed && html) {
-      const htmlAsText = htmlToText(html)
-      parsed = parseTurnoText(htmlAsText, msg.id, account.email)
-    }
-
-    // Skip if we couldn't parse a valid date
+    const parsed = parseTurnoText(plain, msg.id, account.email)
     if (!parsed) continue
 
     const jobData = jobFromParsed(parsed)
-    if (!jobData) continue // skip if no valid start time
+    if (!jobData) continue
 
     try {
       await prisma.job.create({
@@ -269,7 +232,7 @@ export async function syncGmailAccount(accountId: string) {
       })
       imported++
     } catch {
-      // Skip duplicates
+      // Skip duplicates silently
     }
   }
 
@@ -278,7 +241,7 @@ export async function syncGmailAccount(accountId: string) {
     data: { lastSynced: new Date() },
   })
 
-  return { imported, total: messages.length }
+  return { imported, total: allMessages.length }
 }
 
 export async function syncAllAccounts() {
