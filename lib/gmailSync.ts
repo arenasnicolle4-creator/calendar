@@ -1,7 +1,8 @@
 // lib/gmailSync.ts
 import { google } from 'googleapis'
 import { prisma } from './prisma'
-import { jobFromParsed, ParsedJob } from './parseEmail'
+import { jobFromParsed } from './parseEmail'
+import type { ParsedJob } from './parseEmail'
 
 export function getOAuthClient() {
   return new google.auth.OAuth2(
@@ -42,33 +43,25 @@ function extractParts(payload: any): { plain: string; html: string } {
   return { plain, html }
 }
 
-// Parse Turno time string as Alaska time (AKST = UTC-9, AKDT = UTC-8)
-// Turno emails show times in Alaska local time
+// Alaska is currently on AKDT (UTC-8) from March to November
+// AKST (UTC-9) November to March
+// Turno shows times in Alaska local time — we store as UTC
 function parseAlaskaTime(dateStr: string): Date | null {
   if (!dateStr) return null
-  // Strip day name prefix e.g. "Mon, Jun 8 2026 11:00 AM" -> "Jun 8 2026 11:00 AM"
-  const stripped = dateStr.replace(/^[A-Za-z]+,?\s*/, '').trim()
-  // Parse as local time string, then apply Alaska offset
-  // Alaska is UTC-9 standard, UTC-8 daylight
-  // We'll use UTC-9 (AKST) as the conservative offset
-  // Append -09:00 to force correct timezone interpretation
-  const withTZ = stripped.replace(/\s*(AM|PM)\s*$/i, (m) => ` ${m.trim()} -09:00`)
-  let d = new Date(withTZ)
-  if (isNaN(d.getTime())) {
-    // Try direct parse with offset appended differently
-    d = new Date(`${stripped} UTC-9`)
-  }
-  if (isNaN(d.getTime())) {
-    // Last resort: parse without timezone (will be UTC) and subtract 9 hours
-    d = new Date(stripped)
-    if (!isNaN(d.getTime())) {
-      // Already parsed as UTC — but Turno shows local AK time
-      // So "11:00 AM" parsed as UTC is wrong, it should be UTC+9 offset
-      // Add 9 hours to compensate (making 11am AK = 8pm UTC)
-      d = new Date(d.getTime() + 9 * 60 * 60 * 1000)
-    }
-  }
-  return isNaN(d.getTime()) ? null : d
+  // Strip day name prefix: "Mon, Jun 8 2026 11:00 AM" → "Jun 8 2026 11:00 AM"
+  const stripped = dateStr.trim().replace(/^[A-Za-z]+,?\s*/, '').trim()
+  // Try with AKDT offset (-08:00) first — currently active most of the year
+  const withAKDT = stripped.replace(/(AM|PM)\s*$/i, '$1 -08:00')
+  let d = new Date(withAKDT)
+  if (!isNaN(d.getTime())) return d
+  // Try with AKST offset (-09:00)
+  const withAKST = stripped.replace(/(AM|PM)\s*$/i, '$1 -09:00')
+  d = new Date(withAKST)
+  if (!isNaN(d.getTime())) return d
+  // Last resort — parse as-is
+  d = new Date(stripped)
+  if (!isNaN(d.getTime())) return d
+  return null
 }
 
 function parseTurnoText(text: string, messageId: string, accountEmail: string): ParsedJob | null {
@@ -79,15 +72,16 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
 
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
 
-  // Find the block of lines that are inside the forwarded Turno message
-  // Skip the forwarding header lines (From:, Date:, Subject:, To:)
-  let inTurnoContent = false
-  const turnoLines: string[] = []
-  for (const line of lines) {
-    if (line.includes('New Cleaning project available')) inTurnoContent = true
-    if (inTurnoContent) turnoLines.push(line)
+  // Find where the actual Turno content starts — after the forwarded header
+  // Look for the "New Cleaning project available" line to skip all header lines
+  let startIdx = 0
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].toLowerCase().includes('new cleaning project available')) {
+      startIdx = i
+      break
+    }
   }
-  const parseLines = turnoLines.length > 0 ? turnoLines : lines
+  const parseLines = lines.slice(startIdx)
 
   let propertyLabel: string | null = null
   let address: string | null = null
@@ -100,21 +94,30 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
   let checklist: string | null = null
 
   for (const line of parseLines) {
-    // Property label — "Cleaning X" where X is NOT "project"
+    // Skip the subject/header lines that contain "Subject:" or "Date:" or "From:" or "To:"
+    if (/^(Subject|Date|From|To|Cc|Bcc):/i.test(line)) continue
+
+    // Property label — "Cleaning X" (not "Cleaning project")
     if (!propertyLabel && /^Cleaning\s+\S/.test(line) && !line.toLowerCase().includes('project')) {
       propertyLabel = line.replace(/^Cleaning\s+/, '').trim()
     }
 
-    // Address — contains Anchorage or AK street pattern, not a Cleaning/Start/End/Host line
+    // Address — street address pattern or contains Anchorage
+    // Must NOT be a Subject/Date/Header line
     if (!address &&
-        (line.includes('Anchorage') || line.includes(', AK') || /^\d+\s+\w+\s+(Dr|St|Ave|Rd|Blvd|Ln|Way|Ct|Pl|Cir)/i.test(line)) &&
-        !line.startsWith('Cleaning') &&
+        !line.toLowerCase().startsWith('subject:') &&
+        !line.toLowerCase().startsWith('new cleaning') &&
+        !line.toLowerCase().startsWith('cleaning') &&
         !line.toLowerCase().includes('start time') &&
         !line.toLowerCase().includes('end time') &&
         !line.toLowerCase().includes('too many') &&
         !line.toLowerCase().includes('bishop') &&
-        !line.toLowerCase().includes('copyright') &&
-        !line.includes('@')) {
+        !line.toLowerCase().includes('project details') &&
+        !line.toLowerCase().includes('best regards') &&
+        !line.includes('turno.com') &&
+        !line.includes('@') &&
+        (line.includes('Anchorage') || line.includes(', AK') ||
+         /^\d+\s+\w/.test(line) || /\d{4}\s+\w/.test(line))) {
       const hostIdx = line.indexOf('Host:')
       address = (hostIdx > -1 ? line.substring(0, hostIdx) : line).trim()
       if (!hostName && hostIdx > -1) {
@@ -122,13 +125,12 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
       }
     }
 
-    // Host on its own line — strip markdown bold asterisks Gmail adds
-    if (!hostName) {
-      const m = line.match(/^Host:\s*\*?(.+?)\*?\s*$/)
-      if (m) hostName = m[1].trim()
+    // Host on its own line
+    if (!hostName && /^Host:\s*/i.test(line)) {
+      hostName = line.replace(/^Host:\s*/i, '').replace(/\*/g, '').trim()
     }
 
-    // Start Time — "Start Time: Mon, Jun 8 2026 11:00 AM"
+    // Start Time
     if (!startTime) {
       const m = line.match(/Start\s*Time:\s*(.+)/i)
       if (m) {
@@ -146,19 +148,19 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
       }
     }
 
-    // Bedrooms — "Bedrooms: 4 Beds: 5" all on one line
+    // Bedrooms — "Bedrooms: 4 Beds: 5" on same line
     if (bedrooms === null) {
       const m = line.match(/Bedroom[s]?:\s*(\d+)/i)
       if (m) bedrooms = parseInt(m[1])
     }
 
-    // Beds (number of actual beds, may differ from bedrooms)
+    // Beds count
     if (beds === null) {
-      const m = line.match(/Beds?:\s*(\d+)/i)
+      const m = line.match(/\bBeds?:\s*(\d+)/i)
       if (m) beds = parseInt(m[1])
     }
 
-    // Bathrooms — may be on its own line "Bathrooms: 2.5"
+    // Bathrooms — "Bathrooms: 2.5" may be on same line OR its own line
     if (bathrooms === null) {
       const m = line.match(/Bathroom[s]?:\s*(\d+\.?\d*)/i)
       if (m) bathrooms = parseFloat(m[1])
@@ -176,7 +178,6 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
   if (!startTime) return null
   if (!address && !propertyLabel) return null
 
-  // Use address as the property label (cleaner and more consistent)
   const finalAddress = address || propertyLabel || 'Unknown'
 
   return {
@@ -190,7 +191,7 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
     checklist,
     gmailMessageId: messageId,
     gmailAccountEmail: accountEmail,
-  } as import('./parseEmail').ParsedJob
+  } as ParsedJob
 }
 
 export async function syncGmailAccount(accountId: string) {
@@ -221,7 +222,6 @@ export async function syncGmailAccount(accountId: string) {
   })
   const seen = new Set(existingIds.map(j => j.gmailMessageId))
 
-  // Search for direct AND forwarded Turno emails
   const queries = [
     'from:turno.com subject:"New Cleaning project available" "Start Time"',
     'subject:"Fwd: New Cleaning project available" "Start Time"',
