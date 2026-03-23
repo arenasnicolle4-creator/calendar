@@ -561,7 +561,7 @@ export default function Dashboard() {
               <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Auto-Sync</div>
               <div style={{background:'var(--cyan-bg)',borderRadius:8,padding:'10px 12px',fontSize:10,border:'1px solid #cef0f7'}}>
                 {gmailAccounts.map(acc=>(
-                  <div key={acc.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,marginBottom:4,lastChild:{marginBottom:0}}}>
+                  <div key={acc.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,marginBottom:4}}>
                     <span style={{color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acc.email.split('@')[0]}</span>
                     <span style={{color:'var(--text-dim)',flexShrink:0}}>{fmtRel(acc.lastSynced)}</span>
                   </div>
