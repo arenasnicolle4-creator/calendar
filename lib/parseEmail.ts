@@ -106,10 +106,17 @@ function getShortName(propertyLabel: string): string {
   return propertyLabel.split('|')[0].split('•')[0].trim()
 }
 
-export function jobFromParsed(parsed: ParsedJob) {
+export function jobFromParsed(parsed: ParsedJob): ReturnType<typeof _buildJob> | null {
+  if (!parsed.startTime) return null
+  const _startCheck = new Date(parsed.startTime)
+  if (isNaN(_startCheck.getTime())) return null
+  return _buildJob(parsed)
+}
+
+function _buildJob(parsed: ParsedJob) {
   const address = parsed.address
   const shortName = getShortName(address.split(',')[0].trim())
-  const startTime = parsed.startTime ? new Date(parsed.startTime) : new Date()
+  const startTime = new Date(parsed.startTime!)
   const endTime = parsed.endTime ? new Date(parsed.endTime) : new Date(startTime.getTime() + 3 * 3600000)
 
   return {
