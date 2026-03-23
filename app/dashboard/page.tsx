@@ -43,6 +43,9 @@ function shortName(label: string) {
 }
 
 // Per-property color storage (persisted to localStorage)
+// New properties default to bright red (#ef4444) so they're easy to spot and reassign
+const DEFAULT_PROP_COLOR = '#ef4444'
+
 function loadColorMap(): Record<string,string> {
   if (typeof window === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem('propColors') || '{}') } catch { return {} }
@@ -52,12 +55,11 @@ function saveColorMap(map: Record<string,string>) {
   localStorage.setItem('propColors', JSON.stringify(map))
 }
 
-let _colorMap: Record<string,string> = {}
 let _colorIdx = 0
 function getPropColor(label: string, colorMap: Record<string,string>): string {
   if (colorMap[label]) return colorMap[label]
-  const color = COLOR_PALETTE[_colorIdx++ % COLOR_PALETTE.length]
-  return color
+  // Default to bright red so new properties are obvious and need to be assigned
+  return DEFAULT_PROP_COLOR
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
@@ -402,18 +404,6 @@ export default function Dashboard() {
               </Section>
             )}
 
-            {/* Color */}
-            <Section title="Property Color">
-              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                {COLOR_PALETTE.map(col=>(
-                  <button key={col} onClick={()=>assignColor(j.propertyLabel,col)}
-                    style={{width:24,height:24,borderRadius:6,background:col,border:colorMap[j.propertyLabel]===col?`3px solid var(--text)`:'2px solid transparent',cursor:'pointer',transition:'transform 0.1s'}}
-                    onMouseEnter={e=>(e.currentTarget.style.transform='scale(1.2)')}
-                    onMouseLeave={e=>(e.currentTarget.style.transform='')}/>
-                ))}
-              </div>
-            </Section>
-
             {/* Cleaners */}
             <Section title="Assigned Cleaners">
               <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
@@ -604,18 +594,44 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Properties */}
+          {/* Properties with color assignment */}
           {propNames.length>0&&(
             <div>
               <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Properties</div>
-              <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:260,overflowY:'auto'}}>
-                {propNames.map(p=>(
-                  <div key={p} style={{display:'flex',alignItems:'flex-start',gap:7,fontSize:11,color:'var(--text-muted)'}}>
-                    <div style={{width:10,height:10,borderRadius:3,background:colorMap[p]||getPropColor(p,colorMap),flexShrink:0,marginTop:1}}/>
-                    <span style={{lineHeight:1.3}}>{shortName(p)}</span>
-                  </div>
-                ))}
+              <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:300,overflowY:'auto'}}>
+                {propNames.map(p=>{
+                  const c = colorMap[p] || DEFAULT_PROP_COLOR
+                  const isDefault = !colorMap[p]
+                  return(
+                    <div key={p}>
+                      <div style={{display:'flex',alignItems:'flex-start',gap:7,marginBottom:4}}>
+                        <div style={{width:10,height:10,borderRadius:3,background:c,flexShrink:0,marginTop:2,border:isDefault?'2px solid #dc2626':'none'}}/>
+                        <span style={{fontSize:11,color:isDefault?'#dc2626':'var(--text-muted)',fontWeight:isDefault?600:400,lineHeight:1.3,flex:1}}>{shortName(p)}</span>
+                      </div>
+                      {/* Inline color swatches */}
+                      <div style={{display:'flex',flexWrap:'wrap',gap:3,paddingLeft:17}}>
+                        {COLOR_PALETTE.map(col=>(
+                          <button key={col} onClick={()=>{
+                            const next={...colorMap,[p]:col}
+                            setColorMap(next); saveColorMap(next)
+                          }}
+                            style={{width:14,height:14,borderRadius:3,background:col,
+                              border:colorMap[p]===col?'2px solid var(--text)':'1px solid transparent',
+                              cursor:'pointer',flexShrink:0,transition:'transform 0.1s'}}
+                            onMouseEnter={e=>(e.currentTarget.style.transform='scale(1.3)')}
+                            onMouseLeave={e=>(e.currentTarget.style.transform='')}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
+              {propNames.some(p=>!colorMap[p])&&(
+                <div style={{marginTop:8,padding:'6px 8px',borderRadius:6,background:'#fef2f2',border:'1px solid #fecaca',fontSize:10,color:'#dc2626'}}>
+                  ● Red = unassigned. Click a color to assign.
+                </div>
+              )}
             </div>
           )}
         </aside>
