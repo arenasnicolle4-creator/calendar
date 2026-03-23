@@ -78,7 +78,35 @@ function sameDay(a: Date, b: Date) { return a.getFullYear()===b.getFullYear()&&a
 function getWeekStart(d: Date) { const r=new Date(d); r.setDate(r.getDate()-r.getDay()); r.setHours(0,0,0,0); return r }
 const MAX_VISIBLE = 2
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
+// ── PROP NAME EDITOR — inline editable text ───────────────────────────────────
+function PropNameEditor({ value, onSave }: { label: string; value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { onSave(draft); setEditing(false) }}
+        onKeyDown={e => { if (e.key === 'Enter') { onSave(draft); setEditing(false) } if (e.key === 'Escape') setEditing(false) }}
+        style={{flex:1,background:'var(--surface)',border:'1px solid var(--cyan-dark)',borderRadius:5,padding:'1px 5px',fontSize:11,color:'var(--text)',outline:'none',minWidth:0}}
+      />
+    )
+  }
+
+  return (
+    <span
+      onClick={() => { setDraft(value); setEditing(true) }}
+      style={{flex:1,fontSize:11,color:'var(--text-muted)',lineHeight:1.3,cursor:'text',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}
+      title="Click to rename"
+    >
+      {value}
+    </span>
+  )
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const [jobs, setJobs] = useState<Job[]>([])
@@ -97,11 +125,16 @@ export default function Dashboard() {
   const [labelDraft, setLabelDraft] = useState('')
   const [expandedDays, setExpandedDays] = useState<Record<string,boolean>>({})
   const [colorMap, setColorMap] = useState<Record<string,string>>({})
+  const [propNameMap, setPropNameMap] = useState<Record<string,string>>({}) // propertyLabel → custom display name
+  const [hiddenProps, setHiddenProps] = useState<Set<string>>(new Set()) // hidden property labels
+  const [expandedColorProp, setExpandedColorProp] = useState<string|null>(null) // which property has color picker open
   const today = new Date()
   const HS=7, HE=21, HOURS=HE-HS
 
   useEffect(() => {
     setColorMap(loadColorMap())
+    try { setPropNameMap(JSON.parse(localStorage.getItem('propNames') || '{}')) } catch {}
+    try { setHiddenProps(new Set(JSON.parse(localStorage.getItem('hiddenProps') || '[]'))) } catch {}
     const params = new URLSearchParams(window.location.search)
     const connected = params.get('connected')
     const error = params.get('error')
@@ -119,6 +152,27 @@ export default function Dashboard() {
   function assignColor(label: string, color: string) {
     const next = { ...colorMap, [label]: color }
     setColorMap(next); saveColorMap(next)
+    setExpandedColorProp(null) // collapse picker after selecting
+  }
+
+  function displayName(propertyLabel: string): string {
+    if (propNameMap[propertyLabel]) return propNameMap[propertyLabel]
+    return shortName(propertyLabel)
+  }
+
+  function savePropName(label: string, name: string) {
+    const next = { ...propNameMap, [label]: name.trim() || shortName(label) }
+    setPropNameMap(next)
+    localStorage.setItem('propNames', JSON.stringify(next))
+  }
+
+  function togglePropVisibility(label: string) {
+    setHiddenProps(prev => {
+      const next = new Set(prev)
+      next.has(label) ? next.delete(label) : next.add(label)
+      localStorage.setItem('hiddenProps', JSON.stringify([...next]))
+      return next
+    })
   }
 
   async function connectGmail() { const r=await fetch('/api/gmail/accounts',{method:'POST'}); const {url}=await r.json(); window.location.href=url }
@@ -142,7 +196,7 @@ export default function Dashboard() {
   async function deleteJob(id: string) { await fetch(`/api/jobs/${id}`,{method:'DELETE'}); setSelectedJob(null); loadJobs() }
   async function handleLogout() { await fetch('/api/auth/login',{method:'DELETE'}); router.push('/login') }
 
-  const visibleJobs = jobs.filter(j=>activePlatforms.has(j.platform))
+  const visibleJobs = jobs.filter(j=>activePlatforms.has(j.platform) && !hiddenProps.has(j.propertyLabel))
   function jobsOnDay(date: Date) { return visibleJobs.filter(j=>sameDay(new Date(j.checkoutTime),date)) }
   function dayKey(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` }
 
@@ -196,7 +250,7 @@ export default function Dashboard() {
           }}>{day}</div>
           <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden'}}>
             {visible.map(j=>{
-              const c=jobColor(j),name=shortName(j.propertyLabel)
+              const c=jobColor(j),name=displayName(j.propertyLabel)
               return(
                 <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
                   style={{padding:'2px 6px 3px',borderRadius:5,cursor:'pointer',fontSize:10,fontWeight:500,
@@ -269,7 +323,7 @@ export default function Dashboard() {
                       background:`${c}18`,color:c,border:`1px solid ${c}30`,overflow:'hidden',zIndex:2,transition:'filter 0.1s'}}
                     onMouseEnter={e=>(e.currentTarget.style.filter='brightness(0.9)')}
                     onMouseLeave={e=>(e.currentTarget.style.filter='')}>
-                    <div style={{fontWeight:600,fontSize:11,whiteSpace:'pre-line',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'} as React.CSSProperties}>{shortName(j.propertyLabel)}</div>
+                    <div style={{fontWeight:600,fontSize:11,whiteSpace:'pre-line',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'} as React.CSSProperties}>{displayName(j.propertyLabel)}</div>
                     <div style={{fontSize:9,opacity:0.8}}>{fmt(j.checkoutTime)}{j.checkinTime?` – ${fmt(j.checkinTime)}`:''}</div>
                     {cl&&<div style={{fontSize:9,opacity:0.65}}>{cl.name}</div>}
                   </div>
@@ -304,7 +358,7 @@ export default function Dashboard() {
                 <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
                   style={{position:'absolute',left:10,right:10,top,height:ht,borderRadius:8,padding:'8px 12px',cursor:'pointer',
                     background:`${c}18`,color:c,borderLeft:`3px solid ${c}`,zIndex:2}}>
-                  <div style={{fontWeight:600,fontSize:14,whiteSpace:'pre-line'}}>{shortName(j.propertyLabel)}</div>
+                  <div style={{fontWeight:600,fontSize:14,whiteSpace:'pre-line'}}>{displayName(j.propertyLabel)}</div>
                   <div style={{fontSize:11,opacity:0.7,marginTop:1}}>{j.address}</div>
                   <div style={{fontSize:11,opacity:0.75,marginTop:2}}>{fmt(j.checkoutTime)}{j.checkinTime?` → ${fmt(j.checkinTime)}`:''}</div>
                   {cl&&<div style={{fontSize:11,opacity:0.6}}>👤 {cl.name}</div>}
@@ -324,7 +378,7 @@ export default function Dashboard() {
     const assigned=jobCleanerIds(j).map(id=>cleaners.find(cl=>cl.id===id)).filter(Boolean) as Cleaner[]
     const platLabel=j.platform.charAt(0).toUpperCase()+j.platform.slice(1)
     const pc=PLAT_COLORS[j.platform]||PLAT_COLORS.turno
-    const name=shortName(j.propertyLabel)
+    const name=displayName(j.propertyLabel)
 
     return(
       <div style={{position:'fixed',inset:0,background:'rgba(10,40,50,0.4)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setSelectedJob(null)}>
@@ -514,7 +568,8 @@ export default function Dashboard() {
   }
 
   // ── SIDEBAR ──────────────────────────────────────────────────────────────────
-  const propNames=[...new Set(Array.from(visibleJobs.map(j=>j.propertyLabel)))].sort()
+  // All unique properties across all jobs (not filtered) so they always appear in sidebar
+  const allPropNames = [...new Set(jobs.map(j=>j.propertyLabel))].sort()
   const allPlatforms=['airbnb','jobber','turno','hostaway']
 
   return(
@@ -594,44 +649,64 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Properties with color assignment */}
-          {propNames.length>0&&(
+          {/* Properties with toggle, editable name, collapsible color picker */}
+          {allPropNames.length>0&&(
             <div>
               <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Properties</div>
-              <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:300,overflowY:'auto'}}>
-                {propNames.map(p=>{
+              {allPropNames.some(p=>!colorMap[p])&&(
+                <div style={{marginBottom:8,padding:'5px 8px',borderRadius:6,background:'#fef2f2',border:'1px solid #fecaca',fontSize:10,color:'#dc2626'}}>
+                  ● Red = needs color assigned
+                </div>
+              )}
+              <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:400,overflowY:'auto'}}>
+                {allPropNames.map(p=>{
                   const c = colorMap[p] || DEFAULT_PROP_COLOR
-                  const isDefault = !colorMap[p]
+                  const isHidden = hiddenProps.has(p)
+                  const isExpanded = expandedColorProp === p
+                  const name = displayName(p)
+
                   return(
-                    <div key={p}>
-                      <div style={{display:'flex',alignItems:'flex-start',gap:7,marginBottom:4}}>
-                        <div style={{width:10,height:10,borderRadius:3,background:c,flexShrink:0,marginTop:2,border:isDefault?'2px solid #dc2626':'none'}}/>
-                        <span style={{fontSize:11,color:isDefault?'#dc2626':'var(--text-muted)',fontWeight:isDefault?600:400,lineHeight:1.3,flex:1}}>{shortName(p)}</span>
+                    <div key={p} style={{borderRadius:8,border:'1px solid var(--border-light)',background:isHidden?'var(--surface)':'var(--surface2)',overflow:'hidden',opacity:isHidden?0.5:1,transition:'opacity 0.15s'}}>
+                      {/* Property row */}
+                      <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px'}}>
+                        {/* Color dot — click to toggle color picker */}
+                        <button onClick={()=>setExpandedColorProp(isExpanded?null:p)}
+                          style={{width:12,height:12,borderRadius:3,background:c,border:'none',cursor:'pointer',flexShrink:0,transition:'transform 0.1s'}}
+                          onMouseEnter={e=>(e.currentTarget.style.transform='scale(1.2)')}
+                          onMouseLeave={e=>(e.currentTarget.style.transform='')}
+                          title="Click to change color"
+                        />
+                        {/* Editable name */}
+                        <PropNameEditor
+                          label={p}
+                          value={name}
+                          onSave={(v)=>savePropName(p,v)}
+                        />
+                        {/* Eye toggle */}
+                        <button onClick={()=>togglePropVisibility(p)}
+                          style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',fontSize:12,opacity:isHidden?0.4:0.7,flexShrink:0,padding:'0 2px'}}
+                          title={isHidden?'Show on calendar':'Hide from calendar'}>
+                          {isHidden?'○':'●'}
+                        </button>
                       </div>
-                      {/* Inline color swatches */}
-                      <div style={{display:'flex',flexWrap:'wrap',gap:3,paddingLeft:17}}>
-                        {COLOR_PALETTE.map(col=>(
-                          <button key={col} onClick={()=>{
-                            const next={...colorMap,[p]:col}
-                            setColorMap(next); saveColorMap(next)
-                          }}
-                            style={{width:14,height:14,borderRadius:3,background:col,
-                              border:colorMap[p]===col?'2px solid var(--text)':'1px solid transparent',
-                              cursor:'pointer',flexShrink:0,transition:'transform 0.1s'}}
-                            onMouseEnter={e=>(e.currentTarget.style.transform='scale(1.3)')}
-                            onMouseLeave={e=>(e.currentTarget.style.transform='')}
-                          />
-                        ))}
-                      </div>
+                      {/* Collapsible color picker */}
+                      {isExpanded&&(
+                        <div style={{padding:'4px 8px 8px',borderTop:'1px solid var(--border-light)'}}>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                            {COLOR_PALETTE.map(col=>(
+                              <button key={col} onClick={()=>assignColor(p,col)}
+                                style={{width:18,height:18,borderRadius:4,background:col,border:colorMap[p]===col?'2px solid var(--text)':'2px solid transparent',cursor:'pointer',transition:'transform 0.1s'}}
+                                onMouseEnter={e=>(e.currentTarget.style.transform='scale(1.2)')}
+                                onMouseLeave={e=>(e.currentTarget.style.transform='')}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
               </div>
-              {propNames.some(p=>!colorMap[p])&&(
-                <div style={{marginTop:8,padding:'6px 8px',borderRadius:6,background:'#fef2f2',border:'1px solid #fecaca',fontSize:10,color:'#dc2626'}}>
-                  ● Red = unassigned. Click a color to assign.
-                </div>
-              )}
             </div>
           )}
         </aside>
