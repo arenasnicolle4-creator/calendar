@@ -30,8 +30,9 @@ export async function GET() {
       accessToken = tokens.access_token
     }
 
-    const startAt = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
-    const endAt = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString()
+    // 90 days back to ~14 months forward (under 1.5 year limit)
+    const startAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const endAt = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString()
 
     const scheduledData = await gql(accessToken, `query {
       scheduledItems(
@@ -60,11 +61,19 @@ export async function GET() {
             title
             startAt
             endAt
+            description
           }
           ... on Task {
             __typename
             id
             title
+          }
+          ... on Assessment {
+            __typename
+            id
+            title
+            startAt
+            endAt
           }
         }
         pageInfo { hasNextPage endCursor }
