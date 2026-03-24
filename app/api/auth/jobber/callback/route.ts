@@ -42,7 +42,8 @@ export async function GET(req: Request) {
       if (meData?.data?.account?.name) {
         companyName = meData.data.account.name
         // Use company name as unique key since email may not be available
-        email = `${companyName.toLowerCase().replace(/\s+/g, '-')}-${meData.data.account.id}@jobber.cleansync`
+        const safeName = (companyName || 'jobber').toLowerCase().replace(/\s+/g, '-')
+        email = `${safeName}-${meData.data.account.id}@jobber.cleansync`
       }
     } catch (accountErr) {
       console.error('Could not fetch Jobber account info:', accountErr)
