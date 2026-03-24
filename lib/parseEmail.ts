@@ -53,12 +53,15 @@ export function parseTurnoEmail(body: string, messageId?: string, accountEmail?:
       continue
     }
 
+    // Bedrooms — match "Bedrooms: 4" 
     const brm = line.match(/Bedroom[s]?:\s*(\d+)/i)
     if (bedrooms === null && brm) bedrooms = parseInt(brm[1])
 
-    const bdsm = line.match(/Beds?:\s*(\d+)/i)
+    // Beds — "Beds: 5" but NOT "Bedrooms:" — use word boundary after Beds
+    const bdsm = line.match(/(?<![a-z])Beds:\s*(\d+)/i)
     if (beds === null && bdsm) beds = parseInt(bdsm[1])
 
+    // Bathrooms — "Bathrooms: 2.5" or "Bathroom: 1" on same or separate line
     const bam = line.match(/Bathroom[s]?:\s*(\d+\.?\d*)/i)
     if (bathrooms === null && bam) bathrooms = parseFloat(bam[1])
 
