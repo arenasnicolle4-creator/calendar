@@ -2,41 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
 
 :root {
-  /* Off-white base — slightly more contrast */
-  --bg: #ece8e1;
-  --surface: #f2ede7;
-  --surface2: #e8e3db;
-  --surface3: #dedad1;
-  --border: #c8c1b8;
-  --border-light: #ddd8d0;
+  /* Base — deep navy */
+  --bg: #0b0f1a;
+  --surface: #111827;
+  --surface2: #1a2235;
+  --surface3: #243049;
+  --border: #1e2d47;
+  --border-light: #263555;
 
-  /* Text — darkened for readability */
-  --text: #0f1f24;
-  --text-muted: #3d5a62;
-  --text-dim: #7a9298;
+  /* Text */
+  --text: #f0f4ff;
+  --text-muted: #8ba3c7;
+  --text-dim: #4a6080;
 
-  /* Cyan accents */
-  --cyan-dark: #0e7490;
-  --cyan-mid: #0891b2;
-  --cyan-light: #a5f3fc;
-  --cyan-pale: #e0f7fa;
-  --cyan-bg: #f0fbfd;
+  /* Primary — electric teal */
+  --teal: #00d4aa;
+  --teal-dark: #00a882;
+  --teal-bg: rgba(0,212,170,0.08);
+  --teal-border: rgba(0,212,170,0.2);
+
+  /* Accent — coral */
+  --coral: #ff6b6b;
+  --coral-dark: #e85555;
+  --coral-bg: rgba(255,107,107,0.08);
+
+  /* Accent 2 — amber */
+  --amber: #ffd166;
+  --amber-bg: rgba(255,209,102,0.08);
+
+  /* Accent 3 — violet */
+  --violet: #a78bfa;
+  --violet-bg: rgba(167,139,250,0.08);
 
   /* Status */
-  --green: #0d9488;
-  --green-bg: #f0fdfa;
-  --red: #dc2626;
-  --red-bg: #fef2f2;
-  --amber: #d97706;
-  --amber-bg: #fffbeb;
+  --green: #10b981;
+  --green-bg: rgba(16,185,129,0.1);
+  --red: #f43f5e;
+  --red-bg: rgba(244,63,94,0.1);
 
   --radius: 12px;
-  --shadow-sm: 0 1px 3px rgba(14,116,144,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(14,116,144,0.1), 0 2px 4px rgba(0,0,0,0.05);
-  --shadow-lg: 0 10px 30px rgba(14,116,144,0.12), 0 4px 8px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 40px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 20px rgba(0,212,170,0.15);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,7 +59,7 @@ body {
   min-height: 100vh;
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
