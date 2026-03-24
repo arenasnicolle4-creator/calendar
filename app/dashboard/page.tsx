@@ -427,37 +427,31 @@ export default function Dashboard() {
               </Section>
             )}
 
-            {/* Property details — always show if any detail exists */}
-            {(j.sqft||j.beds||j.baths)&&(
+            {/* Property details */}
+            {(j.sqft||j.beds!=null||j.baths!=null)&&(
               <Section title="Property Details">
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
                   {j.beds!=null&&(
                     <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
-                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Bedrooms</div>
-                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.beds}</div>
+                      <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Bedrooms</div>
+                      <div style={{fontFamily:'Fraunces,serif',fontSize:22,color:'var(--text)',fontWeight:400}}>{j.beds}</div>
                     </div>
                   )}
-                  {j.beds!=null&&(
+                  {(()=>{const m=j.notes?.match(/Beds:\s*(\d+)/i);return m?(
                     <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
-                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Beds</div>
-                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.beds}</div>
+                      <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Beds</div>
+                      <div style={{fontFamily:'Fraunces,serif',fontSize:22,color:'var(--text)',fontWeight:400}}>{m[1]}</div>
                     </div>
-                  )}
+                  ):null})()}
                   {j.baths!=null&&(
                     <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
-                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Bathrooms</div>
-                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.baths}</div>
-                    </div>
-                  )}
-                  {j.sqft&&(
-                    <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
-                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Sq Ft</div>
-                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.sqft.toLocaleString()}</div>
+                      <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Bathrooms</div>
+                      <div style={{fontFamily:'Fraunces,serif',fontSize:22,color:'var(--text)',fontWeight:400}}>{j.baths}</div>
                     </div>
                   )}
                   {j.worth&&(
                     <div style={{gridColumn:'1/-1',background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
-                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Job Value</div>
+                      <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Job Value</div>
                       <span style={{display:'inline-flex',alignItems:'center',gap:4,background:'#f0fdf4',color:'#166534',border:'1px solid #bbf7d0',borderRadius:7,padding:'3px 10px',fontSize:13,fontWeight:600}}>💵 ${j.worth}</span>
                     </div>
                   )}
@@ -655,21 +649,6 @@ export default function Dashboard() {
                   {active&&<span style={{marginLeft:'auto',fontSize:10,color:'var(--cyan-dark)'}}>✓</span>}
                 </div>
               )})}
-            </div>
-          </div>
-
-          {/* Cleaners */}
-          <div>
-            <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>Cleaners</div>
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              {cleaners.map(cl=>(
-                <div key={cl.id} style={{display:'flex',alignItems:'center',gap:7,padding:'4px 5px',fontSize:11,color:'var(--text-muted)'}}>
-                  <div style={{width:22,height:22,borderRadius:'50%',background:cl.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'white',flexShrink:0}}>
-                    {cl.name.split(' ').map((w:string)=>w[0]).join('')}
-                  </div>
-                  {cl.name}
-                </div>
-              ))}
             </div>
           </div>
 
