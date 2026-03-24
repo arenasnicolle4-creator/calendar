@@ -806,7 +806,7 @@ export default function Dashboard() {
         {/* Collapse toggle */}
         <div style={{padding:'12px 8px',borderTop:'1px solid var(--border)'}}>
           <button onClick={()=>setSidebarCollapsed(p=>!p)}
-            style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',cursor:'pointer',color:'var(--text-muted)',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'DM Sans,sans-serif',fontSize:11,fontWeight:500}}>
+            style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',cursor:'pointer',color:'var(--text-muted)',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'DM Sans,sans-serif',fontWeight:500}}>
             {sidebarCollapsed?'→':'← Collapse'}
           </button>
         </div>
