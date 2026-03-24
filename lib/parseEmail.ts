@@ -2,6 +2,7 @@
 
 export interface ParsedJob {
   address: string
+  propertyName?: string | null  // from email subject: "New Cleaning project available at X"
   hostName: string | null
   startTime: string | null
   endTime: string | null
@@ -13,7 +14,7 @@ export interface ParsedJob {
   gmailAccountEmail?: string
 }
 
-// Parse plain text Turno emails (noreply@turno.com format)
+// Parse plain text Turno emails (direct or forwarded)
 export function parseTurnoEmail(body: string, messageId?: string, accountEmail?: string): ParsedJob | null {
   if (!body.toLowerCase().includes('cleaning') && !body.toLowerCase().includes('turno')) return null
 
@@ -29,44 +30,61 @@ export function parseTurnoEmail(body: string, messageId?: string, accountEmail?:
   let checklist: string | null = null
 
   for (const line of lines) {
-    const cleaningMatch = line.match(/^Cleaning\s+(.+)$/i)
-    if (!address && cleaningMatch && !line.toLowerCase().includes('project')) {
-      address = cleaningMatch[1].trim(); continue
-    }
-    const atMatch = line.match(/available at (.+)/i)
-    if (!address && atMatch) { address = atMatch[1].replace(/\.$/, '').trim(); continue }
+    if (/^(Subject|Date|From|To):/i.test(line)) continue
 
-    const hm = line.match(/Host:\s*\*?(.+?)\*?\s*$/i)
-    if (!hostName && hm) { hostName = hm[1].trim(); continue }
-
-    const sm = line.match(/Start\s*Time:\s*(.+)/i)
-    if (!startTime && sm) {
-      const d = parseAlaskaTime(sm[1].trim())
-      if (d) startTime = d.toISOString()
+    if (!address && !line.startsWith('Cleaning') &&
+        (line.includes('Anchorage') || line.includes(', AK'))) {
+      const hostIdx = line.indexOf('Host:')
+      address = (hostIdx > -1 ? line.substring(0, hostIdx) : line).trim()
+      if (!hostName && hostIdx > -1) {
+        hostName = line.substring(hostIdx).replace(/Host:\s*/i, '').replace(/\*/g, '').trim()
+      }
       continue
     }
 
-    const em = line.match(/End\s*Time:\s*(.+)/i)
-    if (!endTime && em) {
-      const d = parseAlaskaTime(em[1].trim())
-      if (d) endTime = d.toISOString()
-      continue
+    if (!hostName) {
+      const hm = line.match(/^Host:\s*\*?(.+?)\*?\s*$/i)
+      if (hm) { hostName = hm[1].trim(); continue }
     }
 
-    // Bedrooms — match "Bedrooms: 4" 
-    const brm = line.match(/Bedroom[s]?:\s*(\d+)/i)
-    if (bedrooms === null && brm) bedrooms = parseInt(brm[1])
+    if (!startTime) {
+      const sm = line.match(/Start\s*Time:\s*(.+)/i)
+      if (sm) {
+        const d = parseAlaskaTime(sm[1].trim())
+        if (d) startTime = d.toISOString()
+        continue
+      }
+    }
 
-    // Beds — "Beds: 5" but NOT "Bedrooms:" — use word boundary after Beds
-    const bdsm = line.match(/(?<![a-z])Beds:\s*(\d+)/i)
-    if (beds === null && bdsm) beds = parseInt(bdsm[1])
+    if (!endTime) {
+      const em = line.match(/End\s*Time:\s*(.+)/i)
+      if (em) {
+        const d = parseAlaskaTime(em[1].trim())
+        if (d) endTime = d.toISOString()
+        continue
+      }
+    }
 
-    // Bathrooms — "Bathrooms: 2.5" or "Bathroom: 1" on same or separate line
-    const bam = line.match(/Bathroom[s]?:\s*(\d+\.?\d*)/i)
-    if (bathrooms === null && bam) bathrooms = parseFloat(bam[1])
+    if (bedrooms === null) {
+      const m = line.match(/Bedrooms?:\s*(\d+)/i)
+      if (m) bedrooms = parseInt(m[1])
+    }
 
-    const cm = line.match(/^Checklist:\s*(.+)/i)
-    if (!checklist && cm && !cm[1].toLowerCase().includes('too many')) checklist = cm[1].trim()
+    // Beds: match " Beds: N" or "Beds: N" at start — NOT "Bedrooms:"
+    if (beds === null) {
+      const m = line.match(/(?:^|\s)Beds:\s*(\d+)/i)
+      if (m) beds = parseInt(m[1])
+    }
+
+    if (bathrooms === null) {
+      const m = line.match(/Bathrooms?:\s*(\d+\.?\d*)/i)
+      if (m) bathrooms = parseFloat(m[1])
+    }
+
+    if (!checklist) {
+      const cm = line.match(/^Checklist:\s*(.+)/i)
+      if (cm && !cm[1].toLowerCase().includes('too many')) checklist = cm[1].trim()
+    }
   }
 
   if (!address) return null
@@ -74,40 +92,43 @@ export function parseTurnoEmail(body: string, messageId?: string, accountEmail?:
   return { address, hostName, startTime, endTime, bedrooms, beds, bathrooms, checklist, gmailMessageId: messageId, gmailAccountEmail: accountEmail }
 }
 
-// Parse Alaska time — Turno shows times in Alaska local time
+// Alaska time parser
 function parseAlaskaTime(dateStr: string): Date | null {
   if (!dateStr) return null
-  // Strip day name: "Mon, Jun 8 2026 11:00 AM" -> "Jun 8 2026 11:00 AM"
-  const stripped = dateStr.replace(/^[A-Za-z]+,?\s*/, '').trim()
-  // Try parsing with AKST offset (-09:00)
-  const withOffset = stripped.replace(/(AM|PM)\s*$/i, '$1 -09:00')
-  let d = new Date(withOffset)
+  const stripped = dateStr.trim().replace(/^[A-Za-z]+,?\s*/, '').trim()
+  let d = new Date(stripped.replace(/(AM|PM)\s*$/i, '$1 -08:00'))
   if (!isNaN(d.getTime())) return d
-  // Fallback: parse without TZ then add 9 hours (AKST offset)
+  d = new Date(stripped.replace(/(AM|PM)\s*$/i, '$1 -09:00'))
+  if (!isNaN(d.getTime())) return d
   d = new Date(stripped)
-  if (!isNaN(d.getTime())) return new Date(d.getTime() + 9 * 60 * 60 * 1000)
+  if (!isNaN(d.getTime())) return d
   return null
 }
 
 const PROPERTY_SHORT_NAMES: Record<string, string> = {
   'WildAboutAnchorage | HotTub | Patio | ChefsKitchen': 'WildAboutAnchorage',
   'Meridian Suite at North Star Lodge • HotTub • View': 'Meridian Suite',
-  'North Star Lodge - TOP TWO UNITS': 'North Star Lodge\nTop Two Units',
-  'North Star Lodge - ENTIRE HOUSE': 'North Star Lodge\nEntire House',
+  'North Star Lodge - TOP TWO UNITS': 'North Star Lodge - Top Two Units',
+  'North Star Lodge - ENTIRE HOUSE': 'North Star Lodge - Entire House',
   'Polaris Suite at North Star Lodge • Hot Tub • View': 'Polaris Suite',
 }
 
-function getShortName(label: string): string {
-  if (PROPERTY_SHORT_NAMES[label]) return PROPERTY_SHORT_NAMES[label]
-  // Strip "Subject: New Cleaning project available at " prefix if present
-  let clean = label
+function getDisplayName(propertyName: string | null | undefined, address: string): string {
+  // Property name from subject line takes priority — it's the cleanest form
+  if (propertyName) {
+    // Check our known short name map
+    if (PROPERTY_SHORT_NAMES[propertyName]) return PROPERTY_SHORT_NAMES[propertyName]
+    // Use it as-is — it's already the clean name from the subject
+    return propertyName
+  }
+  // Fall back to address street portion
+  const clean = address
     .replace(/^Subject:\s*/i, '')
     .replace(/^New Cleaning project available at\s*/i, '')
-    .replace(/^Fwd?:\s*/i, '')
-  // For addresses, use just the street portion before the city
+    .trim()
   const commaIdx = clean.indexOf(',')
-  if (commaIdx > -1 && clean.includes('Anchorage')) {
-    clean = clean.substring(0, commaIdx).trim()
+  if (commaIdx > -1 && (clean.includes('Anchorage') || clean.includes(' AK'))) {
+    return clean.substring(0, commaIdx).trim()
   }
   return clean.split('|')[0].split('•')[0].trim()
 }
@@ -119,32 +140,36 @@ export function jobFromParsed(parsed: ParsedJob): object | null {
   const endTime = parsed.endTime ? new Date(parsed.endTime) : new Date(startTime.getTime() + 3 * 3600000)
 
   const address = parsed.address
-  // Clean up address — strip any "Subject:" or forwarding artifacts
-  const cleanAddress = address
     .replace(/^Subject:\s*/i, '')
     .replace(/^New Cleaning project available at\s*/i, '')
-    .replace(/^Fwd?:\s*/i, '')
     .trim()
-  // Use street portion as property label (consistent across all jobs at same address)
-  const streetOnly = cleanAddress.split(',')[0].trim()
-  const propertyLabel = streetOnly
-  const displayName = getShortName(streetOnly)
+
+  // Property label = property name from subject (cleanest) or street address
+  const propertyLabel = parsed.propertyName ||
+    (address.split(',')[0].trim())
+
+  const displayName = getDisplayName(parsed.propertyName, address)
 
   return {
     platform: 'turno',
     displayName,
     customerName: parsed.hostName || 'Unknown Host',
-    address: cleanAddress,
+    address,
     propertyLabel,
     checkoutTime: startTime,
     checkinTime: endTime,
     nextGuests: null,
     nextGuestCount: null,
     sqft: null,
-    beds: parsed.bedrooms ?? parsed.beds ?? null,
+    // beds = number of bedrooms (rooms), baths = bathrooms
+    // Store bedrooms in displayName context, beds as actual bed count
+    beds: parsed.bedrooms ?? null,      // bedrooms (rooms)
     baths: parsed.bathrooms ?? null,
     worth: null,
-    notes: parsed.checklist ? `Checklist: ${parsed.checklist}` : '',
+    notes: [
+      parsed.checklist ? `Checklist: ${parsed.checklist}` : '',
+      parsed.beds != null ? `Beds: ${parsed.beds}` : '',
+    ].filter(Boolean).join('\n'),
     cleanerIds: '[]',
     duties: '[]',
     gmailMessageId: parsed.gmailMessageId || null,
