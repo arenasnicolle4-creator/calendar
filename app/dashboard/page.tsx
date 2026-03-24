@@ -427,16 +427,40 @@ export default function Dashboard() {
               </Section>
             )}
 
-            {/* Property details */}
-            {(j.sqft||j.beds)&&(
+            {/* Property details — always show if any detail exists */}
+            {(j.sqft||j.beds||j.baths)&&(
               <Section title="Property Details">
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  {j.sqft&&<IC label="Sq Ft" value={j.sqft.toLocaleString()} large/>}
-                  {j.beds&&<IC label="Beds / Baths" value={`${j.beds}bd / ${j.baths}ba`} large/>}
-                  {j.worth&&<div style={{gridColumn:'1/-1',background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
-                    <div style={{fontSize:9,color:'var(--text-dim)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3}}>Job Value</div>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:4,background:'#f0fdf4',color:'#166534',border:'1px solid #bbf7d0',borderRadius:7,padding:'3px 10px',fontSize:13,fontWeight:600}}>💵 ${j.worth}</span>
-                  </div>}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                  {j.beds!=null&&(
+                    <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
+                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Bedrooms</div>
+                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.beds}</div>
+                    </div>
+                  )}
+                  {j.beds!=null&&(
+                    <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
+                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Beds</div>
+                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.beds}</div>
+                    </div>
+                  )}
+                  {j.baths!=null&&(
+                    <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
+                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Bathrooms</div>
+                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.baths}</div>
+                    </div>
+                  )}
+                  {j.sqft&&(
+                    <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
+                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Sq Ft</div>
+                      <div style={{fontFamily:'Fraunces,serif',fontSize:20,color:'var(--text)',fontWeight:400}}>{j.sqft.toLocaleString()}</div>
+                    </div>
+                  )}
+                  {j.worth&&(
+                    <div style={{gridColumn:'1/-1',background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
+                      <div style={{fontSize:9,color:'var(--text)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>Job Value</div>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:4,background:'#f0fdf4',color:'#166534',border:'1px solid #bbf7d0',borderRadius:7,padding:'3px 10px',fontSize:13,fontWeight:600}}>💵 ${j.worth}</span>
+                    </div>
+                  )}
                 </div>
               </Section>
             )}
@@ -544,7 +568,7 @@ export default function Dashboard() {
   function Section({title,children}:{title:string;children:React.ReactNode}) {
     return(
       <div style={{marginBottom:18}}>
-        <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',marginBottom:8}}>{title}</div>
+        <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:1.2,color:'var(--text-muted)',marginBottom:8}}>{title}</div>
         {children}
       </div>
     )
@@ -552,17 +576,17 @@ export default function Dashboard() {
   function TBI({label,value,sub}:{label:string;value:string;sub:string}) {
     return(
       <div style={{flex:1}}>
-        <div style={{fontSize:9,color:'var(--text-dim)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:2}}>{label}</div>
-        <div style={{fontSize:14,fontWeight:600,color:'var(--text)'}}>{value}</div>
-        <div style={{fontSize:10,color:'var(--text-muted)'}}>{sub}</div>
+        <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:2,fontWeight:600}}>{label}</div>
+        <div style={{fontSize:15,fontWeight:700,color:'var(--text)'}}>{value}</div>
+        <div style={{fontSize:11,color:'var(--text-muted)',fontWeight:500}}>{sub}</div>
       </div>
     )
   }
   function IC({label,value,large}:{label:string;value:string;large?:boolean}) {
     return(
       <div style={{background:'var(--surface2)',borderRadius:9,padding:'10px 12px',border:'1px solid var(--border-light)'}}>
-        <div style={{fontSize:9,color:'var(--text-dim)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3}}>{label}</div>
-        <div style={{fontSize:large?18:13,fontWeight:large?400:500,fontFamily:large?'Fraunces,serif':'DM Sans,sans-serif',color:'var(--text)'}}>{value}</div>
+        <div style={{fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:0.8,marginBottom:3,fontWeight:600}}>{label}</div>
+        <div style={{fontSize:large?18:14,fontWeight:large?400:600,fontFamily:large?'Fraunces,serif':'DM Sans,sans-serif',color:'var(--text)'}}>{value}</div>
       </div>
     )
   }
