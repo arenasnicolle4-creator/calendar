@@ -30,60 +30,50 @@ export async function GET() {
       accessToken = tokens.access_token
     }
 
-    // Test events query — calendar events/blocked time
-    const eventsData = await gql(accessToken, `query {
-      events(first: 5) {
-        nodes {
-          id
-          title
-          startAt
-          endAt
-        }
-        pageInfo { hasNextPage }
-      }
-    }`)
+    // Test scheduledItems with date filter — this is the unified calendar feed
+    const now = new Date().toISOString()
+    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
 
-    // Test scheduledItems — the unified calendar feed
     const scheduledData = await gql(accessToken, `query {
-      scheduledItems(first: 5) {
+      scheduledItems(
+        first: 10
+        filter: { startAt: { after: "${now}", before: "${future}" } }
+      ) {
         nodes {
           ... on Visit {
+            __typename
             id
             title
             startAt
             endAt
             client { name }
+            job { jobNumber title property { address { street city } } }
           }
           ... on Event {
+            __typename
             id
             title
             startAt
             endAt
           }
         }
-        pageInfo { hasNextPage }
+        pageInfo { hasNextPage endCursor }
       }
     }`)
 
-    // Test visits
-    const visitsData = await gql(accessToken, `query {
-      visits(first: 3) {
-        nodes { id title startAt endAt client { name } }
-      }
-    }`)
-
-    // Test jobs
-    const jobsData = await gql(accessToken, `query {
-      jobs(first: 3) {
-        nodes { id jobNumber title startAt endAt client { name } }
+    // Also test single event query
+    const eventData = await gql(accessToken, `query {
+      event(id: "test") {
+        id
+        title
+        startAt
+        endAt
       }
     }`)
 
     return NextResponse.json({
-      events: eventsData,
       scheduledItems: scheduledData,
-      visits: visitsData,
-      jobs: jobsData,
+      eventSingleTest: eventData,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
