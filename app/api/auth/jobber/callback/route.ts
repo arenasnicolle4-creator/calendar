@@ -17,7 +17,15 @@ export async function GET(req: Request) {
   try {
     const tokens = await exchangeJobberCode(code)
 
-    // Try to get account info — use a simple query that works across API versions
+    // Log what Jobber actually returns for debugging
+    console.log('Jobber token response keys:', Object.keys(tokens))
+    console.log('expires_in:', (tokens as any).expires_in)
+    console.log('expires_in type:', typeof (tokens as any).expires_in)
+
+    // Jobber tokens last 1 hour — use 55 minutes to be safe
+    // Don't rely on expires_in since Jobber may not return it consistently
+    const expiresAt = new Date(Date.now() + 55 * 60 * 1000)
+
     let email = `jobber-${Date.now()}@cleansync.app`
     let companyName: string | null = null
 
@@ -27,32 +35,19 @@ export async function GET(req: Request) {
         headers: {
           'Authorization': `Bearer ${tokens.access_token}`,
           'Content-Type': 'application/json',
-          'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
+          'X-JOBBER-GRAPHQL-VERSION': '2026-03-10',
         },
-        body: JSON.stringify({
-          query: `query {
-            account {
-              id
-              name
-            }
-          }`
-        }),
+        body: JSON.stringify({ query: `query { account { id name } }` }),
       })
       const meData = await meRes.json()
       if (meData?.data?.account?.name) {
         companyName = meData.data.account.name
-        // Use company name as unique key since email may not be available
-        const safeName = (companyName || 'jobber').toLowerCase().replace(/\s+/g, '-')
+        const safeName = companyName.toLowerCase().replace(/\s+/g, '-')
         email = `${safeName}-${meData.data.account.id}@jobber.cleansync`
       }
     } catch (accountErr) {
       console.error('Could not fetch Jobber account info:', accountErr)
-      // Continue with fallback email — don't fail the whole auth
     }
-
-    // Upsert the account — use 1 hour fallback if expires_in missing
-    const expiresIn = typeof tokens.expires_in === 'number' ? tokens.expires_in : 3600
-    const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
     await prisma.jobberAccount.upsert({
       where: { email },
@@ -76,7 +71,6 @@ export async function GET(req: Request) {
     )
   } catch (e) {
     console.error('Jobber callback error:', String(e))
-    // Pass the actual error message through so we can debug
     const msg = encodeURIComponent(String(e).slice(0, 100))
     return NextResponse.redirect(
       `${process.env.NEXTAUTH_URL}/dashboard?error=jobber_${msg}`
