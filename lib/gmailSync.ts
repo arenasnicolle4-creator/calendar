@@ -154,13 +154,13 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
       if (m) bedrooms = parseInt(m[1])
     }
 
-    // Beds count
+    // Beds — "Beds: 5" but NOT "Bedrooms:" — negative lookbehind
     if (beds === null) {
-      const m = line.match(/\bBeds?:\s*(\d+)/i)
+      const m = line.match(/(?<![a-z])Beds:\s*(\d+)/i)
       if (m) beds = parseInt(m[1])
     }
 
-    // Bathrooms — "Bathrooms: 2.5" may be on same line OR its own line
+    // Bathrooms — "Bathrooms: 2.5" on same or separate line
     if (bathrooms === null) {
       const m = line.match(/Bathroom[s]?:\s*(\d+\.?\d*)/i)
       if (m) bathrooms = parseFloat(m[1])
