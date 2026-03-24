@@ -1,8 +1,22 @@
 // app/api/jobber/debug/route.ts
-// Temporary debug endpoint — shows raw Jobber API response
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { refreshJobberToken } from '@/lib/jobberSync'
+
+const VERSION = '2026-03-10'
+
+async function gql(accessToken: string, query: string) {
+  const res = await fetch('https://api.getjobber.com/api/graphql', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'X-JOBBER-GRAPHQL-VERSION': VERSION,
+    },
+    body: JSON.stringify({ query }),
+  })
+  return res.json()
+}
 
 export async function GET() {
   try {
@@ -11,80 +25,65 @@ export async function GET() {
 
     const account = accounts[0]
     let accessToken = account.accessToken
-
-    // Refresh if expired
     if (new Date(account.expiresAt) < new Date()) {
       const tokens = await refreshJobberToken(account.refreshToken)
       accessToken = tokens.access_token
     }
 
-    // Test 1: simple account query
-    const accountRes = await fetch('https://api.getjobber.com/api/graphql', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
-      },
-      body: JSON.stringify({ query: `query { account { id name } }` }),
-    })
-    const accountData = await accountRes.json()
+    // Test events query — calendar events/blocked time
+    const eventsData = await gql(accessToken, `query {
+      events(first: 5) {
+        nodes {
+          id
+          title
+          startAt
+          endAt
+        }
+        pageInfo { hasNextPage }
+      }
+    }`)
 
-    // Test 2: visits query
-    const visitsRes = await fetch('https://api.getjobber.com/api/graphql', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
-      },
-      body: JSON.stringify({
-        query: `query {
-          visits(first: 5) {
-            nodes {
-              id
-              title
-              startAt
-              endAt
-              client { name }
-            }
-            pageInfo { hasNextPage }
+    // Test scheduledItems — the unified calendar feed
+    const scheduledData = await gql(accessToken, `query {
+      scheduledItems(first: 5) {
+        nodes {
+          ... on Visit {
+            id
+            title
+            startAt
+            endAt
+            client { name }
           }
-        }`
-      }),
-    })
-    const visitsData = await visitsRes.json()
+          ... on Event {
+            id
+            title
+            startAt
+            endAt
+          }
+        }
+        pageInfo { hasNextPage }
+      }
+    }`)
 
-    // Test 3: jobs query as fallback
-    const jobsRes = await fetch('https://api.getjobber.com/api/graphql', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
-      },
-      body: JSON.stringify({
-        query: `query {
-          jobs(first: 5) {
-            nodes {
-              id
-              jobNumber
-              title
-              startAt
-              endAt
-              client { name }
-            }
-          }
-        }`
-      }),
-    })
-    const jobsData = await jobsRes.json()
+    // Test visits
+    const visitsData = await gql(accessToken, `query {
+      visits(first: 3) {
+        nodes { id title startAt endAt client { name } }
+      }
+    }`)
+
+    // Test jobs
+    const jobsData = await gql(accessToken, `query {
+      jobs(first: 3) {
+        nodes { id jobNumber title startAt endAt client { name } }
+      }
+    }`)
 
     return NextResponse.json({
-      account: accountData,
+      events: eventsData,
+      scheduledItems: scheduledData,
       visits: visitsData,
       jobs: jobsData,
-      tokenExpiry: account.expiresAt,
     })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
