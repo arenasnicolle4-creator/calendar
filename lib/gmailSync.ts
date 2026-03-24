@@ -236,7 +236,7 @@ export async function syncGmailAccount(accountId: string) {
     'subject:"FW: New Cleaning project available" "Start Time"',
   ]
 
-  const allMessages: Array<{id: string; subject?: string}> = []
+  const allMessages: Array<{id: string}> = []
   for (const q of queries) {
     const res = await gmail.users.messages.list({ userId: 'me', q, maxResults: 100 })
     for (const msg of res.data.messages || []) {
@@ -257,7 +257,6 @@ export async function syncGmailAccount(accountId: string) {
       format: 'full',
     })
 
-    // Get subject from headers
     const subject = full.data.payload?.headers?.find(
       (h: any) => h.name?.toLowerCase() === 'subject'
     )?.value || ''
@@ -265,10 +264,8 @@ export async function syncGmailAccount(accountId: string) {
     const { plain } = extractParts(full.data.payload)
     const parsed = parseTurnoText(plain, msg.id, account.email, subject)
     if (!parsed) continue
-
     const jobData = jobFromParsed(parsed)
     if (!jobData) continue
-
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await prisma.job.create({
