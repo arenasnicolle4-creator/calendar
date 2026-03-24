@@ -1,4 +1,4 @@
-// lib/jobberSync.ts — Jobber OAuth + GraphQL API sync
+// lib/jobberSync.ts — Jobber OAuth + GraphQL sync via scheduledItems
 import { prisma } from './prisma'
 
 export function getJobberAuthUrl(state = '') {
@@ -41,13 +41,15 @@ export async function refreshJobberToken(refreshToken: string) {
   return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>
 }
 
+const VERSION = '2026-03-10'
+
 async function jobberGQL(accessToken: string, query: string, variables = {}) {
   const res = await fetch('https://api.getjobber.com/api/graphql', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
+      'X-JOBBER-GRAPHQL-VERSION': VERSION,
     },
     body: JSON.stringify({ query, variables }),
   })
@@ -57,79 +59,177 @@ async function jobberGQL(accessToken: string, query: string, variables = {}) {
   return json.data
 }
 
-const VISITS_QUERY = `
-  query CleanSyncVisits($cursor: String) {
-    visits(first: 50, after: $cursor) {
+// Scheduled items query — covers Events, Visits, Assessments, Tasks
+// Max 1.5 year range, paginated
+function scheduledItemsQuery(startAt: string, endAt: string, cursor?: string) {
+  return `query {
+    scheduledItems(
+      first: 50
+      ${cursor ? `after: "${cursor}"` : ''}
+      filter: {
+        occursWithin: { startAt: "${startAt}", endAt: "${endAt}" }
+      }
+    ) {
       nodes {
-        id
-        title
-        startAt
-        endAt
-        client { id name }
-        job {
+        ... on Visit {
+          __typename
           id
-          jobNumber
           title
-          property {
-            address { street city province postalCode }
+          startAt
+          endAt
+          client { name }
+          job {
+            jobNumber
+            title
+            property { address { street city province } }
           }
         }
-        assignedUsers {
-          nodes { id name { full } }
+        ... on Event {
+          __typename
+          id
+          title
+          startAt
+          endAt
+          description
+        }
+        ... on Assessment {
+          __typename
+          id
+          title
+          startAt
+          endAt
+          client { name }
+          property { address { street city province } }
+        }
+        ... on Task {
+          __typename
+          id
+          title
         }
       }
-      pageInfo { endCursor hasNextPage }
+      pageInfo { hasNextPage endCursor }
     }
-  }
-`
-
-interface JobberVisit {
-  id: string
-  title: string | null
-  startAt: string
-  endAt: string | null
-  client: { id: string; name: string } | null
-  job: {
-    id: string
-    jobNumber: number
-    title: string | null
-    property: { address: { street: string | null; city: string | null; province: string | null; postalCode: string | null } | null } | null
-  } | null
-  assignedUsers: { nodes: { id: string; name: { full: string } }[] }
+  }`
 }
 
-function visitToJob(visit: JobberVisit, jobberAccountId: string) {
-  const addr = visit.job?.property?.address
-  const street = addr?.street || ''
-  const city = addr?.city || 'Anchorage'
-  const province = addr?.province || 'AK'
-  const address = [street, city, province].filter(Boolean).join(', ') || 'Unknown Address'
-  const propertyLabel = street.trim() || visit.client?.name || 'Jobber Job'
-  const displayName = visit.job?.title || visit.title || visit.client?.name || `Job #${visit.job?.jobNumber}`
-  const assignedNames = visit.assignedUsers.nodes.map(u => u.name.full).join(', ')
+// Parse Event description like:
+// "1711 Crescent Cir // 3 beds / 3 baths / 2500 sq.ft. // Code for all doors: 5834"
+function parseEventDescription(description: string | null) {
+  if (!description) return { address: null, beds: null, baths: null, notes: description }
 
-  return {
-    platform: 'jobber' as const,
-    displayName: (displayName || 'Jobber Job').trim(),
-    customerName: visit.client?.name || null,
-    address,
-    propertyLabel,
-    checkoutTime: new Date(visit.startAt),
-    checkinTime: visit.endAt ? new Date(visit.endAt) : null,
-    nextGuests: null,
-    nextGuestCount: null,
-    sqft: null,
-    beds: null,
-    baths: null,
-    worth: null,
-    notes: assignedNames ? `Assigned: ${assignedNames}` : '',
-    cleanerIds: '[]',
-    duties: '[]',
-    gmailMessageId: null,
-    gmailAccountId: null,
-    jobberVisitId: visit.id,
-    jobberAccountId,
+  const parts = description.split('//').map(p => p.trim())
+  const address = parts[0] || null
+
+  let beds: number | null = null
+  let baths: number | null = null
+
+  const fullText = description.toLowerCase()
+
+  const bedsMatch = fullText.match(/(\d+)\s*bed/)
+  if (bedsMatch) beds = parseInt(bedsMatch[1])
+
+  const bathsMatch = fullText.match(/(\d+\.?\d*)\s*bath/)
+  if (bathsMatch) baths = parseFloat(bathsMatch[1])
+
+  return { address, beds, baths, notes: description }
+}
+
+function scheduledItemToJob(item: any, jobberAccountId: string) {
+  const type = item.__typename
+
+  if (type === 'Event') {
+    const { address, beds, baths, notes } = parseEventDescription(item.description)
+    const street = address || item.title
+    const propertyLabel = street?.split(',')[0]?.trim() || item.title
+
+    return {
+      platform: 'jobber' as const,
+      displayName: item.title?.trim() || 'Jobber Event',
+      customerName: null,
+      address: address || item.title || 'Unknown',
+      propertyLabel,
+      checkoutTime: new Date(item.startAt),
+      checkinTime: item.endAt ? new Date(item.endAt) : null,
+      nextGuests: null,
+      nextGuestCount: null,
+      sqft: null,
+      beds,
+      baths,
+      worth: null,
+      notes: notes || '',
+      cleanerIds: '[]',
+      duties: '[]',
+      gmailMessageId: null,
+      gmailAccountId: null,
+      jobberVisitId: item.id,
+      jobberAccountId,
+    }
   }
+
+  if (type === 'Visit') {
+    const addr = item.job?.property?.address
+    const street = addr?.street || ''
+    const city = addr?.city || 'Anchorage'
+    const province = addr?.province || 'AK'
+    const address = [street, city, province].filter(Boolean).join(', ') || 'Unknown Address'
+    const propertyLabel = street.trim() || item.client?.name || 'Jobber Visit'
+    const displayName = item.job?.title || item.title || item.client?.name || `Job #${item.job?.jobNumber}`
+
+    return {
+      platform: 'jobber' as const,
+      displayName: (displayName || 'Jobber Visit').trim(),
+      customerName: item.client?.name || null,
+      address,
+      propertyLabel,
+      checkoutTime: new Date(item.startAt),
+      checkinTime: item.endAt ? new Date(item.endAt) : null,
+      nextGuests: null,
+      nextGuestCount: null,
+      sqft: null,
+      beds: null,
+      baths: null,
+      worth: null,
+      notes: item.job?.jobNumber ? `Job #${item.job.jobNumber}` : '',
+      cleanerIds: '[]',
+      duties: '[]',
+      gmailMessageId: null,
+      gmailAccountId: null,
+      jobberVisitId: item.id,
+      jobberAccountId,
+    }
+  }
+
+  if (type === 'Assessment') {
+    const addr = item.property?.address
+    const street = addr?.street || ''
+    const city = addr?.city || 'Anchorage'
+    const address = [street, city].filter(Boolean).join(', ') || 'Unknown'
+
+    return {
+      platform: 'jobber' as const,
+      displayName: item.title?.trim() || item.client?.name || 'Assessment',
+      customerName: item.client?.name || null,
+      address,
+      propertyLabel: street || item.client?.name || 'Assessment',
+      checkoutTime: new Date(item.startAt),
+      checkinTime: item.endAt ? new Date(item.endAt) : null,
+      nextGuests: null,
+      nextGuestCount: null,
+      sqft: null,
+      beds: null,
+      baths: null,
+      worth: null,
+      notes: '',
+      cleanerIds: '[]',
+      duties: '[]',
+      gmailMessageId: null,
+      gmailAccountId: null,
+      jobberVisitId: item.id,
+      jobberAccountId,
+    }
+  }
+
+  return null // Task — skip, no time data
 }
 
 export async function syncJobberAccount(accountId: string) {
@@ -142,44 +242,60 @@ export async function syncJobberAccount(accountId: string) {
   if (new Date(account.expiresAt) < new Date()) {
     const tokens = await refreshJobberToken(account.refreshToken)
     accessToken = tokens.access_token
-    const expiresIn = typeof tokens.expires_in === 'number' ? tokens.expires_in : 3600
     await prisma.jobberAccount.update({
       where: { id: accountId },
       data: {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: new Date(Date.now() + expiresIn * 1000),
+        expiresAt: new Date(Date.now() + 55 * 60 * 1000),
       },
     })
   }
 
-  // Get already-synced visit IDs
+  // Get already-synced IDs
   const existing = await prisma.job.findMany({
     where: { jobberAccountId: accountId, jobberVisitId: { not: null } },
     select: { jobberVisitId: true },
   })
   const seen = new Set(existing.map(j => j.jobberVisitId))
 
-  let cursor: string | null = null
+  // Query in two windows — past 90 days and next ~14 months (under 1.5yr limit)
+  const windows = [
+    {
+      startAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+      endAt: new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  ]
+
   let imported = 0
   let total = 0
 
-  do {
-    const data = await jobberGQL(accessToken, VISITS_QUERY, cursor ? { cursor } : {})
-    const { nodes, pageInfo } = data.visits
+  for (const window of windows) {
+    let cursor: string | null = null
 
-    for (const visit of nodes as JobberVisit[]) {
-      total++
-      if (seen.has(visit.id)) continue
-      const jobData = visitToJob(visit, accountId)
-      try {
-        await prisma.job.create({ data: jobData })
-        imported++
-      } catch { /* skip duplicates */ }
-    }
+    do {
+      const query = scheduledItemsQuery(window.startAt, window.endAt, cursor || undefined)
+      const data = await jobberGQL(accessToken, query)
+      const { nodes, pageInfo } = data.scheduledItems
 
-    cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null
-  } while (cursor)
+      for (const item of nodes) {
+        total++
+        if (seen.has(item.id)) continue
+        if (!item.startAt) continue // skip Tasks with no time
+
+        const jobData = scheduledItemToJob(item, accountId)
+        if (!jobData) continue
+
+        try {
+          await prisma.job.create({ data: jobData })
+          imported++
+          seen.add(item.id)
+        } catch { /* skip duplicates */ }
+      }
+
+      cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null
+    } while (cursor)
+  }
 
   await prisma.jobberAccount.update({
     where: { id: accountId },
