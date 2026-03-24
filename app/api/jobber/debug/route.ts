@@ -1,7 +1,6 @@
 // app/api/jobber/debug/route.ts
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { refreshJobberToken } from '@/lib/jobberSync'
 
 const VERSION = '2026-03-10'
 
@@ -24,13 +23,9 @@ export async function GET() {
     if (!accounts.length) return NextResponse.json({ error: 'No Jobber accounts connected' })
 
     const account = accounts[0]
-    let accessToken = account.accessToken
-    if (new Date(account.expiresAt) < new Date()) {
-      const tokens = await refreshJobberToken(account.refreshToken)
-      accessToken = tokens.access_token
-    }
+    const accessToken = account.accessToken
 
-    // 90 days back to ~14 months forward (under 1.5 year limit)
+    // 90 days back to ~13 months forward (under 1.5 year limit)
     const startAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
     const endAt = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -80,7 +75,11 @@ export async function GET() {
       }
     }`)
 
-    return NextResponse.json({ scheduledItems: scheduledData })
+    return NextResponse.json({
+      tokenExpiry: account.expiresAt,
+      tokenIsExpired: new Date(account.expiresAt) < new Date(),
+      scheduledItems: scheduledData,
+    })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
