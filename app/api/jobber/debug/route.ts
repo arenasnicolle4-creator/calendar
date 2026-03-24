@@ -23,9 +23,9 @@ export async function GET() {
     if (!accounts.length) return NextResponse.json({ error: 'No Jobber accounts connected' })
 
     const account = accounts[0]
+    // Use the stored token directly — no expiry check
     const accessToken = account.accessToken
 
-    // 90 days back to ~13 months forward (under 1.5 year limit)
     const startAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
     const endAt = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -76,7 +76,7 @@ export async function GET() {
     }`)
 
     return NextResponse.json({
-      tokenExpiry: account.expiresAt,
+      storedExpiry: account.expiresAt,
       tokenIsExpired: new Date(account.expiresAt) < new Date(),
       scheduledItems: scheduledData,
     })
