@@ -27,7 +27,7 @@ export async function GET(req: Request) {
         headers: {
           'Authorization': `Bearer ${tokens.access_token}`,
           'Content-Type': 'application/json',
-          'X-JOBBER-GRAPHQL-VERSION': '2024-11-15',
+          'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
         },
         body: JSON.stringify({
           query: `query {
