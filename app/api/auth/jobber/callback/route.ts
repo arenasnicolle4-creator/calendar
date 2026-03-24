@@ -50,13 +50,16 @@ export async function GET(req: Request) {
       // Continue with fallback email — don't fail the whole auth
     }
 
-    // Upsert the account
+    // Upsert the account — use 1 hour fallback if expires_in missing
+    const expiresIn = typeof tokens.expires_in === 'number' ? tokens.expires_in : 3600
+    const expiresAt = new Date(Date.now() + expiresIn * 1000)
+
     await prisma.jobberAccount.upsert({
       where: { email },
       update: {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+        expiresAt,
         companyName,
       },
       create: {
@@ -64,7 +67,7 @@ export async function GET(req: Request) {
         companyName,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+        expiresAt,
       },
     })
 
