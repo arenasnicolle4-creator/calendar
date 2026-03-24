@@ -8,12 +8,15 @@ export async function POST(req: Request) {
   try {
     if (id) {
       const result = await syncJobberAccount(id)
+      console.log('Jobber sync result:', JSON.stringify(result))
       return NextResponse.json(result)
     }
     const results = await syncAllJobberAccounts()
+    console.log('Jobber sync all results:', JSON.stringify(results))
     return NextResponse.json(results)
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    console.error('Jobber sync error:', String(e))
+    return NextResponse.json({ error: String(e), imported: 0 }, { status: 500 })
   }
 }
 
