@@ -5,18 +5,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
 
 :root {
-  /* Off-white base */
-  --bg: #f0ece6;
-  --surface: #f5f2ed;
-  --surface2: #ede9e2;
-  --surface3: #e4dfd7;
-  --border: #d4cec6;
-  --border-light: #e8e3dc;
+  /* Off-white base — slightly more contrast */
+  --bg: #ece8e1;
+  --surface: #f2ede7;
+  --surface2: #e8e3db;
+  --surface3: #dedad1;
+  --border: #c8c1b8;
+  --border-light: #ddd8d0;
 
-  /* Text */
-  --text: #1a2e35;
-  --text-muted: #5a7880;
-  --text-dim: #9ab0b6;
+  /* Text — darkened for readability */
+  --text: #0f1f24;
+  --text-muted: #3d5a62;
+  --text-dim: #7a9298;
 
   /* Cyan accents */
   --cyan-dark: #0e7490;
