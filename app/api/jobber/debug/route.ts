@@ -30,15 +30,14 @@ export async function GET() {
       accessToken = tokens.access_token
     }
 
-    // Past year to next 2 years to get a wide range
-    const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
-    const end = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString()
+    const startAt = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+    const endAt = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString()
 
     const scheduledData = await gql(accessToken, `query {
       scheduledItems(
         first: 10
         filter: {
-          occursWithin: { start: "${start}", end: "${end}" }
+          occursWithin: { startAt: "${startAt}", endAt: "${endAt}" }
         }
       ) {
         nodes {
@@ -66,7 +65,6 @@ export async function GET() {
             __typename
             id
             title
-            dueAt: dueDate
           }
         }
         pageInfo { hasNextPage endCursor }
