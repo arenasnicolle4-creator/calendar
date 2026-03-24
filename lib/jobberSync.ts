@@ -290,7 +290,9 @@ export async function syncJobberAccount(accountId: string) {
           await prisma.job.create({ data: jobData })
           imported++
           seen.add(item.id)
-        } catch { /* skip duplicates */ }
+        } catch (e) {
+          console.error(`Failed to create job for ${item.id}:`, String(e).slice(0, 200))
+        }
       }
 
       cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null
