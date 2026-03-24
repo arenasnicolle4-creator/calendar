@@ -31,7 +31,7 @@ model Job {
   nextGuestCount Int?
   sqft           Int?
   beds           Int?
-  baths          Int?
+  baths          Float?
   worth          Float?
   notes          String?
   cleanerIds     String       @default("[]")
