@@ -142,12 +142,13 @@ export async function syncJobberAccount(accountId: string) {
   if (new Date(account.expiresAt) < new Date()) {
     const tokens = await refreshJobberToken(account.refreshToken)
     accessToken = tokens.access_token
+    const expiresIn = typeof tokens.expires_in === 'number' ? tokens.expires_in : 3600
     await prisma.jobberAccount.update({
       where: { id: accountId },
       data: {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+        expiresAt: new Date(Date.now() + expiresIn * 1000),
       },
     })
   }
