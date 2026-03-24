@@ -30,14 +30,16 @@ export async function GET() {
       accessToken = tokens.access_token
     }
 
-    // Test scheduledItems with date filter — this is the unified calendar feed
-    const now = new Date().toISOString()
-    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+    // Past year to next 2 years to get a wide range
+    const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+    const end = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString()
 
     const scheduledData = await gql(accessToken, `query {
       scheduledItems(
         first: 10
-        filter: { startAt: { after: "${now}", before: "${future}" } }
+        filter: {
+          occursWithin: { start: "${start}", end: "${end}" }
+        }
       ) {
         nodes {
           ... on Visit {
@@ -47,7 +49,11 @@ export async function GET() {
             startAt
             endAt
             client { name }
-            job { jobNumber title property { address { street city } } }
+            job {
+              jobNumber
+              title
+              property { address { street city province } }
+            }
           }
           ... on Event {
             __typename
@@ -56,25 +62,18 @@ export async function GET() {
             startAt
             endAt
           }
+          ... on Task {
+            __typename
+            id
+            title
+            dueAt: dueDate
+          }
         }
         pageInfo { hasNextPage endCursor }
       }
     }`)
 
-    // Also test single event query
-    const eventData = await gql(accessToken, `query {
-      event(id: "test") {
-        id
-        title
-        startAt
-        endAt
-      }
-    }`)
-
-    return NextResponse.json({
-      scheduledItems: scheduledData,
-      eventSingleTest: eventData,
-    })
+    return NextResponse.json({ scheduledItems: scheduledData })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
