@@ -43,28 +43,27 @@ function extractParts(payload: any): { plain: string; html: string } {
   return { plain, html }
 }
 
-// Alaska is currently on AKDT (UTC-8) from March to November
-// AKST (UTC-9) November to March
-// Turno shows times in Alaska local time — we store as UTC
+// Alaska time parser — AKDT (UTC-8) in summer, AKST (UTC-9) in winter
 function parseAlaskaTime(dateStr: string): Date | null {
   if (!dateStr) return null
-  // Strip day name prefix: "Mon, Jun 8 2026 11:00 AM" → "Jun 8 2026 11:00 AM"
   const stripped = dateStr.trim().replace(/^[A-Za-z]+,?\s*/, '').trim()
-  // Try with AKDT offset (-08:00) first — currently active most of the year
-  const withAKDT = stripped.replace(/(AM|PM)\s*$/i, '$1 -08:00')
-  let d = new Date(withAKDT)
+  // Try AKDT first (-08:00) — active Mar-Nov
+  let d = new Date(stripped.replace(/(AM|PM)\s*$/i, '$1 -08:00'))
   if (!isNaN(d.getTime())) return d
-  // Try with AKST offset (-09:00)
-  const withAKST = stripped.replace(/(AM|PM)\s*$/i, '$1 -09:00')
-  d = new Date(withAKST)
+  // Try AKST (-09:00)
+  d = new Date(stripped.replace(/(AM|PM)\s*$/i, '$1 -09:00'))
   if (!isNaN(d.getTime())) return d
-  // Last resort — parse as-is
   d = new Date(stripped)
   if (!isNaN(d.getTime())) return d
   return null
 }
 
-function parseTurnoText(text: string, messageId: string, accountEmail: string): ParsedJob | null {
+function parseTurnoText(
+  text: string,
+  messageId: string,
+  accountEmail: string,
+  emailSubject?: string
+): ParsedJob | null {
   if (!text) return null
   const lower = text.toLowerCase()
   if (!lower.includes('turno')) return null
@@ -72,18 +71,28 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
 
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
 
-  // Find where the actual Turno content starts — after the forwarded header
-  // Look for the "New Cleaning project available" line to skip all header lines
+  // Find where actual Turno content starts (after forwarded headers)
   let startIdx = 0
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].toLowerCase().includes('new cleaning project available')) {
+    if (lines[i].toLowerCase().includes('new cleaning project available') ||
+        lines[i].toLowerCase().includes('cleaning projects available')) {
       startIdx = i
       break
     }
   }
   const parseLines = lines.slice(startIdx)
 
-  let propertyLabel: string | null = null
+  // Extract property name from email subject: "Fwd: New Cleaning project available at WildAboutAnchorage"
+  let propertyName: string | null = null
+  if (emailSubject) {
+    const subjectMatch = emailSubject.match(/available at (.+)$/i)
+    if (subjectMatch) {
+      propertyName = subjectMatch[1]
+        .replace(/^Fwd?:\s*/i, '')
+        .trim()
+    }
+  }
+
   let address: string | null = null
   let hostName: string | null = null
   let startTime: string | null = null
@@ -94,30 +103,25 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
   let checklist: string | null = null
 
   for (const line of parseLines) {
-    // Skip the subject/header lines that contain "Subject:" or "Date:" or "From:" or "To:"
-    if (/^(Subject|Date|From|To|Cc|Bcc):/i.test(line)) continue
+    // Skip header lines
+    if (/^(Subject|Date|From|To|Cc):/i.test(line)) continue
+    if (line.includes('@') && line.includes('<')) continue
 
-    // Property label — "Cleaning X" (not "Cleaning project")
-    if (!propertyLabel && /^Cleaning\s+\S/.test(line) && !line.toLowerCase().includes('project')) {
-      propertyLabel = line.replace(/^Cleaning\s+/, '').trim()
-    }
-
-    // Address — street address pattern or contains Anchorage
-    // Must NOT be a Subject/Date/Header line
+    // Address — street address with Anchorage or AK
     if (!address &&
-        !line.toLowerCase().startsWith('subject:') &&
-        !line.toLowerCase().startsWith('new cleaning') &&
-        !line.toLowerCase().startsWith('cleaning') &&
+        !line.startsWith('Cleaning') &&
+        !line.toLowerCase().includes('new cleaning') &&
         !line.toLowerCase().includes('start time') &&
         !line.toLowerCase().includes('end time') &&
         !line.toLowerCase().includes('too many') &&
         !line.toLowerCase().includes('bishop') &&
         !line.toLowerCase().includes('project details') &&
         !line.toLowerCase().includes('best regards') &&
+        !line.toLowerCase().includes('customer support') &&
         !line.includes('turno.com') &&
-        !line.includes('@') &&
+        !line.includes('http') &&
         (line.includes('Anchorage') || line.includes(', AK') ||
-         /^\d+\s+\w/.test(line) || /\d{4}\s+\w/.test(line))) {
+         /^\d+\s+\w+\s+(Dr|St|Ave|Rd|Blvd|Ln|Way|Ct|Pl|Cir)/i.test(line))) {
       const hostIdx = line.indexOf('Host:')
       address = (hostIdx > -1 ? line.substring(0, hostIdx) : line).trim()
       if (!hostName && hostIdx > -1) {
@@ -148,21 +152,24 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
       }
     }
 
-    // Bedrooms — "Bedrooms: 4 Beds: 5" on same line
+    // Bedrooms, Beds, Bathrooms — may all be on same line or separate lines
+    // Example: "Bedrooms: 4 Beds: 3" and "Bathrooms: 3" on next line
+    // Example: "Bedrooms: 4 Beds: 5" and "Bathrooms: 2.5" on next line
     if (bedrooms === null) {
-      const m = line.match(/Bedroom[s]?:\s*(\d+)/i)
+      const m = line.match(/Bedrooms?:\s*(\d+)/i)
       if (m) bedrooms = parseInt(m[1])
     }
 
-    // Beds — "Beds: 5" but NOT "Bedrooms:" — negative lookbehind
+    // Beds — specifically the word "Beds:" preceded by a space or start of line
+    // NOT part of "Bedrooms:" — we search for " Beds:" or line starting with "Beds:"
     if (beds === null) {
-      const m = line.match(/(?<![a-z])Beds:\s*(\d+)/i)
+      // Match "Beds: N" where it's either at start of line or preceded by whitespace
+      const m = line.match(/(?:^|\s)Beds:\s*(\d+)/i)
       if (m) beds = parseInt(m[1])
     }
 
-    // Bathrooms — "Bathrooms: 2.5" on same or separate line
     if (bathrooms === null) {
-      const m = line.match(/Bathroom[s]?:\s*(\d+\.?\d*)/i)
+      const m = line.match(/Bathrooms?:\s*(\d+\.?\d*)/i)
       if (m) bathrooms = parseFloat(m[1])
     }
 
@@ -176,17 +183,18 @@ function parseTurnoText(text: string, messageId: string, accountEmail: string): 
   }
 
   if (!startTime) return null
-  if (!address && !propertyLabel) return null
 
-  const finalAddress = address || propertyLabel || 'Unknown'
+  // Use property name from subject, then fall back to address
+  const finalAddress = address || propertyName || 'Unknown'
 
   return {
     address: finalAddress,
+    propertyName: propertyName || null,
     hostName: hostName || null,
     startTime,
     endTime,
     bedrooms,
-    beds: beds ?? null,
+    beds,
     bathrooms,
     checklist,
     gmailMessageId: messageId,
@@ -228,7 +236,7 @@ export async function syncGmailAccount(accountId: string) {
     'subject:"FW: New Cleaning project available" "Start Time"',
   ]
 
-  const allMessages: Array<{id: string}> = []
+  const allMessages: Array<{id: string; subject?: string}> = []
   for (const q of queries) {
     const res = await gmail.users.messages.list({ userId: 'me', q, maxResults: 100 })
     for (const msg of res.data.messages || []) {
@@ -249,8 +257,13 @@ export async function syncGmailAccount(accountId: string) {
       format: 'full',
     })
 
+    // Get subject from headers
+    const subject = full.data.payload?.headers?.find(
+      (h: any) => h.name?.toLowerCase() === 'subject'
+    )?.value || ''
+
     const { plain } = extractParts(full.data.payload)
-    const parsed = parseTurnoText(plain, msg.id, account.email)
+    const parsed = parseTurnoText(plain, msg.id, account.email, subject)
     if (!parsed) continue
 
     const jobData = jobFromParsed(parsed)
