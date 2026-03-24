@@ -306,7 +306,7 @@ export default function Dashboard() {
                   style={{position:'absolute',left:10,right:10,top,height:ht,borderRadius:8,padding:'10px 14px',cursor:'pointer',background:`${c}18`,color:c,borderLeft:`4px solid ${c}`,zIndex:2}}>
                   <div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,whiteSpace:'pre-line'}}>{displayName(j.propertyLabel)}</div>
                   <div style={{fontSize:11,opacity:0.7,marginTop:2}}>{j.address}</div>
-                  <div style={{fontSize:12,fontWeight:700,marginTop:4}}>{fmt(co)} → {fmt(ci)}</div>
+                  <div style={{fontSize:12,fontWeight:700,marginTop:4}}>{fmt(j.checkoutTime)} → {j.checkinTime?fmt(j.checkinTime):fmt(new Date(co.getTime()+3*3600000).toISOString())}</div>
                 </div>
               )
             })}
