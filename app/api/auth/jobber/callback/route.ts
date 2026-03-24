@@ -42,7 +42,7 @@ export async function GET(req: Request) {
       const meData = await meRes.json()
       if (meData?.data?.account?.name) {
         companyName = meData.data.account.name
-        const safeName = companyName.toLowerCase().replace(/\s+/g, '-')
+        const safeName = (companyName as string).toLowerCase().replace(/\s+/g, '-')
         email = `${safeName}-${meData.data.account.id}@jobber.cleansync`
       }
     } catch (accountErr) {
