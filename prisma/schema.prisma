@@ -8,39 +8,54 @@ datasource db {
 }
 
 model GmailAccount {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   accessToken  String
   refreshToken String
   expiresAt    DateTime
   lastSynced   DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
+  jobs         Job[]
+}
+
+model JobberAccount {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  companyName  String?
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  lastSynced   DateTime?
+  createdAt    DateTime  @default(now())
   jobs         Job[]
 }
 
 model Job {
-  id             String       @id @default(cuid())
-  platform       String       @default("turno")
-  displayName    String
-  customerName   String?
-  address        String
-  propertyLabel  String
-  checkoutTime   DateTime
-  checkinTime    DateTime?
-  nextGuests     String?
-  nextGuestCount Int?
-  sqft           Int?
-  beds           Int?
-  baths          Float?
-  worth          Float?
-  notes          String?
-  cleanerIds     String       @default("[]")
-  duties         String       @default("[]")
-  gmailMessageId String?      @unique
-  gmailAccountId String?
-  gmailAccount   GmailAccount? @relation(fields: [gmailAccountId], references: [id])
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id              String         @id @default(cuid())
+  platform        String         @default("turno")
+  displayName     String
+  customerName    String?
+  address         String
+  propertyLabel   String
+  checkoutTime    DateTime
+  checkinTime     DateTime?
+  nextGuests      String?
+  nextGuestCount  Int?
+  sqft            Int?
+  beds            Int?
+  baths           Float?
+  worth           Float?
+  notes           String?
+  cleanerIds      String         @default("[]")
+  duties          String         @default("[]")
+  gmailMessageId  String?        @unique
+  gmailAccountId  String?
+  gmailAccount    GmailAccount?  @relation(fields: [gmailAccountId], references: [id])
+  jobberVisitId   String?        @unique
+  jobberAccountId String?
+  jobberAccount   JobberAccount? @relation(fields: [jobberAccountId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
 
 model Cleaner {
