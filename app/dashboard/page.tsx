@@ -120,6 +120,7 @@ export default function Dashboard() {
   const [hiddenProps, setHiddenProps] = useState<Set<string>>(new Set())
   const [expandedColorProp, setExpandedColorProp] = useState<string|null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [jobberAccounts, setJobberAccounts] = useState<{id:string;email:string;companyName:string|null;lastSynced:string|null}[]>([])
   const today = new Date()
 
   useEffect(() => {
@@ -127,14 +128,21 @@ export default function Dashboard() {
     try { setPropNameMap(JSON.parse(localStorage.getItem('propNames')||'{}')) } catch {}
     try { setHiddenProps(new Set(JSON.parse(localStorage.getItem('hiddenProps')||'[]'))) } catch {}
     const params = new URLSearchParams(window.location.search)
-    if (params.get('connected')) { setSyncMsg(`✓ Connected ${params.get('connected')}`); window.history.replaceState({},'','/dashboard'); loadGmailAccounts(); setTimeout(syncAll,1200) }
+    if (params.get('connected')) {
+      setSyncMsg(`✓ Connected ${params.get('connected')}`)
+      window.history.replaceState({},'','/dashboard')
+      loadGmailAccounts(); loadJobberAccounts()
+      setTimeout(syncAll,1200)
+      if (params.get('page')) setPage(params.get('page') as Page)
+    }
     if (params.get('error')) { setSyncMsg(`Error: ${params.get('error')?.replace(/_/g,' ')}`); window.history.replaceState({},'','/dashboard') }
   }, [])
 
   const loadJobs = useCallback(async()=>{const r=await fetch('/api/jobs');if(r.ok)setJobs(await r.json())},[])
   const loadCleaners = useCallback(async()=>{const r=await fetch('/api/cleaners');if(r.ok)setCleaners(await r.json())},[])
   const loadGmailAccounts = useCallback(async()=>{const r=await fetch('/api/gmail/accounts');if(r.ok)setGmailAccounts(await r.json())},[])
-  useEffect(()=>{loadJobs();loadCleaners();loadGmailAccounts()},[loadJobs,loadCleaners,loadGmailAccounts])
+  const loadJobberAccounts = useCallback(async()=>{const r=await fetch('/api/jobber/accounts');if(r.ok)setJobberAccounts(await r.json())},[])
+  useEffect(()=>{loadJobs();loadCleaners();loadGmailAccounts();loadJobberAccounts()},[loadJobs,loadCleaners,loadGmailAccounts,loadJobberAccounts])
 
   function displayName(label: string) { return propNameMap[label] || shortName(label) }
   function savePropName(label: string, name: string) {
@@ -151,6 +159,14 @@ export default function Dashboard() {
 
   async function connectGmail(){const r=await fetch('/api/gmail/accounts',{method:'POST'});const{url}=await r.json();window.location.href=url}
   async function disconnectGmail(id:string){await fetch(`/api/gmail/accounts/${id}`,{method:'DELETE'});loadGmailAccounts()}
+  async function connectJobber(){const r=await fetch('/api/jobber/accounts',{method:'POST'});const{url}=await r.json();window.location.href=url}
+  async function disconnectJobber(id:string){await fetch(`/api/jobber/accounts/${id}`,{method:'DELETE'});loadJobberAccounts();loadJobs()}
+  async function syncJobberAccount(id:string,email:string){
+    setSyncing(`jobber-${id}`);setSyncMsg(null)
+    try{const r=await fetch(`/api/jobber/sync?id=${id}`,{method:'POST'});const d=await r.json();setSyncMsg(`✓ Synced Jobber (${email}) — ${d.imported} new job(s)`);loadJobs();loadJobberAccounts()}
+    catch{setSyncMsg('Error syncing Jobber')}
+    setSyncing(null)
+  }
   async function syncAccount(id:string,email:string){
     setSyncing(id);setSyncMsg(null)
     try{const r=await fetch(`/api/gmail/sync?id=${id}`,{method:'POST'});const d=await r.json();setSyncMsg(`✓ Synced ${email} — ${d.imported} new job(s)`);loadJobs();loadGmailAccounts()}
@@ -159,9 +175,18 @@ export default function Dashboard() {
   }
   async function syncAll(){
     setSyncing('all');setSyncMsg(null)
-    try{const r=await fetch('/api/gmail/sync',{method:'POST'});const d=await r.json();const t=Array.isArray(d)?d.reduce((s:number,x:any)=>s+(x.imported||0),0):0;setSyncMsg(t>0?`✓ ${t} new job(s) synced`:'✓ All accounts up to date');loadJobs();loadGmailAccounts()}
-    catch{setSyncMsg('Sync error')}
-    setSyncing(null);setTimeout(()=>setSyncMsg(null),5000)
+    try{
+      const [gmailRes, jobberRes] = await Promise.allSettled([
+        fetch('/api/gmail/sync',{method:'POST'}).then(r=>r.json()),
+        fetch('/api/jobber/sync',{method:'POST'}).then(r=>r.json()),
+      ])
+      const gmailTotal = gmailRes.status==='fulfilled'&&Array.isArray(gmailRes.value)?gmailRes.value.reduce((s:number,x:any)=>s+(x.imported||0),0):0
+      const jobberTotal = jobberRes.status==='fulfilled'&&Array.isArray(jobberRes.value)?jobberRes.value.reduce((s:number,x:any)=>s+(x.imported||0),0):(jobberRes.status==='fulfilled'?(jobberRes.value?.imported||0):0)
+      const total = gmailTotal + jobberTotal
+      setSyncMsg(total>0?`✓ ${total} new job(s) synced`:'✓ All accounts up to date')
+      loadJobs(); loadGmailAccounts(); loadJobberAccounts()
+    } catch{ setSyncMsg('Sync error') }
+    setSyncing(null); setTimeout(()=>setSyncMsg(null),5000)
   }
   async function updateJob(id:string,data:Partial<Job>){
     await fetch(`/api/jobs/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
@@ -649,39 +674,90 @@ export default function Dashboard() {
 
   function IntegrationsPage(){
     const integrations=[
-      {name:'Gmail',icon:'✉️',desc:'Auto-sync Turno job emails',status:'connected',count:gmailAccounts.length,color:'var(--coral)'},
-      {name:'Airbnb',icon:'🏠',desc:'Sync reservations via iCal',status:'available',color:'var(--coral)'},
-      {name:'Turno',icon:'🧹',desc:'Cleaning job management',status:'via-email',color:'var(--violet)'},
-      {name:'Hostaway',icon:'🔑',desc:'Channel manager sync',status:'available',color:'var(--amber)'},
-      {name:'Jobber',icon:'💼',desc:'Field service management',status:'available',color:'#00c4ff'},
-      {name:'Stripe',icon:'💳',desc:'Payment processing',status:'coming',color:'var(--violet)'},
-      {name:'QuickBooks',icon:'📊',desc:'Accounting integration',status:'coming',color:'var(--green)'},
-      {name:'Google Calendar',icon:'📅',desc:'Two-way calendar sync',status:'coming',color:'var(--teal)'},
+      {name:'Gmail',icon:'✉️',desc:'Auto-sync Turno job emails from Gmail',status:gmailAccounts.length>0?'connected':'available',count:gmailAccounts.length,color:'var(--coral)',type:'gmail'},
+      {name:'Jobber',icon:'💼',desc:'Sync scheduled visits directly from Jobber',status:jobberAccounts.length>0?'connected':'available',count:jobberAccounts.length,color:'#00c4ff',type:'jobber'},
+      {name:'Airbnb',icon:'🏠',desc:'Sync reservations via iCal link',status:'coming',color:'var(--coral)',type:'airbnb'},
+      {name:'Hostaway',icon:'🔑',desc:'Channel manager sync',status:'coming',color:'var(--amber)',type:'hostaway'},
+      {name:'Stripe',icon:'💳',desc:'Payment processing for invoices',status:'coming',color:'var(--violet)',type:'stripe'},
+      {name:'QuickBooks',icon:'📊',desc:'Accounting integration',status:'coming',color:'var(--green)',type:'qb'},
+      {name:'Google Calendar',icon:'📅',desc:'Two-way calendar sync',status:'coming',color:'var(--teal)',type:'gcal'},
     ]
     return(
       <div>
         <PageHeader title="Integrations" subtitle="Connect your platforms and tools"/>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16}}>
+        {syncMsg&&<div style={{marginBottom:16,padding:'10px 14px',borderRadius:8,fontSize:12,background:syncMsg.startsWith('✓')?'var(--green-bg)':'var(--red-bg)',color:syncMsg.startsWith('✓')?'var(--green)':'var(--red)',border:`1px solid ${syncMsg.startsWith('✓')?'rgba(16,185,129,0.3)':'rgba(244,63,94,0.3)'}`}}>{syncMsg}</div>}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:16}}>
           {integrations.map(intg=>(
             <div key={intg.name} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:14,padding:'18px',boxShadow:'var(--shadow-sm)'}}>
-              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{fontSize:28}}>{intg.icon}</span>
+                  <div style={{width:44,height:44,borderRadius:12,background:`${intg.color}18`,border:`1px solid ${intg.color}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>{intg.icon}</div>
                   <div>
                     <div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)'}}>{intg.name}</div>
                     <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{intg.desc}</div>
                   </div>
                 </div>
-                <StatusBadge status={intg.status} count={intg.count}/>
+                <StatusBadge status={intg.status}/>
               </div>
+
+              {/* Connected accounts list */}
+              {intg.type==='gmail'&&gmailAccounts.length>0&&(
+                <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:4}}>
+                  {gmailAccounts.map(acc=>(
+                    <div key={acc.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--surface2)',borderRadius:8,padding:'7px 10px',border:'1px solid var(--border)'}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:'var(--text)'}}>{acc.email}</div>
+                        <div style={{fontSize:10,color:'var(--text-dim)'}}>Synced {fmtRel(acc.lastSynced)}</div>
+                      </div>
+                      <div style={{display:'flex',gap:5}}>
+                        <button onClick={()=>syncAccount(acc.id,acc.email)} disabled={!!syncing}
+                          style={{padding:'4px 10px',fontSize:10,fontWeight:700,borderRadius:6,background:'var(--teal-bg)',color:'var(--teal)',border:'1px solid var(--teal-border)',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+                          ⟳
+                        </button>
+                        <button onClick={()=>{if(confirm(`Disconnect ${acc.email}?`))disconnectGmail(acc.id)}}
+                          style={{padding:'4px 10px',fontSize:10,fontWeight:700,borderRadius:6,background:'var(--red-bg)',color:'var(--red)',border:'1px solid rgba(244,63,94,0.3)',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {intg.type==='jobber'&&jobberAccounts.length>0&&(
+                <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:4}}>
+                  {jobberAccounts.map(acc=>(
+                    <div key={acc.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--surface2)',borderRadius:8,padding:'7px 10px',border:'1px solid var(--border)'}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:'var(--text)'}}>{acc.companyName||acc.email}</div>
+                        <div style={{fontSize:10,color:'var(--text-dim)'}}>Synced {fmtRel(acc.lastSynced)}</div>
+                      </div>
+                      <div style={{display:'flex',gap:5}}>
+                        <button onClick={()=>syncJobberAccount(acc.id,acc.email)} disabled={!!syncing}
+                          style={{padding:'4px 10px',fontSize:10,fontWeight:700,borderRadius:6,background:'rgba(0,196,255,0.1)',color:'#00c4ff',border:'1px solid rgba(0,196,255,0.3)',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+                          ⟳
+                        </button>
+                        <button onClick={()=>{if(confirm('Disconnect Jobber account?'))disconnectJobber(acc.id)}}
+                          style={{padding:'4px 10px',fontSize:10,fontWeight:700,borderRadius:6,background:'var(--red-bg)',color:'var(--red)',border:'1px solid rgba(244,63,94,0.3)',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Action button */}
               <button
-                onClick={intg.status==='connected'?()=>setShowGmailPanel(true):undefined}
-                style={{width:'100%',padding:'8px',borderRadius:8,fontSize:12,fontWeight:700,cursor:intg.status==='coming'?'not-allowed':'pointer',
-                  background:intg.status==='connected'?'var(--teal-bg)':intg.status==='coming'?'var(--surface2)':'var(--surface2)',
-                  color:intg.status==='connected'?'var(--teal)':intg.status==='coming'?'var(--text-dim)':'var(--text-muted)',
-                  border:`1px solid ${intg.status==='connected'?'var(--teal-border)':'var(--border)'}`,
-                  fontFamily:'DM Sans,sans-serif',opacity:intg.status==='coming'?0.5:1}}>
-                {intg.status==='connected'?`Manage (${intg.count} connected)`:intg.status==='coming'?'Coming Soon':'Connect'}
+                onClick={intg.type==='gmail'?connectGmail:intg.type==='jobber'?connectJobber:undefined}
+                disabled={intg.status==='coming'}
+                style={{width:'100%',padding:'9px',borderRadius:8,fontSize:12,fontWeight:700,
+                  cursor:intg.status==='coming'?'not-allowed':'pointer',
+                  background:intg.status==='connected'?`${intg.color}18`:intg.status==='coming'?'var(--surface2)':'var(--surface2)',
+                  color:intg.status==='connected'?intg.color:intg.status==='coming'?'var(--text-dim)':'var(--text-muted)',
+                  border:`1px solid ${intg.status==='connected'?`${intg.color}35`:'var(--border)'}`,
+                  fontFamily:'DM Sans,sans-serif',opacity:intg.status==='coming'?0.5:1,transition:'all 0.15s'}}>
+                {intg.status==='connected'?`+ Connect Another ${intg.name} Account`:intg.status==='coming'?'Coming Soon':`Connect ${intg.name}`}
               </button>
             </div>
           ))}
