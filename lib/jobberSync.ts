@@ -1,9 +1,10 @@
-// lib/jobberSync.ts — Jobber OAuth + GraphQL sync
+// lib/jobberSync.ts — Jobber OAuth + GraphQL API sync
+import { prisma } from './prisma'
 
 export function getJobberAuthUrl(state = '') {
   const clientId = process.env.JOBBER_CLIENT_ID!
-  const callbackUrl = encodeURIComponent(`${process.env.NEXTAUTH_URL}/api/auth/jobber/callback`)
-  return `https://api.getjobber.com/api/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${callbackUrl}&state=${state}`
+  const callback = `${process.env.NEXTAUTH_URL}/api/auth/jobber/callback`
+  return `https://api.getjobber.com/api/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(callback)}&state=${state}`
 }
 
 export async function exchangeJobberCode(code: string) {
@@ -18,7 +19,10 @@ export async function exchangeJobberCode(code: string) {
       redirect_uri: `${process.env.NEXTAUTH_URL}/api/auth/jobber/callback`,
     }),
   })
-  if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`)
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(`Token exchange failed ${res.status}: ${txt}`)
+  }
   return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>
 }
 
@@ -37,47 +41,6 @@ export async function refreshJobberToken(refreshToken: string) {
   return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>
 }
 
-// GraphQL query for scheduled visits (upcoming jobs)
-const VISITS_QUERY = `
-  query CleanSyncVisits($cursor: String) {
-    visits(first: 50, after: $cursor) {
-      nodes {
-        id
-        title
-        startAt
-        endAt
-        client {
-          id
-          name
-        }
-        job {
-          id
-          jobNumber
-          title
-          property {
-            address {
-              street
-              city
-              province
-              postalCode
-            }
-          }
-        }
-        assignedUsers {
-          nodes {
-            id
-            name { full }
-          }
-        }
-      }
-      pageInfo {
-        endCursor
-        hasNextPage
-      }
-    }
-  }
-`
-
 async function jobberGQL(accessToken: string, query: string, variables = {}) {
   const res = await fetch('https://api.getjobber.com/api/graphql', {
     method: 'POST',
@@ -90,9 +53,35 @@ async function jobberGQL(accessToken: string, query: string, variables = {}) {
   })
   if (!res.ok) throw new Error(`Jobber API error: ${res.status}`)
   const json = await res.json()
-  if (json.errors) throw new Error(json.errors[0]?.message || 'GraphQL error')
+  if (json.errors?.length) throw new Error(json.errors[0]?.message || 'GraphQL error')
   return json.data
 }
+
+const VISITS_QUERY = `
+  query CleanSyncVisits($cursor: String) {
+    visits(first: 50, after: $cursor) {
+      nodes {
+        id
+        title
+        startAt
+        endAt
+        client { id name }
+        job {
+          id
+          jobNumber
+          title
+          property {
+            address { street city province postalCode }
+          }
+        }
+        assignedUsers {
+          nodes { id name { full } }
+        }
+      }
+      pageInfo { endCursor hasNextPage }
+    }
+  }
+`
 
 interface JobberVisit {
   id: string
@@ -104,14 +93,7 @@ interface JobberVisit {
     id: string
     jobNumber: number
     title: string | null
-    property: {
-      address: {
-        street: string | null
-        city: string | null
-        province: string | null
-        postalCode: string | null
-      } | null
-    } | null
+    property: { address: { street: string | null; city: string | null; province: string | null; postalCode: string | null } | null } | null
   } | null
   assignedUsers: { nodes: { id: string; name: { full: string } }[] }
 }
@@ -127,8 +109,8 @@ function visitToJob(visit: JobberVisit, jobberAccountId: string) {
   const assignedNames = visit.assignedUsers.nodes.map(u => u.name.full).join(', ')
 
   return {
-    platform: 'jobber',
-    displayName: displayName?.trim() || 'Jobber Job',
+    platform: 'jobber' as const,
+    displayName: (displayName || 'Jobber Job').trim(),
     customerName: visit.client?.name || null,
     address,
     propertyLabel,
@@ -150,14 +132,14 @@ function visitToJob(visit: JobberVisit, jobberAccountId: string) {
   }
 }
 
-export async function syncJobberAccount(accountId: string, prisma: any) {
+export async function syncJobberAccount(accountId: string) {
   const account = await prisma.jobberAccount.findUnique({ where: { id: accountId } })
   if (!account) throw new Error('Jobber account not found')
 
   let accessToken = account.accessToken
 
-  // Refresh token if expired
-  if (account.expiresAt && new Date(account.expiresAt) < new Date()) {
+  // Refresh if expired
+  if (new Date(account.expiresAt) < new Date()) {
     const tokens = await refreshJobberToken(account.refreshToken)
     accessToken = tokens.access_token
     await prisma.jobberAccount.update({
@@ -170,12 +152,12 @@ export async function syncJobberAccount(accountId: string, prisma: any) {
     })
   }
 
-  // Get existing visit IDs to skip duplicates
+  // Get already-synced visit IDs
   const existing = await prisma.job.findMany({
     where: { jobberAccountId: accountId, jobberVisitId: { not: null } },
     select: { jobberVisitId: true },
   })
-  const seen = new Set(existing.map((j: any) => j.jobberVisitId))
+  const seen = new Set(existing.map(j => j.jobberVisitId))
 
   let cursor: string | null = null
   let imported = 0
@@ -192,9 +174,7 @@ export async function syncJobberAccount(accountId: string, prisma: any) {
       try {
         await prisma.job.create({ data: jobData })
         imported++
-      } catch {
-        // Skip duplicates
-      }
+      } catch { /* skip duplicates */ }
     }
 
     cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null
@@ -208,13 +188,13 @@ export async function syncJobberAccount(accountId: string, prisma: any) {
   return { imported, total }
 }
 
-export async function syncAllJobberAccounts(prisma: any) {
+export async function syncAllJobberAccounts() {
   const accounts = await prisma.jobberAccount.findMany()
   const results = []
   for (const account of accounts) {
     try {
-      const r = await syncJobberAccount(account.id, prisma)
-      results.push({ email: account.email, ...r })
+      const r = await syncJobberAccount(account.id)
+      results.push({ companyName: account.companyName, email: account.email, ...r })
     } catch (e) {
       results.push({ email: account.email, error: String(e) })
     }
