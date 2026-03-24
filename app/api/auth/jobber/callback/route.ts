@@ -9,26 +9,45 @@ export async function GET(req: Request) {
   const error = searchParams.get('error')
 
   if (error || !code) {
-    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard?error=jobber_${error || 'no_code'}`)
+    return NextResponse.redirect(
+      `${process.env.NEXTAUTH_URL}/dashboard?error=jobber_${error || 'no_code'}`
+    )
   }
 
   try {
     const tokens = await exchangeJobberCode(code)
 
-    // Get account info from Jobber
-    const meRes = await fetch('https://api.getjobber.com/api/graphql', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${tokens.access_token}`,
-        'Content-Type': 'application/json',
-        'X-JOBBER-GRAPHQL-VERSION': '2024-11-15',
-      },
-      body: JSON.stringify({ query: `query { account { id name owner { email name { full } } } }` }),
-    })
-    const meData = await meRes.json()
-    const account = meData?.data?.account
-    const email = account?.owner?.email || `jobber-${Date.now()}@unknown.com`
-    const companyName = account?.name || null
+    // Try to get account info — use a simple query that works across API versions
+    let email = `jobber-${Date.now()}@cleansync.app`
+    let companyName: string | null = null
+
+    try {
+      const meRes = await fetch('https://api.getjobber.com/api/graphql', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${tokens.access_token}`,
+          'Content-Type': 'application/json',
+          'X-JOBBER-GRAPHQL-VERSION': '2024-11-15',
+        },
+        body: JSON.stringify({
+          query: `query {
+            account {
+              id
+              name
+            }
+          }`
+        }),
+      })
+      const meData = await meRes.json()
+      if (meData?.data?.account?.name) {
+        companyName = meData.data.account.name
+        // Use company name as unique key since email may not be available
+        email = `${companyName.toLowerCase().replace(/\s+/g, '-')}-${meData.data.account.id}@jobber.cleansync`
+      }
+    } catch (accountErr) {
+      console.error('Could not fetch Jobber account info:', accountErr)
+      // Continue with fallback email — don't fail the whole auth
+    }
 
     // Upsert the account
     await prisma.jobberAccount.upsert({
@@ -48,9 +67,15 @@ export async function GET(req: Request) {
       },
     })
 
-    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard?connected=jobber&page=integrations`)
+    return NextResponse.redirect(
+      `${process.env.NEXTAUTH_URL}/dashboard?connected=jobber&page=integrations`
+    )
   } catch (e) {
-    console.error('Jobber callback error:', e)
-    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard?error=jobber_auth_failed`)
+    console.error('Jobber callback error:', String(e))
+    // Pass the actual error message through so we can debug
+    const msg = encodeURIComponent(String(e).slice(0, 100))
+    return NextResponse.redirect(
+      `${process.env.NEXTAUTH_URL}/dashboard?error=jobber_${msg}`
+    )
   }
 }
