@@ -24,7 +24,7 @@ export async function GET() {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'X-JOBBER-GRAPHQL-VERSION': '2024-11-15',
+        'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
       },
       body: JSON.stringify({ query: `query { account { id name } }` }),
     })
@@ -36,7 +36,7 @@ export async function GET() {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'X-JOBBER-GRAPHQL-VERSION': '2024-11-15',
+        'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
       },
       body: JSON.stringify({
         query: `query {
@@ -61,7 +61,7 @@ export async function GET() {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
-        'X-JOBBER-GRAPHQL-VERSION': '2024-11-15',
+        'X-JOBBER-GRAPHQL-VERSION': '2023-11-15',
       },
       body: JSON.stringify({
         query: `query {
