@@ -2,6 +2,7 @@
 // app/dashboard/page.tsx — CleanSync Pro v2
 
 import { useEffect, useState, useCallback } from 'react'
+import React from 'react'
 import { useRouter } from 'next/navigation'
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
@@ -265,55 +266,104 @@ export default function Dashboard() {
   function MonthView() {
     const yr=currentDate.getFullYear(),mo=currentDate.getMonth()
     const first=new Date(yr,mo,1),last=new Date(yr,mo+1,0),dow=first.getDay(),ts=today.toDateString()
-    const days:React.ReactElement[]=[]
-    for(let i=0;i<dow;i++){const d=new Date(yr,mo,-dow+i+1);days.push(<div key={`p${i}`} style={{height:130,background:'var(--surface)',opacity:0.3,padding:'8px'}}><span style={{fontSize:11,color:'var(--text-dim)'}}>{d.getDate()}</span></div>)}
-    for(let day=1;day<=last.getDate();day++){
-      const cd=new Date(yr,mo,day),isT=cd.toDateString()===ts,dk=dayKey(cd),isExp=!!expandedDays[dk]
-      const dj=jobsOnDay(cd),showAll=isExp||dj.length<=MAX_VISIBLE,visible=showAll?dj:dj.slice(0,MAX_VISIBLE),hidden=showAll?0:dj.length-MAX_VISIBLE
-      days.push(
-        <div key={day} style={{height:isExp?'auto':130,minHeight:130,background:isT?'rgba(0,212,170,0.06)':'var(--surface)',padding:'7px 6px',display:'flex',flexDirection:'column',position:'relative',zIndex:isExp?10:undefined,borderTop:isT?'2px solid var(--teal)':'2px solid transparent',transition:'background 0.1s'}}>
-          <div style={{fontSize:12,fontWeight:700,fontFamily:'Syne,sans-serif',color:isT?'var(--teal)':'var(--text-muted)',marginBottom:5,width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?'rgba(0,212,170,0.15)':'transparent',flexShrink:0}}>{day}</div>
-          <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden',minHeight:0}}>
-            {visible.map(j=>{
-              const c=jobColor(j),name=displayName(j.propertyLabel)
-              return(
-                <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
-                  style={{padding:'2px 5px',borderRadius:4,cursor:'pointer',background:`${c}20`,color:c,border:`1px solid ${c}35`,flexShrink:0,transition:'background 0.1s',display:'flex',alignItems:'center',gap:3,minWidth:0,overflow:'hidden'}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=`${c}35`}}
-                  onMouseLeave={e=>{e.currentTarget.style.background=`${c}20`}}>
-                  <span style={{fontSize:9,fontWeight:800,opacity:0.8,flexShrink:0}}>{fmt(j.checkoutTime)}</span>
-                  <span style={{fontSize:10,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}}>{name}</span>
-                </div>
-              )
-            })}
-          </div>
-          {!showAll&&hidden>0&&(
-            <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:true}))}}
-              style={{marginTop:2,padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:700,cursor:'pointer',background:'var(--surface3)',color:'var(--text-muted)',border:'1px solid var(--border)',flexShrink:0,fontFamily:'DM Sans,sans-serif',width:'100%',textAlign:'left'}}>
-              ▾ {hidden} more
-            </button>
-          )}
-          {isExp&&dj.length>MAX_VISIBLE&&(
-            <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:false}))}}
-              style={{marginTop:2,padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:700,cursor:'pointer',background:'var(--teal-bg)',color:'var(--teal)',border:'1px solid var(--teal-border)',flexShrink:0,fontFamily:'DM Sans,sans-serif',width:'100%',textAlign:'left'}}>
-              ▴ less
-            </button>
-          )}
-        </div>
-      )
-    }
-    const tr=(dow+last.getDate())%7
-    if(tr)for(let i=1;i<=7-tr;i++)days.push(<div key={`q${i}`} style={{height:130,background:'var(--surface)',opacity:0.3,padding:'8px'}}><span style={{fontSize:11,color:'var(--text-dim)'}}>{i}</span></div>)
+    const [popup,setPopup]=React.useState<{dk:string;jobs:Job[];x:number;y:number}|null>(null)
+
+    // Build weeks array for equal-row-height rendering
+    const cells:({type:'pad';n:number}|{type:'day';day:number;date:Date})[] = []
+    for(let i=0;i<dow;i++){const d=new Date(yr,mo,-dow+i+1);cells.push({type:'pad',n:d.getDate()})}
+    for(let d=1;d<=last.getDate();d++) cells.push({type:'day',day:d,date:new Date(yr,mo,d)})
+    const trailing=(dow+last.getDate())%7
+    if(trailing) for(let i=1;i<=7-trailing;i++) cells.push({type:'pad',n:i})
+
     return(
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:'var(--border)',borderRadius:14,overflow:'hidden',boxShadow:'var(--shadow-md)'}}>
-        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>(
-          <div key={d} style={{background:'var(--surface2)',padding:'10px 0',textAlign:'center',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',fontFamily:'Syne,sans-serif'}}>{d}</div>
-        ))}
-        {days}
+      <div style={{position:'relative'}}>
+        {/* Day header */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:'var(--border)',borderRadius:'14px 14px 0 0',overflow:'hidden',marginBottom:1}}>
+          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>(
+            <div key={d} style={{background:'var(--surface2)',padding:'10px 0',textAlign:'center',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:1.5,color:'var(--text-dim)',fontFamily:'Syne,sans-serif'}}>{d}</div>
+          ))}
+        </div>
+        {/* Calendar body — fixed rows, no expanding */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridAutoRows:'130px',gap:1,background:'var(--border)',borderRadius:'0 0 14px 14px',overflow:'hidden',boxShadow:'var(--shadow-md)'}}>
+          {cells.map((cell,idx)=>{
+            if(cell.type==='pad') return(
+              <div key={`pad-${idx}`} style={{background:'var(--surface)',opacity:0.3,padding:'7px 6px'}}>
+                <span style={{fontSize:11,color:'var(--text-dim)'}}>{cell.n}</span>
+              </div>
+            )
+            const {day,date}=cell
+            const isT=date.toDateString()===ts
+            const dk=dayKey(date)
+            const dj=jobsOnDay(date)
+            const visible=dj.slice(0,MAX_VISIBLE)
+            const hidden=dj.length-MAX_VISIBLE
+            return(
+              <div key={day} style={{background:isT?'rgba(0,212,170,0.06)':'var(--surface)',padding:'6px 5px',display:'flex',flexDirection:'column',overflow:'hidden',borderTop:isT?'2px solid var(--teal)':'2px solid transparent'}}>
+                <div style={{fontSize:11,fontWeight:700,fontFamily:'Syne,sans-serif',color:isT?'var(--teal)':'var(--text-muted)',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?'rgba(0,212,170,0.15)':'transparent',marginBottom:4,flexShrink:0}}>{day}</div>
+                <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden'}}>
+                  {visible.map(j=>{
+                    const c=jobColor(j),name=displayName(j.propertyLabel)
+                    return(
+                      <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
+                        style={{padding:'2px 4px',borderRadius:3,cursor:'pointer',background:`${c}22`,color:c,border:`1px solid ${c}33`,flexShrink:0,display:'flex',alignItems:'center',gap:3,overflow:'hidden',minWidth:0}}
+                        onMouseEnter={e=>{e.currentTarget.style.background=`${c}40`}}
+                        onMouseLeave={e=>{e.currentTarget.style.background=`${c}22`}}>
+                        <span style={{fontSize:9,fontWeight:800,opacity:0.8,flexShrink:0,lineHeight:1.4}}>{fmt(j.checkoutTime)}</span>
+                        <span style={{fontSize:10,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0,lineHeight:1.4}}>{name}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                {hidden>0&&(
+                  <button
+                    onClick={e=>{
+                      e.stopPropagation()
+                      const rect=(e.currentTarget as HTMLElement).closest('[data-calday]')?.getBoundingClientRect()||(e.currentTarget as HTMLElement).getBoundingClientRect()
+                      setPopup({dk,jobs:dj,x:rect.left,y:rect.bottom+4})
+                    }}
+                    data-calday={dk}
+                    style={{marginTop:2,padding:'1px 4px',borderRadius:3,fontSize:9,fontWeight:700,cursor:'pointer',background:'rgba(255,255,255,0.06)',color:'var(--text-dim)',border:'none',flexShrink:0,textAlign:'left',fontFamily:'DM Sans,sans-serif'}}>
+                    +{hidden} more
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {/* Popup overlay for "more" jobs */}
+        {popup&&(
+          <div style={{position:'fixed',inset:0,zIndex:100}} onClick={()=>setPopup(null)}>
+            <div style={{position:'fixed',left:Math.min(popup.x,window.innerWidth-260),top:Math.min(popup.y,window.innerHeight-300),width:250,background:'var(--surface)',border:'1px solid var(--border)',borderRadius:12,boxShadow:'var(--shadow-lg)',overflow:'hidden',zIndex:101}} onClick={e=>e.stopPropagation()}>
+              <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:12,fontWeight:700,color:'var(--text)',fontFamily:'Syne,sans-serif'}}>{popup.jobs.length} Jobs</span>
+                <button onClick={()=>setPopup(null)} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-dim)',fontSize:14}}>✕</button>
+              </div>
+              <div style={{maxHeight:260,overflowY:'auto',padding:'6px'}}>
+                {popup.jobs.map(j=>{
+                  const c=jobColor(j),name=displayName(j.propertyLabel)
+                  return(
+                    <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({});setPopup(null)}}
+                      style={{padding:'7px 10px',borderRadius:7,cursor:'pointer',background:`${c}15`,color:c,border:`1px solid ${c}30`,marginBottom:4,display:'flex',alignItems:'center',gap:8}}
+                      onMouseEnter={e=>{e.currentTarget.style.background=`${c}30`}}
+                      onMouseLeave={e=>{e.currentTarget.style.background=`${c}15`}}>
+                      <div style={{flexShrink:0}}>
+                        <div style={{fontSize:10,fontWeight:800}}>{fmt(j.checkoutTime)}</div>
+                        <div style={{fontSize:9,opacity:0.7}}>{fmt(j.checkinTime)}</div>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>
+                        <div style={{fontSize:10,opacity:0.6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.address}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
-
   function WeekView(){
     const ws=getWeekStart(currentDate),ts=today.toDateString()
     return(
@@ -535,189 +585,294 @@ export default function Dashboard() {
 
   // ── OTHER PAGES ─────────────────────────────────────────────────────────────
   function PropertiesPage(){
-    const [platFilter, setPlatFilter] = useState<string>('all')
+    const [tab, setTab] = useState<'properties'|'clients'>('properties')
+    const [platFilter, setPlatFilter] = useState('all')
+    const [searchQ, setSearchQ] = useState('')
+    const [expandedClient, setExpandedClient] = useState<string|null>(null)
+    const [newClientName, setNewClientName] = useState('')
+
+    // persisted propClientMap — property label → client name
     const [propClientMap, setPropClientMap] = useState<Record<string,string>>(()=>{
       try{return JSON.parse(localStorage.getItem('propClientMap')||'{}')}catch{return{}}
+    })
+    // custom clients list (additions beyond what jobs derive)
+    const [customClients, setCustomClients] = useState<string[]>(()=>{
+      try{return JSON.parse(localStorage.getItem('customClients')||'[]')}catch{return[]}
     })
 
     function assignPropClient(prop: string, client: string) {
       const next={...propClientMap,[prop]:client}
-      setPropClientMap(next)
-      localStorage.setItem('propClientMap',JSON.stringify(next))
+      setPropClientMap(next); localStorage.setItem('propClientMap',JSON.stringify(next))
+    }
+    function addCustomClient(name: string) {
+      if(!name.trim())return
+      const next=[...new Set([...customClients,name.trim()])]
+      setCustomClients(next); localStorage.setItem('customClients',JSON.stringify(next))
+    }
+    function removeCustomClient(name: string) {
+      const next=customClients.filter(c=>c!==name)
+      setCustomClients(next); localStorage.setItem('customClients',JSON.stringify(next))
     }
 
-    const clientNames=[...new Set(jobs.map(j=>j.customerName).filter(Boolean))] as string[]
-    const platforms=['all','airbnb','turno','jobber','hostaway']
-    const filtered = platFilter==='all' ? allPropNames : allPropNames.filter(p=>jobs.find(j=>j.propertyLabel===p&&j.platform===platFilter))
+    // All client names = from jobs + custom
+    const autoClients=[...new Set(jobs.map(j=>j.customerName).filter(Boolean))] as string[]
+    const allClientNames=[...new Set([...autoClients,...customClients])].sort()
 
-    return(
-      <div style={{padding:'0 4px'}}>
-        <PageHeader title="Properties" subtitle={`${allPropNames.length} properties tracked`}/>
-        {/* Platform filter tabs */}
-        <div style={{display:'flex',gap:6,marginBottom:20,flexWrap:'wrap'}}>
-          {platforms.map(p=>(
-            <button key={p} onClick={()=>setPlatFilter(p)}
-              style={{padding:'6px 14px',borderRadius:20,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'DM Sans,sans-serif',
-                background:platFilter===p?'var(--teal)':'var(--surface2)',
-                color:platFilter===p?'#000':'var(--text-muted)',
-                border:`1px solid ${platFilter===p?'var(--teal)':'var(--border)'}`,
-                textTransform:'capitalize'}}>
-              {p==='all'?'All Platforms':p.charAt(0).toUpperCase()+p.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:16}}>
-          {filtered.map(p=>{
-            const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
-            const propJobs=jobs.filter(j=>j.propertyLabel===p).sort((a,b)=>new Date(b.checkoutTime).getTime()-new Date(a.checkoutTime).getTime())
-            const upcoming=propJobs.filter(j=>new Date(j.checkoutTime)>new Date())
-            const isHidden=hiddenProps.has(p)
-            const platforms=[...new Set(propJobs.map(j=>j.platform))]
-            const assignedClient=propClientMap[p]||propJobs[0]?.customerName||null
-            return(
-              <div key={p} style={{background:'var(--surface)',border:`1px solid ${c}30`,borderRadius:14,overflow:'hidden',boxShadow:`0 0 20px ${c}08`}}>
-                <div style={{height:5,background:`linear-gradient(90deg,${c},${c}60)`}}/>
-                <div style={{padding:'14px 16px'}}>
-                  {/* Header */}
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)',lineHeight:1.2,marginBottom:3}}>{displayName(p)}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{propJobs[0]?.address||p}</div>
-                    </div>
-                    <button onClick={()=>setExpandedColorProp(expandedColorProp===p?null:p)}
-                      style={{width:18,height:18,borderRadius:4,background:c,border:'none',cursor:'pointer',flexShrink:0,marginLeft:8}}/>
-                  </div>
-                  {expandedColorProp===p&&(
-                    <div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:10,padding:'8px',background:'var(--surface2)',borderRadius:7}}>
-                      {COLOR_PALETTE.map(col=>(
-                        <button key={col} onClick={()=>assignColor(p,col)}
-                          style={{width:18,height:18,borderRadius:3,background:col,border:colorMap[p]===col?'2px solid white':'2px solid transparent',cursor:'pointer'}}/>
-                      ))}
-                    </div>
-                  )}
-                  {/* Platform badges */}
-                  <div style={{display:'flex',gap:4,marginBottom:10,flexWrap:'wrap'}}>
-                    {platforms.map(plt=>{
-                      const pc=PLAT_COLORS[plt]||PLAT_COLORS.turno
-                      return <span key={plt} style={{fontSize:9,padding:'2px 7px',borderRadius:10,background:pc.bg,color:pc.text,fontWeight:700,textTransform:'capitalize'}}>{plt}</span>
-                    })}
-                  </div>
-                  {/* Client assignment */}
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:9,color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:0.8,marginBottom:4}}>Assigned Client</div>
-                    <select value={assignedClient||''} onChange={e=>assignPropClient(p,e.target.value)}
-                      style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:7,padding:'6px 10px',color:assignedClient?'var(--text)':'var(--text-dim)',fontFamily:'DM Sans,sans-serif',fontSize:12,outline:'none',cursor:'pointer'}}>
-                      <option value="">— Unassigned —</option>
-                      {clientNames.map(n=><option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10}}>
-                    <MiniStat label="Total Jobs" value={String(propJobs.length)}/>
-                    <MiniStat label="Upcoming" value={String(upcoming.length)} color="var(--teal)"/>
-                  </div>
-                  {upcoming[0]&&(
-                    <div style={{background:'var(--surface2)',borderRadius:7,padding:'8px 10px',marginBottom:10,border:'1px solid var(--border)'}}>
-                      <div style={{fontSize:9,color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:1,marginBottom:3}}>Next Job</div>
-                      <div style={{fontSize:12,fontWeight:700,color:'var(--teal)'}}>{fmtD(upcoming[0].checkoutTime)}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:1}}>{fmt(upcoming[0].checkoutTime)} → {fmt(upcoming[0].checkinTime)}</div>
-                    </div>
-                  )}
-                  <button onClick={()=>togglePropVisibility(p)}
-                    style={{width:'100%',padding:'6px',borderRadius:7,fontSize:11,fontWeight:600,cursor:'pointer',background:isHidden?'var(--surface3)':'var(--teal-bg)',color:isHidden?'var(--text-muted)':'var(--teal)',border:`1px solid ${isHidden?'var(--border)':'var(--teal-border)'}`,fontFamily:'DM Sans,sans-serif'}}>
-                    {isHidden?'Show on Calendar':'Hide from Calendar'}
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
+    // All properties with optional client assigned
+    const propsWithClient = allPropNames.map(p=>{
+      const propJobs=jobs.filter(j=>j.propertyLabel===p)
+      const autoClient=propJobs.find(j=>j.customerName)?.customerName||null
+      const assignedClient=propClientMap[p]||autoClient
+      return {p, assignedClient, propJobs}
+    })
 
-  function ClientsPage(){
-    // Group all jobs by customerName
-    const clientNames=[...new Set(jobs.map(j=>j.customerName).filter(Boolean))].sort() as string[]
+    // Build client → properties map
+    const clientPropMap: Record<string,{p:string;propJobs:any[]}[]> = {}
+    for(const {p,assignedClient,propJobs} of propsWithClient){
+      const key=assignedClient||'__unassigned__'
+      if(!clientPropMap[key]) clientPropMap[key]=[]
+      clientPropMap[key].push({p,propJobs})
+    }
 
-    // Also include property label groups for Jobber events (no customerName)
-    // Group events by their propertyLabel where customerName is null
-    const unassignedProps = [...new Set(
-      jobs.filter(j=>!j.customerName && j.platform==='jobber').map(j=>j.propertyLabel)
-    )]
+    const filteredProps = allPropNames
+      .filter(p=>platFilter==='all'||jobs.find(j=>j.propertyLabel===p&&j.platform===platFilter))
+      .filter(p=>!searchQ||p.toLowerCase().includes(searchQ.toLowerCase())||displayName(p).toLowerCase().includes(searchQ.toLowerCase()))
+
+    const PLAT_OPTS=['all','airbnb','turno','jobber','hostaway']
 
     return(
       <div>
-        <PageHeader title="Clients" subtitle={`${clientNames.length} clients`} action={<Chip color="var(--violet)">+ Add Client</Chip>}/>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:16}}>
-          {clientNames.map(name=>{
-            const clientJobs=jobs.filter(j=>j.customerName===name)
-            const props=[...new Set(clientJobs.map(j=>j.propertyLabel))]
-            const upcoming=clientJobs.filter(j=>new Date(j.checkoutTime)>new Date()).sort((a,b)=>new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
-            const initials=name.split(' ').map((w:string)=>w[0]).join('').slice(0,2).toUpperCase()
-            const accentColor = colorMap[props[0]] || colorFromRules(name, colorRules) || 'var(--violet)'
-            return(
-              <div key={name} style={{background:'var(--surface)',border:`1px solid ${accentColor}25`,borderRadius:14,overflow:'hidden',boxShadow:'var(--shadow-sm)'}}>
-                <div style={{height:4,background:`linear-gradient(90deg,${accentColor},${accentColor}60)`}}/>
-                <div style={{padding:'16px 18px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-                    <div style={{width:44,height:44,borderRadius:'50%',background:`${accentColor}20`,border:`1.5px solid ${accentColor}40`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:700,color:accentColor,flexShrink:0}}>
-                      {initials}
-                    </div>
-                    <div>
-                      <div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)'}}>{name}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{props.length} propert{props.length===1?'y':'ies'} · {clientJobs.length} total jobs</div>
-                    </div>
-                  </div>
+        {/* Header with tabs */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <h1 style={{fontFamily:'Syne,sans-serif',fontSize:26,fontWeight:700,color:'var(--text)'}}>Properties & Clients</h1>
+            <p style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>{allPropNames.length} properties · {allClientNames.length} clients</p>
+          </div>
+          <div style={{display:'flex',gap:3,background:'var(--surface2)',borderRadius:10,padding:4,border:'1px solid var(--border)'}}>
+            {(['properties','clients'] as const).map(t=>(
+              <button key={t} onClick={()=>setTab(t)}
+                style={{padding:'7px 16px',borderRadius:7,border:'none',background:tab===t?'var(--teal)':'transparent',color:tab===t?'#000':'var(--text-muted)',fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',textTransform:'capitalize',transition:'all 0.15s'}}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
 
-                  {/* Properties */}
-                  <div style={{marginBottom:12}}>
-                    <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1,color:'var(--text-dim)',marginBottom:6}}>Properties</div>
-                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                      {props.map(p=>{
-                        const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
-                        return(
-                          <span key={p} style={{fontSize:11,padding:'4px 10px',borderRadius:20,background:`${c}18`,color:c,border:`1px solid ${c}30`,fontWeight:600}}>
-                            {displayName(p)}
-                          </span>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Next upcoming job */}
-                  {upcoming[0]&&(
-                    <div style={{background:'var(--surface2)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--border)',marginBottom:12}}>
-                      <div style={{fontSize:9,color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:1,marginBottom:3}}>Next Job</div>
-                      <div style={{fontSize:13,fontWeight:700,color:accentColor}}>{fmtD(upcoming[0].checkoutTime)}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:1}}>{fmt(upcoming[0].checkoutTime)} → {fmt(upcoming[0].checkinTime)} · {displayName(upcoming[0].propertyLabel)}</div>
-                    </div>
-                  )}
-
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                    <MiniStat label="Total Jobs" value={String(clientJobs.length)}/>
-                    <MiniStat label="Upcoming" value={String(upcoming.length)} color="var(--teal)"/>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Unassigned Jobber events (no customerName) */}
-          {unassignedProps.length>0&&(
-            <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:14,padding:'18px',boxShadow:'var(--shadow-sm)',opacity:0.7}}>
-              <div style={{fontSize:12,fontWeight:700,color:'var(--text-muted)',marginBottom:8,fontFamily:'Syne,sans-serif'}}>Unassigned Events</div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                {unassignedProps.map(p=>{
-                  const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
-                  return <span key={p} style={{fontSize:11,padding:'3px 8px',borderRadius:20,background:`${c}18`,color:c,border:`1px solid ${c}30`,fontWeight:500}}>{displayName(p)}</span>
-                })}
+        {tab==='properties'&&(
+          <div>
+            {/* Filters */}
+            <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center',flexWrap:'wrap'}}>
+              <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Search properties..."
+                style={{flex:'1 1 180px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'7px 12px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:12,outline:'none'}}
+                onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                {PLAT_OPTS.map(p=>(
+                  <button key={p} onClick={()=>setPlatFilter(p)}
+                    style={{padding:'6px 12px',borderRadius:20,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'DM Sans,sans-serif',
+                      background:platFilter===p?'var(--teal)':'var(--surface2)',color:platFilter===p?'#000':'var(--text-muted)',
+                      border:`1px solid ${platFilter===p?'var(--teal)':'var(--border)'}`,textTransform:'capitalize'}}>
+                    {p==='all'?'All':p.charAt(0).toUpperCase()+p.slice(1)}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-        </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
+              {filteredProps.map(p=>{
+                const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
+                const propJobs=jobs.filter(j=>j.propertyLabel===p)
+                const upcoming=propJobs.filter(j=>new Date(j.checkoutTime)>new Date()).sort((a,b)=>new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
+                const isHidden=hiddenProps.has(p)
+                const plats=[...new Set(propJobs.map(j=>j.platform))]
+                const autoClient=propJobs.find(j=>j.customerName)?.customerName||null
+                const assignedClient=propClientMap[p]||autoClient
+                return(
+                  <div key={p} style={{background:'var(--surface)',border:`1px solid ${c}25`,borderRadius:12,overflow:'hidden',transition:'box-shadow 0.15s'}}
+                    onMouseEnter={e=>(e.currentTarget.style.boxShadow=`0 4px 20px ${c}18`)}
+                    onMouseLeave={e=>(e.currentTarget.style.boxShadow='')}>
+                    <div style={{height:4,background:`linear-gradient(90deg,${c},${c}50)`}}/>
+                    <div style={{padding:'13px 14px'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontFamily:'Syne,sans-serif',fontSize:14,fontWeight:700,color:'var(--text)',lineHeight:1.2,marginBottom:2}}>{displayName(p)}</div>
+                          <div style={{fontSize:10,color:'var(--text-muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{propJobs[0]?.address||p}</div>
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',gap:5,marginLeft:8}}>
+                          <button onClick={()=>setExpandedColorProp(expandedColorProp===p?null:p)}
+                            style={{width:16,height:16,borderRadius:3,background:c,border:'none',cursor:'pointer',flexShrink:0}}/>
+                          <button onClick={()=>togglePropVisibility(p)}
+                            style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:isHidden?'var(--text-dim)':'var(--teal)',flexShrink:0,padding:0}}
+                            title={isHidden?'Hidden from calendar':'Visible on calendar'}>
+                            {isHidden?'○':'●'}
+                          </button>
+                        </div>
+                      </div>
+                      {expandedColorProp===p&&(
+                        <div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:8,padding:'7px',background:'var(--surface2)',borderRadius:6}}>
+                          {COLOR_PALETTE.map(col=>(
+                            <button key={col} onClick={()=>assignColor(p,col)}
+                              style={{width:16,height:16,borderRadius:2,background:col,border:colorMap[p]===col?'2px solid white':'2px solid transparent',cursor:'pointer'}}/>
+                          ))}
+                        </div>
+                      )}
+                      {/* Platform + client row */}
+                      <div style={{display:'flex',gap:4,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
+                        {plats.map(plt=>{const pc=PLAT_COLORS[plt]||PLAT_COLORS.turno;return(
+                          <span key={plt} style={{fontSize:9,padding:'2px 6px',borderRadius:8,background:pc.bg,color:pc.text,fontWeight:700,textTransform:'capitalize'}}>{plt}</span>
+                        )})}
+                        {assignedClient&&(
+                          <span style={{fontSize:9,padding:'2px 8px',borderRadius:8,background:'var(--violet-bg)',color:'var(--violet)',fontWeight:600,border:'1px solid rgba(167,139,250,0.2)'}}>👤 {assignedClient}</span>
+                        )}
+                      </div>
+                      {/* Client assignment */}
+                      <select value={assignedClient||''} onChange={e=>assignPropClient(p,e.target.value)}
+                        style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,padding:'5px 8px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:11,outline:'none',cursor:'pointer',marginBottom:8}}>
+                        <option value="">— Assign to client —</option>
+                        {allClientNames.map(n=><option key={n} value={n}>{n}</option>)}
+                      </select>
+                      {/* Stats */}
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5,marginBottom:upcoming[0]?8:0}}>
+                        <MiniStat label="Total" value={String(propJobs.length)}/>
+                        <MiniStat label="Upcoming" value={String(upcoming.length)} color="var(--teal)"/>
+                      </div>
+                      {upcoming[0]&&(
+                        <div style={{background:'var(--teal-bg)',borderRadius:6,padding:'6px 8px',border:'1px solid var(--teal-border)'}}>
+                          <div style={{fontSize:9,color:'var(--teal)',fontWeight:700,textTransform:'uppercase',letterSpacing:0.8,marginBottom:2}}>Next</div>
+                          <div style={{fontSize:11,fontWeight:700,color:'var(--teal)'}}>{fmtD(upcoming[0].checkoutTime)} · {fmt(upcoming[0].checkoutTime)}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {tab==='clients'&&(
+          <div>
+            {/* Add new client */}
+            <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:12,padding:'14px 16px',marginBottom:20,display:'flex',gap:10,alignItems:'center'}}>
+              <input value={newClientName} onChange={e=>setNewClientName(e.target.value)}
+                onKeyDown={e=>{if(e.key==='Enter'){addCustomClient(newClientName);setNewClientName('')}}}
+                placeholder="Type a client name and press Enter..."
+                style={{flex:1,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'9px 14px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:13,outline:'none'}}
+                onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+              <button onClick={()=>{addCustomClient(newClientName);setNewClientName('')}} disabled={!newClientName.trim()}
+                style={{padding:'9px 18px',borderRadius:8,background:'var(--teal)',color:'#000',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',opacity:newClientName.trim()?1:0.4}}>
+                + Add Client
+              </button>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              {allClientNames.map(name=>{
+                const isExpanded=expandedClient===name
+                const clientJobs=jobs.filter(j=>j.customerName===name)
+                // Properties assigned to this client via propClientMap OR auto-assigned
+                const assignedProps=propsWithClient.filter(({assignedClient})=>assignedClient===name).map(x=>x.p)
+                const upcoming=clientJobs.filter(j=>new Date(j.checkoutTime)>new Date()).sort((a,b)=>new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
+                const accentColor=colorMap[assignedProps[0]]||colorFromRules(name,colorRules)||'#a78bfa'
+                const isCustom=!autoClients.includes(name)
+                const initials=name.split(' ').map((w:string)=>w[0]).join('').slice(0,2).toUpperCase()
+                return(
+                  <div key={name} style={{background:'var(--surface)',border:`1px solid ${accentColor}20`,borderRadius:12,overflow:'hidden',boxShadow:'var(--shadow-sm)'}}>
+                    {/* Client header row — always visible */}
+                    <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',cursor:'pointer'}} onClick={()=>setExpandedClient(isExpanded?null:name)}>
+                      <div style={{width:40,height:40,borderRadius:'50%',background:`${accentColor}20`,border:`2px solid ${accentColor}40`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:accentColor,flexShrink:0}}>
+                        {initials}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)',display:'flex',alignItems:'center',gap:8}}>
+                          {name}
+                          {isCustom&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:6,background:'var(--surface2)',color:'var(--text-dim)',fontWeight:600}}>custom</span>}
+                        </div>
+                        <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+                          {assignedProps.length} propert{assignedProps.length===1?'y':'ies'}
+                          {clientJobs.length>0&&` · ${clientJobs.length} jobs`}
+                          {upcoming.length>0&&` · ${upcoming.length} upcoming`}
+                        </div>
+                      </div>
+                      {/* Property color dots */}
+                      <div style={{display:'flex',gap:3,marginRight:8}}>
+                        {assignedProps.slice(0,5).map(p=>{
+                          const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
+                          return <div key={p} style={{width:8,height:8,borderRadius:2,background:c}} title={displayName(p)}/>
+                        })}
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        {isCustom&&<button onClick={e=>{e.stopPropagation();removeCustomClient(name)}} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'var(--text-dim)',padding:'2px 4px'}} title="Remove custom client">✕</button>}
+                        <span style={{fontSize:12,color:'var(--text-dim)'}}>{isExpanded?'▾':'▸'}</span>
+                      </div>
+                    </div>
+
+                    {/* Expanded details */}
+                    {isExpanded&&(
+                      <div style={{padding:'0 16px 16px',borderTop:'1px solid var(--border)'}}>
+                        {/* Properties */}
+                        {assignedProps.length>0&&(
+                          <div style={{marginTop:12,marginBottom:12}}>
+                            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1,color:'var(--text-dim)',marginBottom:8}}>Properties</div>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                              {assignedProps.map(p=>{
+                                const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
+                                const propJobs=jobs.filter(j=>j.propertyLabel===p)
+                                const propUpcoming=propJobs.filter(j=>new Date(j.checkoutTime)>new Date())
+                                return(
+                                  <div key={p} style={{background:`${c}12`,border:`1px solid ${c}30`,borderRadius:8,padding:'8px 12px',minWidth:140}}>
+                                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                                      <div style={{width:8,height:8,borderRadius:2,background:c,flexShrink:0}}/>
+                                      <span style={{fontSize:12,fontWeight:700,color:c}}>{displayName(p)}</span>
+                                    </div>
+                                    <div style={{fontSize:10,color:'var(--text-dim)'}}>{propJobs[0]?.address||p}</div>
+                                    <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{propUpcoming.length} upcoming</div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {/* Next 3 upcoming jobs */}
+                        {upcoming.length>0&&(
+                          <div>
+                            <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1,color:'var(--text-dim)',marginBottom:8}}>Upcoming Jobs</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                              {upcoming.slice(0,3).map(j=>{
+                                const c=jobColor(j)
+                                return(
+                                  <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
+                                    style={{display:'flex',alignItems:'center',gap:10,background:`${c}10`,border:`1px solid ${c}25`,borderRadius:8,padding:'8px 12px',cursor:'pointer'}}
+                                    onMouseEnter={e=>(e.currentTarget.style.background=`${c}20`)}
+                                    onMouseLeave={e=>(e.currentTarget.style.background=`${c}10`)}>
+                                    <div style={{width:4,height:32,borderRadius:2,background:c,flexShrink:0}}/>
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:12,fontWeight:700,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayName(j.propertyLabel)}</div>
+                                      <div style={{fontSize:10,color:'var(--text-muted)'}}>{fmtD(j.checkoutTime)} · {fmt(j.checkoutTime)} → {fmt(j.checkinTime)}</div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {assignedProps.length===0&&clientJobs.length===0&&(
+                          <div style={{padding:'16px 0',textAlign:'center',fontSize:12,color:'var(--text-dim)'}}>No properties or jobs assigned yet. Go to Properties tab to assign.</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {allClientNames.length===0&&(
+                <div style={{textAlign:'center',padding:'40px',color:'var(--text-dim)',fontSize:13}}>
+                  No clients yet. Type a name above to create one, or assign properties to clients on the Properties tab.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
+
 
   function TeamPage(){
     return(
@@ -1068,7 +1223,7 @@ export default function Dashboard() {
             {page==='calendar'&&view==='week'&&<WeekView/>}
             {page==='calendar'&&view==='day'&&<DayView/>}
             {page==='properties'&&<PropertiesPage/>}
-            {page==='clients'&&<ClientsPage/>}
+            {page==='clients'&&<PropertiesPage/>}
             {page==='team'&&<TeamPage/>}
             {page==='invoices'&&<InvoicesPage/>}
             {page==='integrations'&&<IntegrationsPage/>}
