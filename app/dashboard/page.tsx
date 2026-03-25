@@ -236,9 +236,9 @@ export default function Dashboard() {
       const cd=new Date(yr,mo,day),isT=cd.toDateString()===ts,dk=dayKey(cd),isExp=!!expandedDays[dk]
       const dj=jobsOnDay(cd),showAll=isExp||dj.length<=MAX_VISIBLE,visible=showAll?dj:dj.slice(0,MAX_VISIBLE),hidden=showAll?0:dj.length-MAX_VISIBLE
       days.push(
-        <div key={day} style={{height:isExp?'auto':130,minHeight:130,background:isT?'rgba(0,212,170,0.06)':'var(--surface)',padding:'7px 6px',display:'flex',flexDirection:'column',position:isExp?'relative':undefined,zIndex:isExp?10:undefined,borderTop:isT?'2px solid var(--teal)':'2px solid transparent',transition:'background 0.1s'}}>
+        <div key={day} style={{height:isExp?'auto':130,minHeight:130,background:isT?'rgba(0,212,170,0.06)':'var(--surface)',padding:'7px 6px',display:'flex',flexDirection:'column',position:'relative',zIndex:isExp?10:undefined,borderTop:isT?'2px solid var(--teal)':'2px solid transparent',transition:'background 0.1s'}}>
           <div style={{fontSize:12,fontWeight:700,fontFamily:'Syne,sans-serif',color:isT?'var(--teal)':'var(--text-muted)',marginBottom:5,width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?'rgba(0,212,170,0.15)':'transparent',flexShrink:0}}>{day}</div>
-          <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden',minHeight:0}}>
             {visible.map(j=>{
               const c=jobColor(j),name=displayName(j.propertyLabel)
               return(
@@ -251,19 +251,19 @@ export default function Dashboard() {
                 </div>
               )
             })}
-            {!showAll&&hidden>0&&(
-              <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:true}))}}
-                style={{marginTop:2,padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:700,cursor:'pointer',background:'var(--surface3)',color:'var(--text-muted)',border:'1px solid var(--border)',flexShrink:0,fontFamily:'DM Sans,sans-serif'}}>
-                ▾ {hidden} more
-              </button>
-            )}
-            {isExp&&dj.length>MAX_VISIBLE&&(
-              <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:false}))}}
-                style={{marginTop:2,padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:700,cursor:'pointer',background:'var(--teal-bg)',color:'var(--teal)',border:'1px solid var(--teal-border)',flexShrink:0,fontFamily:'DM Sans,sans-serif'}}>
-                ▴ less
-              </button>
-            )}
           </div>
+          {!showAll&&hidden>0&&(
+            <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:true}))}}
+              style={{marginTop:2,padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:700,cursor:'pointer',background:'var(--surface3)',color:'var(--text-muted)',border:'1px solid var(--border)',flexShrink:0,fontFamily:'DM Sans,sans-serif',width:'100%',textAlign:'left'}}>
+              ▾ {hidden} more
+            </button>
+          )}
+          {isExp&&dj.length>MAX_VISIBLE&&(
+            <button onClick={e=>{e.stopPropagation();setExpandedDays(p=>({...p,[dk]:false}))}}
+              style={{marginTop:2,padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:700,cursor:'pointer',background:'var(--teal-bg)',color:'var(--teal)',border:'1px solid var(--teal-border)',flexShrink:0,fontFamily:'DM Sans,sans-serif',width:'100%',textAlign:'left'}}>
+              ▴ less
+            </button>
+          )}
         </div>
       )
     }
