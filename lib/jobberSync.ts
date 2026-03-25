@@ -26,24 +26,39 @@ export async function exchangeJobberCode(code: string) {
   return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>
 }
 
-export async function refreshJobberToken(refreshToken: string) {
-  const res = await fetch('https://api.getjobber.com/api/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: process.env.JOBBER_CLIENT_ID,
-      client_secret: process.env.JOBBER_CLIENT_SECRET,
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    }),
-  })
-  if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`)
-  return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>
+async function tryRefreshToken(accountId: string, refreshToken: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.getjobber.com/api/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.JOBBER_CLIENT_ID,
+        client_secret: process.env.JOBBER_CLIENT_SECRET,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }),
+    })
+    if (!res.ok) return null
+    const tokens = await res.json()
+    if (!tokens.access_token) return null
+    // Save refreshed tokens
+    await prisma.jobberAccount.update({
+      where: { id: accountId },
+      data: {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || refreshToken,
+        expiresAt: new Date(Date.now() + 55 * 60 * 1000),
+      },
+    })
+    return tokens.access_token
+  } catch {
+    return null
+  }
 }
 
 const VERSION = '2026-03-10'
 
-async function jobberGQL(accessToken: string, query: string, variables = {}) {
+async function jobberGQL(accessToken: string, query: string) {
   const res = await fetch('https://api.getjobber.com/api/graphql', {
     method: 'POST',
     headers: {
@@ -51,7 +66,7 @@ async function jobberGQL(accessToken: string, query: string, variables = {}) {
       'Content-Type': 'application/json',
       'X-JOBBER-GRAPHQL-VERSION': VERSION,
     },
-    body: JSON.stringify({ query, variables }),
+    body: JSON.stringify({ query }),
   })
   if (!res.ok) throw new Error(`Jobber API error: ${res.status}`)
   const json = await res.json()
@@ -59,8 +74,6 @@ async function jobberGQL(accessToken: string, query: string, variables = {}) {
   return json.data
 }
 
-// Scheduled items query — covers Events, Visits, Assessments, Tasks
-// Max 1.5 year range, paginated
 function scheduledItemsQuery(startAt: string, endAt: string, cursor?: string) {
   return `query {
     scheduledItems(
@@ -112,36 +125,27 @@ function scheduledItemsQuery(startAt: string, endAt: string, cursor?: string) {
   }`
 }
 
-// Parse Event description like:
-// "1711 Crescent Cir // 3 beds / 3 baths / 2500 sq.ft. // Code for all doors: 5834"
 function parseEventDescription(description: string | null) {
-  if (!description) return { address: null, beds: null, baths: null, notes: description }
-
+  if (!description) return { address: null, beds: null, baths: null }
   const parts = description.split('//').map(p => p.trim())
   const address = parts[0] || null
-
-  let beds: number | null = null
-  let baths: number | null = null
-
   const fullText = description.toLowerCase()
-
   const bedsMatch = fullText.match(/(\d+)\s*bed/)
-  if (bedsMatch) beds = parseInt(bedsMatch[1])
-
   const bathsMatch = fullText.match(/(\d+\.?\d*)\s*bath/)
-  if (bathsMatch) baths = parseFloat(bathsMatch[1])
-
-  return { address, beds, baths, notes: description }
+  return {
+    address,
+    beds: bedsMatch ? parseInt(bedsMatch[1]) : null,
+    baths: bathsMatch ? parseFloat(bathsMatch[1]) : null,
+  }
 }
 
 function scheduledItemToJob(item: any, jobberAccountId: string) {
   const type = item.__typename
 
   if (type === 'Event') {
-    const { address, beds, baths, notes } = parseEventDescription(item.description)
+    const { address, beds, baths } = parseEventDescription(item.description)
     const street = address || item.title
     const propertyLabel = street?.split(',')[0]?.trim() || item.title
-
     return {
       platform: 'jobber' as const,
       displayName: item.title?.trim() || 'Jobber Event',
@@ -150,19 +154,12 @@ function scheduledItemToJob(item: any, jobberAccountId: string) {
       propertyLabel,
       checkoutTime: new Date(item.startAt),
       checkinTime: item.endAt ? new Date(item.endAt) : null,
-      nextGuests: null,
-      nextGuestCount: null,
-      sqft: null,
-      beds,
-      baths,
-      worth: null,
-      notes: notes || '',
-      cleanerIds: '[]',
-      duties: '[]',
-      gmailMessageId: null,
-      gmailAccountId: null,
-      jobberVisitId: item.id,
-      jobberAccountId,
+      nextGuests: null, nextGuestCount: null, sqft: null,
+      beds, baths, worth: null,
+      notes: item.description || '',
+      cleanerIds: '[]', duties: '[]',
+      gmailMessageId: null, gmailAccountId: null,
+      jobberVisitId: item.id, jobberAccountId,
     }
   }
 
@@ -172,30 +169,20 @@ function scheduledItemToJob(item: any, jobberAccountId: string) {
     const city = addr?.city || 'Anchorage'
     const province = addr?.province || 'AK'
     const address = [street, city, province].filter(Boolean).join(', ') || 'Unknown Address'
-    const propertyLabel = street.trim() || item.client?.name || 'Jobber Visit'
-    const displayName = item.job?.title || item.title || item.client?.name || `Job #${item.job?.jobNumber}`
-
     return {
       platform: 'jobber' as const,
-      displayName: (displayName || 'Jobber Visit').trim(),
+      displayName: (item.job?.title || item.title || item.client?.name || `Job #${item.job?.jobNumber}` || 'Jobber Visit').trim(),
       customerName: item.client?.name || null,
       address,
-      propertyLabel,
+      propertyLabel: street.trim() || item.client?.name || 'Jobber Visit',
       checkoutTime: new Date(item.startAt),
       checkinTime: item.endAt ? new Date(item.endAt) : null,
-      nextGuests: null,
-      nextGuestCount: null,
-      sqft: null,
-      beds: null,
-      baths: null,
-      worth: null,
+      nextGuests: null, nextGuestCount: null, sqft: null,
+      beds: null, baths: null, worth: null,
       notes: item.job?.jobNumber ? `Job #${item.job.jobNumber}` : '',
-      cleanerIds: '[]',
-      duties: '[]',
-      gmailMessageId: null,
-      gmailAccountId: null,
-      jobberVisitId: item.id,
-      jobberAccountId,
+      cleanerIds: '[]', duties: '[]',
+      gmailMessageId: null, gmailAccountId: null,
+      jobberVisitId: item.id, jobberAccountId,
     }
   }
 
@@ -203,53 +190,53 @@ function scheduledItemToJob(item: any, jobberAccountId: string) {
     const addr = item.property?.address
     const street = addr?.street || ''
     const city = addr?.city || 'Anchorage'
-    const address = [street, city].filter(Boolean).join(', ') || 'Unknown'
-
     return {
       platform: 'jobber' as const,
       displayName: item.title?.trim() || item.client?.name || 'Assessment',
       customerName: item.client?.name || null,
-      address,
+      address: [street, city].filter(Boolean).join(', ') || 'Unknown',
       propertyLabel: street || item.client?.name || 'Assessment',
       checkoutTime: new Date(item.startAt),
       checkinTime: item.endAt ? new Date(item.endAt) : null,
-      nextGuests: null,
-      nextGuestCount: null,
-      sqft: null,
-      beds: null,
-      baths: null,
-      worth: null,
+      nextGuests: null, nextGuestCount: null, sqft: null,
+      beds: null, baths: null, worth: null,
       notes: '',
-      cleanerIds: '[]',
-      duties: '[]',
-      gmailMessageId: null,
-      gmailAccountId: null,
-      jobberVisitId: item.id,
-      jobberAccountId,
+      cleanerIds: '[]', duties: '[]',
+      gmailMessageId: null, gmailAccountId: null,
+      jobberVisitId: item.id, jobberAccountId,
     }
   }
 
-  return null // Task — skip, no time data
+  return null
 }
 
 export async function syncJobberAccount(accountId: string) {
   const account = await prisma.jobberAccount.findUnique({ where: { id: accountId } })
   if (!account) throw new Error('Jobber account not found')
 
+  // Always try to refresh — Jobber tokens expire in 1 hour
+  // Try refresh first, fall back to stored token if refresh fails
   let accessToken = account.accessToken
-
-  // Refresh if expired
-  if (new Date(account.expiresAt) < new Date()) {
-    const tokens = await refreshJobberToken(account.refreshToken)
-    accessToken = tokens.access_token
-    await prisma.jobberAccount.update({
-      where: { id: accountId },
-      data: {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        expiresAt: new Date(Date.now() + 55 * 60 * 1000),
+  const refreshed = await tryRefreshToken(accountId, account.refreshToken)
+  if (refreshed) {
+    accessToken = refreshed
+    console.log('Jobber token refreshed successfully')
+  } else {
+    console.log('Token refresh failed, trying stored token')
+    // Test the stored token
+    const testRes = await fetch('https://api.getjobber.com/api/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-JOBBER-GRAPHQL-VERSION': VERSION,
       },
+      body: JSON.stringify({ query: '{ account { id } }' }),
     })
+    const testJson = await testRes.json()
+    if (testJson.message === 'Access token expired' || testJson.errors?.[0]?.message?.includes('expired')) {
+      throw new Error('NEEDS_RECONNECT: Jobber token expired and refresh failed. Please reconnect Jobber in Integrations.')
+    }
   }
 
   // Get already-synced IDs
@@ -259,51 +246,44 @@ export async function syncJobberAccount(accountId: string) {
   })
   const seen = new Set(existing.map(j => j.jobberVisitId))
 
-  // Query in two windows — past 90 days and next ~14 months (under 1.5yr limit)
-  const windows = [
-    {
-      startAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-      endAt: new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ]
+  const startAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const endAt = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString()
 
+  let cursor: string | null = null
   let imported = 0
   let total = 0
 
-  for (const window of windows) {
-    let cursor: string | null = null
+  do {
+    const query = scheduledItemsQuery(startAt, endAt, cursor || undefined)
+    const data = await jobberGQL(accessToken, query)
+    const { nodes, pageInfo } = data.scheduledItems
 
-    do {
-      const query = scheduledItemsQuery(window.startAt, window.endAt, cursor || undefined)
-      const data = await jobberGQL(accessToken, query)
-      const { nodes, pageInfo } = data.scheduledItems
+    for (const item of nodes) {
+      total++
+      if (seen.has(item.id)) continue
+      if (!item.startAt) continue
 
-      for (const item of nodes) {
-        total++
-        if (seen.has(item.id)) continue
-        if (!item.startAt) continue // skip Tasks with no time
+      const jobData = scheduledItemToJob(item, accountId)
+      if (!jobData) continue
 
-        const jobData = scheduledItemToJob(item, accountId)
-        if (!jobData) continue
-
-        try {
-          await prisma.job.create({ data: jobData })
-          imported++
-          seen.add(item.id)
-        } catch (e) {
-          console.error(`Failed to create job for ${item.id}:`, String(e).slice(0, 200))
-        }
+      try {
+        await prisma.job.create({ data: jobData })
+        imported++
+        seen.add(item.id)
+      } catch (e) {
+        console.error(`Jobber insert failed for ${item.id} (${item.__typename}):`, String(e).slice(0, 150))
       }
+    }
 
-      cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null
-    } while (cursor)
-  }
+    cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null
+  } while (cursor)
 
   await prisma.jobberAccount.update({
     where: { id: accountId },
     data: { lastSynced: new Date() },
   })
 
+  console.log(`Jobber sync complete: ${imported} imported of ${total} total`)
   return { imported, total }
 }
 
@@ -315,7 +295,8 @@ export async function syncAllJobberAccounts() {
       const r = await syncJobberAccount(account.id)
       results.push({ companyName: account.companyName, email: account.email, ...r })
     } catch (e) {
-      results.push({ email: account.email, error: String(e) })
+      console.error('Jobber account sync error:', String(e))
+      results.push({ email: account.email, error: String(e), imported: 0, total: 0 })
     }
   }
   return results
