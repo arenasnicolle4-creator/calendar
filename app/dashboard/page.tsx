@@ -163,7 +163,18 @@ export default function Dashboard() {
   async function disconnectJobber(id:string){await fetch(`/api/jobber/accounts/${id}`,{method:'DELETE'});loadJobberAccounts();loadJobs()}
   async function syncJobberAccount(id:string,email:string){
     setSyncing(`jobber-${id}`);setSyncMsg(null)
-    try{const r=await fetch(`/api/jobber/sync?id=${id}`,{method:'POST'});const d=await r.json();setSyncMsg(`✓ Synced Jobber (${email}) — ${d.imported} new job(s)`);loadJobs();loadJobberAccounts()}
+    try{
+      const r=await fetch(`/api/jobber/sync?id=${id}`,{method:'POST'})
+      const d=await r.json()
+      if(d.error?.includes('NEEDS_RECONNECT')){
+        setSyncMsg('⚠ Jobber token expired — please disconnect and reconnect Jobber in Integrations')
+      } else if(d.error){
+        setSyncMsg(`Error: ${d.error}`)
+      } else {
+        setSyncMsg(`✓ Synced Jobber (${email}) — ${d.imported ?? 0} new job(s)`)
+        loadJobs();loadJobberAccounts()
+      }
+    }
     catch{setSyncMsg('Error syncing Jobber')}
     setSyncing(null)
   }
