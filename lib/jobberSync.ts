@@ -170,12 +170,17 @@ function scheduledItemToJob(item: any, jobberAccountId: string) {
     const city = addr?.city || 'Anchorage'
     const province = addr?.province || 'AK'
     const address = [street, city, province].filter(Boolean).join(', ') || 'Unknown Address'
+    // Use client name as the property label so calendar shows name not address
+    const clientName = item.client?.name || ''
+    const jobTitle = item.job?.title || ''
+    const propertyLabel = clientName || jobTitle || street || 'Jobber Visit'
+    const displayName = jobTitle || clientName || `Job #${item.job?.jobNumber}` || 'Jobber Visit'
     return {
       platform: 'jobber' as const,
-      displayName: (item.job?.title || item.title || item.client?.name || `Job #${item.job?.jobNumber}` || 'Jobber Visit').trim(),
-      customerName: item.client?.name || null,
+      displayName: displayName.trim(),
+      customerName: clientName || null,
       address,
-      propertyLabel: street.trim() || item.client?.name || 'Jobber Visit',
+      propertyLabel,
       checkoutTime: new Date(item.startAt),
       checkinTime: item.endAt ? new Date(item.endAt) : null,
       nextGuests: null, nextGuestCount: null, sqft: null,
