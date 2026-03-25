@@ -64,6 +64,24 @@ function saveColorMap(m: Record<string,string>) {
   if (typeof window !== 'undefined') localStorage.setItem('propColors', JSON.stringify(m))
 }
 
+// Color rules — keyword → color, checked against propertyLabel
+interface ColorRule { keyword: string; color: string }
+function loadColorRules(): ColorRule[] {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem('colorRules') || '[]') } catch { return [] }
+}
+function saveColorRules(rules: ColorRule[]) {
+  if (typeof window !== 'undefined') localStorage.setItem('colorRules', JSON.stringify(rules))
+}
+// Returns color from rules if any keyword matches the label (case-insensitive)
+function colorFromRules(label: string, rules: ColorRule[]): string | null {
+  const lower = label.toLowerCase()
+  for (const rule of rules) {
+    if (rule.keyword && lower.includes(rule.keyword.toLowerCase())) return rule.color
+  }
+  return null
+}
+
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 function fmt(d: string|null) { return d ? new Date(d).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—' }
 function fmtD(d: string|null) { return d ? new Date(d).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : '—' }
@@ -116,6 +134,7 @@ export default function Dashboard() {
   const [dutyChecks, setDutyChecks] = useState<Record<number,boolean>>({})
   const [expandedDays, setExpandedDays] = useState<Record<string,boolean>>({})
   const [colorMap, setColorMap] = useState<Record<string,string>>({})
+  const [colorRules, setColorRules] = useState<ColorRule[]>([])
   const [propNameMap, setPropNameMap] = useState<Record<string,string>>({})
   const [hiddenProps, setHiddenProps] = useState<Set<string>>(new Set())
   const [expandedColorProp, setExpandedColorProp] = useState<string|null>(null)
@@ -125,6 +144,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setColorMap(loadColorMap())
+    setColorRules(loadColorRules())
     try { setPropNameMap(JSON.parse(localStorage.getItem('propNames')||'{}')) } catch {}
     try { setHiddenProps(new Set(JSON.parse(localStorage.getItem('hiddenProps')||'[]'))) } catch {}
     const params = new URLSearchParams(window.location.search)
@@ -155,7 +175,16 @@ export default function Dashboard() {
   function togglePropVisibility(label: string) {
     setHiddenProps(prev=>{const n=new Set(prev);n.has(label)?n.delete(label):n.add(label);localStorage.setItem('hiddenProps',JSON.stringify([...n]));return n})
   }
-  function jobColor(j: Job) { return colorMap[j.propertyLabel]||DEFAULT_PROP_COLOR }
+  function jobColor(j: Job) {
+    // 1. Explicit per-property color
+    if (colorMap[j.propertyLabel]) return colorMap[j.propertyLabel]
+    // 2. Keyword rule match against property label or display name
+    const ruleColor = colorFromRules(j.propertyLabel, colorRules) ||
+                      colorFromRules(j.displayName, colorRules)
+    if (ruleColor) return ruleColor
+    // 3. Default red = needs color assigned
+    return DEFAULT_PROP_COLOR
+  }
 
   async function connectGmail(){const r=await fetch('/api/gmail/accounts',{method:'POST'});const{url}=await r.json();window.location.href=url}
   async function disconnectGmail(id:string){await fetch(`/api/gmail/accounts/${id}`,{method:'DELETE'});loadGmailAccounts()}
@@ -243,11 +272,11 @@ export default function Dashboard() {
               const c=jobColor(j),name=displayName(j.propertyLabel)
               return(
                 <div key={j.id} onClick={()=>{setSelectedJob(j);setDutyChecks({})}}
-                  style={{padding:'3px 6px',borderRadius:5,cursor:'pointer',background:`${c}20`,color:c,border:`1px solid ${c}35`,flexShrink:0,transition:'all 0.1s',lineHeight:1.3}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=`${c}35`;e.currentTarget.style.transform='translateY(-1px)'}}
-                  onMouseLeave={e=>{e.currentTarget.style.background=`${c}20`;e.currentTarget.style.transform=''}}>
-                  <div style={{fontSize:10,fontWeight:800,opacity:0.8,marginBottom:1}}>{fmt(j.checkoutTime)}</div>
-                  <div style={{fontSize:11,fontWeight:700,whiteSpace:'pre-line',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'} as React.CSSProperties}>{name}</div>
+                  style={{padding:'3px 6px',borderRadius:5,cursor:'pointer',background:`${c}20`,color:c,border:`1px solid ${c}35`,flexShrink:0,transition:'all 0.1s',lineHeight:1.3,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=`${c}35`}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=`${c}20`}}>
+                  <span style={{fontSize:10,fontWeight:800,opacity:0.75,marginRight:4}}>{fmt(j.checkoutTime)}</span>
+                  <span style={{fontSize:11,fontWeight:700}}>{name}</span>
                 </div>
               )
             })}
@@ -557,41 +586,84 @@ export default function Dashboard() {
   }
 
   function ClientsPage(){
-    const clients=[...new Set(jobs.map(j=>j.customerName).filter(Boolean))] as string[]
+    // Group all jobs by customerName
+    const clientNames=[...new Set(jobs.map(j=>j.customerName).filter(Boolean))].sort() as string[]
+
+    // Also include property label groups for Jobber events (no customerName)
+    // Group events by their propertyLabel where customerName is null
+    const unassignedProps = [...new Set(
+      jobs.filter(j=>!j.customerName && j.platform==='jobber').map(j=>j.propertyLabel)
+    )]
+
     return(
       <div>
-        <PageHeader title="Clients" subtitle={`${clients.length} clients`} action={<Chip color="var(--violet)">+ Add Client</Chip>}/>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16}}>
-          {clients.map(name=>{
+        <PageHeader title="Clients" subtitle={`${clientNames.length} clients`} action={<Chip color="var(--violet)">+ Add Client</Chip>}/>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:16}}>
+          {clientNames.map(name=>{
             const clientJobs=jobs.filter(j=>j.customerName===name)
             const props=[...new Set(clientJobs.map(j=>j.propertyLabel))]
-            const upcoming=clientJobs.filter(j=>new Date(j.checkoutTime)>new Date())
+            const upcoming=clientJobs.filter(j=>new Date(j.checkoutTime)>new Date()).sort((a,b)=>new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
+            const initials=name.split(' ').map((w:string)=>w[0]).join('').slice(0,2).toUpperCase()
+            const accentColor = colorMap[props[0]] || colorFromRules(name, colorRules) || 'var(--violet)'
             return(
-              <div key={name} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:14,padding:'18px',boxShadow:'var(--shadow-sm)'}}>
-                <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-                  <div style={{width:44,height:44,borderRadius:'50%',background:'var(--violet-bg)',border:'1px solid rgba(167,139,250,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:700,color:'var(--violet)',flexShrink:0}}>
-                    {name.split(' ').map(w=>w[0]).join('').slice(0,2)}
+              <div key={name} style={{background:'var(--surface)',border:`1px solid ${accentColor}25`,borderRadius:14,overflow:'hidden',boxShadow:'var(--shadow-sm)'}}>
+                <div style={{height:4,background:`linear-gradient(90deg,${accentColor},${accentColor}60)`}}/>
+                <div style={{padding:'16px 18px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+                    <div style={{width:44,height:44,borderRadius:'50%',background:`${accentColor}20`,border:`1.5px solid ${accentColor}40`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:700,color:accentColor,flexShrink:0}}>
+                      {initials}
+                    </div>
+                    <div>
+                      <div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)'}}>{name}</div>
+                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{props.length} propert{props.length===1?'y':'ies'} · {clientJobs.length} total jobs</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)'}}>{name}</div>
-                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{props.length} propert{props.length===1?'y':'ies'}</div>
+
+                  {/* Properties */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:1,color:'var(--text-dim)',marginBottom:6}}>Properties</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                      {props.map(p=>{
+                        const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
+                        return(
+                          <span key={p} style={{fontSize:11,padding:'4px 10px',borderRadius:20,background:`${c}18`,color:c,border:`1px solid ${c}30`,fontWeight:600}}>
+                            {displayName(p)}
+                          </span>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-                  <MiniStat label="Total Jobs" value={String(clientJobs.length)}/>
-                  <MiniStat label="Upcoming" value={String(upcoming.length)} color="var(--teal)"/>
-                </div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                  {props.slice(0,3).map(p=>(
-                    <span key={p} style={{fontSize:10,padding:'3px 8px',borderRadius:20,background:`${colorMap[p]||DEFAULT_PROP_COLOR}20`,color:colorMap[p]||DEFAULT_PROP_COLOR,border:`1px solid ${colorMap[p]||DEFAULT_PROP_COLOR}30`,fontWeight:600}}>
-                      {displayName(p)}
-                    </span>
-                  ))}
-                  {props.length>3&&<span style={{fontSize:10,padding:'3px 8px',borderRadius:20,background:'var(--surface2)',color:'var(--text-muted)',fontWeight:600}}>+{props.length-3}</span>}
+
+                  {/* Next upcoming job */}
+                  {upcoming[0]&&(
+                    <div style={{background:'var(--surface2)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--border)',marginBottom:12}}>
+                      <div style={{fontSize:9,color:'var(--text-dim)',fontWeight:700,textTransform:'uppercase',letterSpacing:1,marginBottom:3}}>Next Job</div>
+                      <div style={{fontSize:13,fontWeight:700,color:accentColor}}>{fmtD(upcoming[0].checkoutTime)}</div>
+                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:1}}>{fmt(upcoming[0].checkoutTime)} → {fmt(upcoming[0].checkinTime)} · {displayName(upcoming[0].propertyLabel)}</div>
+                    </div>
+                  )}
+
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <MiniStat label="Total Jobs" value={String(clientJobs.length)}/>
+                    <MiniStat label="Upcoming" value={String(upcoming.length)} color="var(--teal)"/>
+                  </div>
                 </div>
               </div>
             )
           })}
+
+          {/* Unassigned Jobber events (no customerName) */}
+          {unassignedProps.length>0&&(
+            <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:14,padding:'18px',boxShadow:'var(--shadow-sm)',opacity:0.7}}>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--text-muted)',marginBottom:8,fontFamily:'Syne,sans-serif'}}>Unassigned Events</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                {unassignedProps.map(p=>{
+                  const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
+                  return <span key={p} style={{fontSize:11,padding:'3px 8px',borderRadius:20,background:`${c}18`,color:c,border:`1px solid ${c}30`,fontWeight:500}}>{displayName(p)}</span>
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -993,12 +1065,12 @@ export default function Dashboard() {
               {allPropNames.length>0&&(
                 <div>
                   <SidebarLabel>Properties</SidebarLabel>
-                  {allPropNames.some(p=>!colorMap[p])&&(
+                  {allPropNames.some(p=>!colorMap[p] && !colorFromRules(p, colorRules))&&(
                     <div style={{marginBottom:6,padding:'4px 8px',borderRadius:6,background:'var(--red-bg)',border:'1px solid rgba(244,63,94,0.3)',fontSize:10,color:'var(--coral)',fontWeight:600}}>● Needs color assigned</div>
                   )}
                   <div style={{display:'flex',flexDirection:'column',gap:5}}>
                     {allPropNames.map(p=>{
-                      const c=colorMap[p]||DEFAULT_PROP_COLOR
+                      const c=colorMap[p]||colorFromRules(p,colorRules)||DEFAULT_PROP_COLOR
                       const isHidden=hiddenProps.has(p),isExp=expandedColorProp===p
                       return(
                         <div key={p} style={{borderRadius:8,border:`1px solid ${isHidden?'var(--border)':c+'30'}`,background:'var(--surface2)',overflow:'hidden',opacity:isHidden?0.4:1,transition:'opacity 0.15s'}}>
@@ -1029,6 +1101,22 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+
+              {/* Color Rules — keyword → color */}
+              <div>
+                <SidebarLabel>Color Rules</SidebarLabel>
+                <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:6}}>
+                  {colorRules.map((rule,i)=>(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:5,background:'var(--surface2)',borderRadius:7,padding:'5px 7px',border:'1px solid var(--border)'}}>
+                      <div style={{width:10,height:10,borderRadius:3,background:rule.color,flexShrink:0}}/>
+                      <span style={{fontSize:11,color:'var(--text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rule.keyword}</span>
+                      <button onClick={()=>{const next=colorRules.filter((_,j)=>j!==i);setColorRules(next);saveColorRules(next)}}
+                        style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--text-dim)',padding:'0 2px',flexShrink:0}}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <ColorRuleAdder onAdd={(rule)=>{const next=[...colorRules,rule];setColorRules(next);saveColorRules(next)}}/>
+              </div>
             </aside>
           )}
         </div>
@@ -1036,6 +1124,33 @@ export default function Dashboard() {
 
       {selectedJob&&<JobModal/>}
       {showGmailPanel&&<GmailPanel/>}
+    </div>
+  )
+}
+
+function ColorRuleAdder({onAdd}:{onAdd:(r:ColorRule)=>void}){
+  const [keyword,setKeyword]=useState('')
+  const [color,setColor]=useState(COLOR_PALETTE[0])
+  const [open,setOpen]=useState(false)
+  if(!open) return(
+    <button onClick={()=>setOpen(true)} style={{width:'100%',padding:'5px',borderRadius:7,background:'var(--surface2)',border:'1px solid var(--border)',fontSize:11,color:'var(--text-muted)',cursor:'pointer',fontFamily:'DM Sans,sans-serif',fontWeight:600}}>+ Add Rule</button>
+  )
+  return(
+    <div style={{background:'var(--surface2)',borderRadius:8,padding:'8px',border:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:6}}>
+      <input value={keyword} onChange={e=>setKeyword(e.target.value)} placeholder="keyword (e.g. Eric)"
+        style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,padding:'5px 8px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:11,outline:'none'}}/>
+      <div style={{display:'flex',flexWrap:'wrap',gap:3}}>
+        {COLOR_PALETTE.map(c=>(
+          <button key={c} onClick={()=>setColor(c)}
+            style={{width:16,height:16,borderRadius:3,background:c,border:color===c?'2px solid white':'2px solid transparent',cursor:'pointer'}}/>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:5}}>
+        <button onClick={()=>{if(keyword.trim()){onAdd({keyword:keyword.trim(),color});setKeyword('');setOpen(false)}}}
+          style={{flex:1,padding:'5px',borderRadius:6,background:'var(--teal)',color:'#000',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:11,fontWeight:700,cursor:'pointer'}}>Save</button>
+        <button onClick={()=>setOpen(false)}
+          style={{padding:'5px 8px',borderRadius:6,background:'var(--surface3)',color:'var(--text-muted)',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:11,cursor:'pointer'}}>Cancel</button>
+      </div>
     </div>
   )
 }
