@@ -144,8 +144,9 @@ function scheduledItemToJob(item: any, jobberAccountId: string) {
 
   if (type === 'Event') {
     const { address, beds, baths } = parseEventDescription(item.description)
-    const street = address || item.title
-    const propertyLabel = street?.split(',')[0]?.trim() || item.title
+    // propertyLabel = title so calendar chips show the event name
+    // address = parsed from description for the detail view
+    const propertyLabel = item.title?.trim() || 'Jobber Event'
     return {
       platform: 'jobber' as const,
       displayName: item.title?.trim() || 'Jobber Event',
