@@ -299,3 +299,59 @@ model Cleaner {
   color     String   @default("#5abfbf")
   createdAt DateTime @default(now())
 }
+
+// ─────────────────────────────────────────
+// BOOKING FORM — QUOTES & CLIENTS
+// ─────────────────────────────────────────
+
+model QuoteClient {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  firstName String   @default("")
+  lastName  String   @default("")
+  phone     String   @default("")
+  address   String   @default("")
+  city      String   @default("")
+  state     String   @default("")
+  zip       String   @default("")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotes Quote[]
+}
+
+model Quote {
+  id                 String    @id @default(cuid())
+  clientId           String
+  cleanerId          String?
+  status             String    @default("pending")
+  submissionType     String    @default("quote")
+  serviceType        String    @default("")
+  frequency          String    @default("")
+  address            String    @default("")
+  sqftRange          String?
+  bedrooms           Int?
+  bathrooms          Float?
+  airbnbSqft         String?
+  airbnbLaundry      String?
+  airbnbBeds         Int?
+  airbnbUnits        String?
+  addonsList         String    @default("")
+  keyAreas           String    @default("")
+  additionalNotes    String    @default("")
+  preferredDate1     DateTime?
+  preferredDate2     DateTime?
+  preferredTimes     String    @default("")
+  priceBreakdown     String    @default("")
+  subtotal           Float     @default(0)
+  discount           Float     @default(0)
+  discountLabel      String    @default("")
+  totalPrice         Float     @default(0)
+  instantBookSavings Float?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  client QuoteClient @relation(fields: [clientId], references: [id])
+}
