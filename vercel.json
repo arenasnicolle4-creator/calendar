@@ -3,7 +3,11 @@
   "buildCommand": "prisma generate && next build",
   "crons": [
     {
-      "path": "/api/gmail/sync",
+      "path": "/api/jobber/sync",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/hostaway/sync",
       "schedule": "0 16 * * *"
     }
   ]
