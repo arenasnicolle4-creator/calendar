@@ -1794,7 +1794,7 @@ export default function Dashboard() {
     )
   }
 
-({onAdd}:{onAdd:(r:ColorRule)=>void}){
+function ColorRuleAdder({onAdd}:{onAdd:(r:ColorRule)=>void}){
   const [keyword,setKeyword]=useState('')
   const [color,setColor]=useState(COLOR_PALETTE[0])
   const [open,setOpen]=useState(false)
