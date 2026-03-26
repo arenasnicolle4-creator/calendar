@@ -1,60 +1,38 @@
-// app/api/turno/test/route.ts — scan for assignments near known IDs
+// app/api/turno/test/route.ts — try user-based assignment listing
 import { NextResponse } from 'next/server'
 
-async function fetchAssignment(id: number) {
-  const res = await fetch(`https://app.turno.com/contractor/assignments/${id}`, {
+async function turnoFetch(url: string, cookie = '') {
+  const res = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0',
-      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': 'application/json, */*',
       'Referer': 'https://app.turno.com/',
+      'X-Requested-With': 'XMLHttpRequest',
+      ...(cookie ? { 'Cookie': cookie } : {}),
     },
   })
-  if (!res.ok) return null
-  try {
-    const d = await res.json()
-    if (!d?.project?.id) return null
-    return {
-      assignmentId: id,
-      projectId: d.project.id,
-      property: d.project?.property?.alias,
-      address: d.project?.property?.short_address,
-      date: d.project?.start_date,
-      customer: d.customer_name,
-    }
-  } catch { return null }
+  const text = await res.text()
+  let parsed = null
+  try { parsed = JSON.parse(text) } catch {}
+  return { status: res.status, url, parsed, raw: text.slice(0, 500) }
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const mode = searchParams.get('mode') || 'scan'
+  const cookie = searchParams.get('cookie') || ''
+  // Your two user IDs from emails
+  const userId1 = '944608'  // arenasnicolle4
+  const userId2 = '483831'  // akcleaningsucasa
 
-  if (mode === 'scan') {
-    // Scan outward from known assignment 18287601 in steps of 1000
-    // to find other assignments belonging to this contractor
-    const base = 18287601
-    const probes: number[] = []
-    for (let i = 1; i <= 20; i++) {
-      probes.push(base + i * 1000)  // forward
-      probes.push(base + i * 5000)  // further forward
-    }
-    const results = (await Promise.all(probes.map(fetchAssignment))).filter(Boolean)
-    return NextResponse.json({ mode: 'scan', base, found: results })
-  }
+  const results: Record<string, any> = {}
 
-  if (mode === 'single') {
-    const id = parseInt(searchParams.get('id') || '18287601')
-    const result = await fetchAssignment(id)
-    return NextResponse.json(result)
-  }
+  // Try listing upcoming assignments for your user
+  results.upcoming1 = await turnoFetch(`https://app.turno.com/contractor/users/${userId1}/projects/upcoming`, cookie)
+  results.upcoming2 = await turnoFetch(`https://app.turno.com/contractor/users/${userId2}/projects/upcoming`, cookie)
+  results.schedule1 = await turnoFetch(`https://app.turno.com/contractor/users/${userId1}/schedule`, cookie)
+  results.schedule2 = await turnoFetch(`https://app.turno.com/contractor/users/${userId2}/schedule`, cookie)
+  results.assignments1 = await turnoFetch(`https://app.turno.com/contractor/users/${userId1}/assignments`, cookie)
+  results.projects1 = await turnoFetch(`https://app.turno.com/contractor/users/${userId1}/projects`, cookie)
 
-  // mode === 'project' — scan for a specific project ID
-  const targetProject = parseInt(searchParams.get('projectId') || '32623827')
-  // Scan a wide range around both known assignments
-  const probes: number[] = []
-  for (let id = 18280000; id <= 18450000; id += 2000) {
-    probes.push(id)
-  }
-  const results = (await Promise.all(probes.map(fetchAssignment))).filter(Boolean)
-  const exact = results.find(r => r!.projectId === targetProject)
-  return NextResponse.json({ targetProject, exact, allFound: results })
+  return NextResponse.json(results)
 }
