@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,69 +9,293 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  role            String   // 'manager' | 'cleaner' | 'provider'
+  name            String
+  company         String?
+  phone           String?
+  bio             String?
+  avatarUrl       String?
+  serviceCategory String?  // for providers: 'plumber' | 'electrician' | 'lawn' | 'snow' | 'handyman' | 'other'
+  stripeAccountId String?  // Stripe Connect for receiving payments
+  stripeCustomerId String? // Stripe for making payments (managers)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  managedProperties    Property[]        @relation("ManagerProperties")
+  connections          Connection[]      @relation("ManagerConnections")
+  connectedTo          Connection[]      @relation("ProviderConnections")
+  postedJobs           ServiceJob[]      @relation("JobPoster")
+  assignedJobs         ServiceJob[]      @relation("JobAssignee")
+  bids                 Bid[]
+  sentInvoices         Invoice[]         @relation("InvoiceSender")
+  receivedInvoices     Invoice[]         @relation("InvoiceReceiver")
+  sentMessages         Message[]         @relation("MessageSender")
+  reviewsGiven         Review[]          @relation("ReviewGiver")
+  reviewsReceived      Review[]          @relation("ReviewReceiver")
+  gmailAccounts        GmailAccount[]
+  jobberAccounts       JobberAccount[]
+  notifications        Notification[]
+}
+
+// ─────────────────────────────────────────
+// PROPERTIES
+// ─────────────────────────────────────────
+
+model Property {
+  id          String   @id @default(cuid())
+  managerId   String
+  name        String
+  address     String
+  platform    String?  // 'hostaway' | 'airbnb' | 'jobber' | 'manual'
+  beds        Int?
+  baths       Float?
+  sqft        Int?
+  notes       String?
+  accessCode  String?
+  wifiName    String?
+  wifiPass    String?
+  createdAt   DateTime @default(now())
+
+  manager          User               @relation("ManagerProperties", fields: [managerId], references: [id])
+  hostawayCalendars HostawayCalendar[]
+  jobs             Job[]
+  serviceJobs      ServiceJob[]
+}
+
+// ─────────────────────────────────────────
+// CONNECTIONS (manager ↔ cleaner/provider)
+// ─────────────────────────────────────────
+
+model Connection {
+  id         String   @id @default(cuid())
+  managerId  String
+  providerId String
+  type       String   // 'cleaner' | 'plumber' | 'electrician' | 'lawn' | 'snow' | 'handyman' | 'other'
+  status     String   @default("pending") // 'pending' | 'active' | 'declined' | 'removed'
+  createdAt  DateTime @default(now())
+
+  manager  User @relation("ManagerConnections", fields: [managerId], references: [id])
+  provider User @relation("ProviderConnections", fields: [providerId], references: [id])
+
+  @@unique([managerId, providerId])
+}
+
+// ─────────────────────────────────────────
+// EXISTING: JOBS (cleaner calendar entries)
+// ─────────────────────────────────────────
+
+model Job {
+  id             String    @id @default(cuid())
+  platform       String    // 'airbnb' | 'jobber' | 'hostaway' | 'manual'
+  displayName    String
+  customerName   String?
+  address        String
+  propertyLabel  String?
+  propertyId     String?
+  assignedUserId String?   // cleaner User.id
+  checkoutTime   DateTime
+  checkinTime    DateTime?
+  nextGuests     String?
+  nextGuestCount Int?
+  sqft           Int?
+  beds           Int?
+  baths          Float?
+  worth          Float?
+  notes          String?
+  cleanerIds     String    @default("[]")
+  duties         String    @default("[]")
+  gmailMessageId  String?  @unique
+  gmailAccountId  String?
+  jobberVisitId   String?  @unique
+  jobberAccountId String?
+  createdAt       DateTime @default(now())
+
+  property Property? @relation(fields: [propertyId], references: [id])
+}
+
+// ─────────────────────────────────────────
+// SERVICE JOBS (marketplace postings)
+// ─────────────────────────────────────────
+
+model ServiceJob {
+  id            String    @id @default(cuid())
+  propertyId    String
+  postedById    String
+  assignedToId  String?
+  category      String    // 'plumbing' | 'electrical' | 'lawn' | 'snow' | 'handyman' | 'cleaning' | 'other'
+  title         String
+  description   String
+  scheduledDate DateTime?
+  budget        Float?    // max budget hint (optional)
+  status        String    @default("open") // 'open' | 'bidding' | 'awarded' | 'in_progress' | 'completed' | 'cancelled'
+  urgency       String    @default("normal") // 'low' | 'normal' | 'urgent'
+  photos        String    @default("[]") // JSON array of photo URLs
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  property   Property @relation(fields: [propertyId], references: [id])
+  postedBy   User     @relation("JobPoster", fields: [postedById], references: [id])
+  assignedTo User?    @relation("JobAssignee", fields: [assignedToId], references: [id])
+  bids       Bid[]
+  invoice    Invoice?
+  messages   Message[]
+}
+
+// ─────────────────────────────────────────
+// BIDS
+// ─────────────────────────────────────────
+
+model Bid {
+  id           String   @id @default(cuid())
+  jobId        String
+  providerId   String
+  amount       Float
+  notes        String?
+  estimatedDays Int?
+  status       String   @default("pending") // 'pending' | 'accepted' | 'rejected' | 'withdrawn'
+  createdAt    DateTime @default(now())
+
+  job      ServiceJob @relation(fields: [jobId], references: [id])
+  provider User       @relation(fields: [providerId], references: [id])
+
+  @@unique([jobId, providerId])
+}
+
+// ─────────────────────────────────────────
+// INVOICES
+// ─────────────────────────────────────────
+
+model Invoice {
+  id          String    @id @default(cuid())
+  jobId       String?   @unique
+  fromId      String
+  toId        String
+  amount      Float
+  tax         Float     @default(0)
+  status      String    @default("draft") // 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
+  dueDate     DateTime?
+  paidAt      DateTime?
+  stripePaymentIntentId String?
+  notes       String?
+  lineItems   String    @default("[]") // JSON array
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  job  ServiceJob? @relation(fields: [jobId], references: [id])
+  from User        @relation("InvoiceSender", fields: [fromId], references: [id])
+  to   User        @relation("InvoiceReceiver", fields: [toId], references: [id])
+}
+
+// ─────────────────────────────────────────
+// MESSAGES
+// ─────────────────────────────────────────
+
+model Message {
+  id        String   @id @default(cuid())
+  threadId  String   // group messages by job or connection
+  jobId     String?
+  senderId  String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  job    ServiceJob? @relation(fields: [jobId], references: [id])
+  sender User        @relation("MessageSender", fields: [senderId], references: [id])
+}
+
+// ─────────────────────────────────────────
+// REVIEWS
+// ─────────────────────────────────────────
+
+model Review {
+  id        String   @id @default(cuid())
+  jobId     String
+  fromId    String
+  toId      String
+  rating    Int      // 1–5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  from User @relation("ReviewGiver", fields: [fromId], references: [id])
+  to   User @relation("ReviewReceiver", fields: [toId], references: [id])
+
+  @@unique([jobId, fromId])
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // 'bid_received' | 'bid_accepted' | 'job_assigned' | 'invoice_sent' | 'payment_received' | 'connection_request'
+  title     String
+  body      String
+  linkUrl   String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// ─────────────────────────────────────────
+// EXISTING: INTEGRATIONS
+// ─────────────────────────────────────────
+
 model GmailAccount {
   id           String    @id @default(cuid())
+  userId       String?   // linked to User
   email        String    @unique
   accessToken  String
   refreshToken String
-  expiresAt    DateTime
+  expiresAt    DateTime?
   lastSynced   DateTime?
   createdAt    DateTime  @default(now())
-  jobs         Job[]
+
+  user User? @relation(fields: [userId], references: [id])
 }
 
 model JobberAccount {
   id           String    @id @default(cuid())
-  email        String    @unique
+  userId       String?
   companyName  String?
+  email        String?
   accessToken  String
   refreshToken String
-  expiresAt    DateTime
+  expiresAt    DateTime?
   lastSynced   DateTime?
   createdAt    DateTime  @default(now())
-  jobs         Job[]
-}
 
-model Job {
-  id              String         @id @default(cuid())
-  platform        String         @default("turno")
-  displayName     String
-  customerName    String?
-  address         String
-  propertyLabel   String
-  checkoutTime    DateTime
-  checkinTime     DateTime?
-  nextGuests      String?
-  nextGuestCount  Int?
-  sqft            Int?
-  beds            Int?
-  baths           Float?
-  worth           Float?
-  notes           String?
-  cleanerIds      String         @default("[]")
-  duties          String         @default("[]")
-  gmailMessageId  String?        @unique
-  gmailAccountId  String?
-  gmailAccount    GmailAccount?  @relation(fields: [gmailAccountId], references: [id])
-  jobberVisitId   String?        @unique
-  jobberAccountId String?
-  jobberAccount   JobberAccount? @relation(fields: [jobberAccountId], references: [id])
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  user User? @relation(fields: [userId], references: [id])
 }
 
 model HostawayCalendar {
   id         String    @id @default(cuid())
+  propertyId String?
   listingId  String    @unique
   name       String
   icalUrl    String
   lastSynced DateTime?
   createdAt  DateTime  @default(now())
+
+  property Property? @relation(fields: [propertyId], references: [id])
 }
 
 model Cleaner {
   id        String   @id @default(cuid())
   name      String
-  color     String
+  color     String   @default("#5abfbf")
   createdAt DateTime @default(now())
 }
