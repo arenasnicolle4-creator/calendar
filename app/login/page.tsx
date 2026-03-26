@@ -4,9 +4,15 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+const ROLE_REDIRECTS: Record<string, string> = {
+  manager:  '/dashboard/manager',
+  cleaner:  '/dashboard/cleaner',
+  provider: '/dashboard/provider',
+  admin:    '/dashboard',
+}
+
 export default function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -20,57 +26,49 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       })
-      if (res.ok) {
-        router.push('/dashboard')
-      } else {
-        const data = await res.json()
+      const data = await res.json()
+      if (!res.ok) {
         setError(data.error || 'Invalid credentials')
+        return
       }
+      const role = data.user?.role || (data.legacy ? 'admin' : 'admin')
+      router.push(ROLE_REDIRECTS[role] || '/dashboard')
     } catch {
       setError('Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
     <div className="login-root">
-      {/* Background pattern */}
       <div className="bg-pattern" />
-
       <div className="login-container">
-        {/* Left panel — branding */}
+
+        {/* Left brand panel */}
         <div className="brand-panel">
           <div className="brand-inner">
             <div className="brand-logo">
               <div className="logo-mark">
-                <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="4" y="4" width="14" height="14" rx="3" fill="currentColor" opacity="0.9"/>
-                  <rect x="22" y="4" width="14" height="14" rx="3" fill="currentColor" opacity="0.6"/>
-                  <rect x="4" y="22" width="14" height="14" rx="3" fill="currentColor" opacity="0.6"/>
-                  <rect x="22" y="22" width="14" height="14" rx="3" fill="currentColor" opacity="0.3"/>
+                <svg viewBox="0 0 40 40" fill="none">
+                  <rect x="4" y="4" width="14" height="14" rx="3" fill="currentColor" opacity=".9"/>
+                  <rect x="22" y="4" width="14" height="14" rx="3" fill="currentColor" opacity=".6"/>
+                  <rect x="4" y="22" width="14" height="14" rx="3" fill="currentColor" opacity=".6"/>
+                  <rect x="22" y="22" width="14" height="14" rx="3" fill="currentColor" opacity=".3"/>
                 </svg>
               </div>
               <span className="logo-text">CleanSync</span>
             </div>
             <div className="brand-tagline">
-              <h1>Your centralized<br/>cleaning operations<br/>hub.</h1>
-              <p>Connect all your platforms. Manage every job. One place.</p>
+              <h1>Your centralized<br/>property operations<br/>hub.</h1>
+              <p>One login. Every property, cleaner, and service provider you need.</p>
             </div>
             <div className="brand-features">
-              <div className="feature-item">
-                <span className="feature-dot" />
-                Airbnb · Turno · Hostaway · Jobber
-              </div>
-              <div className="feature-item">
-                <span className="feature-dot" />
-                Auto-sync from Gmail
-              </div>
-              <div className="feature-item">
-                <span className="feature-dot" />
-                Team cleaner assignment
-              </div>
+              <div className="feature-item"><span className="feature-dot" />Property Managers</div>
+              <div className="feature-item"><span className="feature-dot" />Cleaners &amp; cleaning companies</div>
+              <div className="feature-item"><span className="feature-dot" />Plumbers, electricians, lawn &amp; more</div>
             </div>
           </div>
           <div className="brand-grid">
@@ -80,412 +78,169 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right panel — form */}
+        {/* Right form panel */}
         <div className="form-panel">
           <div className="form-inner">
             <div className="form-header">
-              <h2>{mode === 'login' ? 'Welcome back' : 'Create account'}</h2>
-              <p>{mode === 'login' ? 'Sign in to your CleanSync workspace' : 'Set up your cleaning operations hub'}</p>
+              <h2>Welcome back</h2>
+              <p>Sign in to your CleanSync workspace</p>
             </div>
 
-            {mode === 'login' ? (
-              <form onSubmit={handleLogin} className="auth-form">
-                <div className="field-group">
-                  <label htmlFor="username">Username</label>
-                  <input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    placeholder="admin"
-                    autoComplete="username"
-                    required
-                  />
-                </div>
-                <div className="field-group">
-                  <label htmlFor="password">Password</label>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    required
-                  />
-                </div>
-                {error && <div className="error-msg">{error}</div>}
-                <button type="submit" className="submit-btn" disabled={loading}>
-                  {loading ? (
-                    <span className="loading-dots"><span /><span /><span /></span>
-                  ) : 'Sign in'}
-                </button>
-              </form>
-            ) : (
-              <div className="signup-disabled">
-                <div className="signup-icon">🔒</div>
-                <h3>Sign-ups are currently closed</h3>
-                <p>CleanSync is invite-only right now. If you&apos;d like access, reach out to the workspace admin.</p>
+            <form onSubmit={handleLogin} className="auth-form">
+              <div className="field-group">
+                <label htmlFor="email">Email</label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  required
+                />
               </div>
-            )}
+              <div className="field-group">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+              {error && <div className="error-msg">{error}</div>}
+              <button type="submit" className="submit-btn" disabled={loading}>
+                {loading
+                  ? <span className="loading-dots"><span /><span /><span /></span>
+                  : 'Sign in'}
+              </button>
+            </form>
 
             <div className="form-footer">
-              {mode === 'login' ? (
-                <p>
-                  Want your own workspace?{' '}
-                  <button onClick={() => setMode('signup')} className="switch-btn">
-                    Request access
-                  </button>
-                </p>
-              ) : (
-                <p>
-                  Already have an account?{' '}
-                  <button onClick={() => setMode('login')} className="switch-btn">
-                    Sign in
-                  </button>
-                </p>
-              )}
+              <p>
+                Don&apos;t have an account?{' '}
+                <button onClick={() => router.push('/register')} className="switch-btn" type="button">
+                  Create account
+                </button>
+              </p>
             </div>
           </div>
         </div>
       </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        .login-root {
-          min-height: 100vh;
-          background: #f0ece6;
-          display: flex;
-          align-items: stretch;
-          font-family: 'DM Sans', sans-serif;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .bg-pattern {
-          position: fixed;
-          inset: 0;
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        .login-root{
+          min-height:100vh;background:#0d1f2d;
+          display:flex;align-items:stretch;
+          font-family:'DM Sans',sans-serif;position:relative;overflow:hidden;
           background-image:
-            radial-gradient(circle at 20% 50%, rgba(14,116,144,0.06) 0%, transparent 50%),
-            radial-gradient(circle at 80% 20%, rgba(165,243,252,0.15) 0%, transparent 40%),
-            radial-gradient(circle at 60% 80%, rgba(14,116,144,0.04) 0%, transparent 40%);
-          pointer-events: none;
+            linear-gradient(rgba(0,230,210,0.03) 1px,transparent 1px),
+            linear-gradient(90deg,rgba(0,230,210,0.03) 1px,transparent 1px);
+          background-size:38px 38px;
         }
-
-        .login-container {
-          display: flex;
-          width: 100%;
-          min-height: 100vh;
-          position: relative;
-          z-index: 1;
+        .bg-pattern{
+          position:fixed;inset:0;pointer-events:none;
+          background:
+            radial-gradient(ellipse at 15% 20%,rgba(0,180,210,0.12) 0%,transparent 50%),
+            radial-gradient(ellipse at 85% 75%,rgba(0,100,180,0.1) 0%,transparent 50%);
         }
-
-        /* BRAND PANEL */
-        .brand-panel {
-          flex: 1.1;
-          background: #0e7490;
-          background-image:
-            radial-gradient(circle at 30% 70%, rgba(165,243,252,0.15) 0%, transparent 50%),
-            radial-gradient(circle at 80% 20%, rgba(6,182,212,0.2) 0%, transparent 40%);
-          display: flex;
-          align-items: stretch;
-          position: relative;
-          overflow: hidden;
+        .login-container{display:flex;width:100%;min-height:100vh;position:relative;z-index:1;}
+        .brand-panel{
+          flex:1.1;background:#0d1f2d;
+          display:flex;align-items:stretch;position:relative;overflow:hidden;
+          border-right:1px solid rgba(0,230,210,0.12);
         }
-
-        .brand-inner {
-          position: relative;
-          z-index: 2;
-          padding: 60px 56px;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          flex: 1;
+        .brand-inner{
+          position:relative;z-index:2;padding:52px 48px;
+          display:flex;flex-direction:column;justify-content:space-between;flex:1;
         }
-
-        .brand-logo {
-          display: flex;
-          align-items: center;
-          gap: 12px;
+        .brand-logo{display:flex;align-items:center;gap:12px;}
+        .logo-mark{width:36px;height:36px;color:#00e6d2;filter:drop-shadow(0 0 8px rgba(0,230,210,0.6));}
+        .logo-text{
+          font-family:'Syne',sans-serif;font-size:20px;font-weight:800;
+          color:#30ffea;text-shadow:0 0 16px rgba(0,230,210,0.7),0 0 40px rgba(0,230,210,0.3);letter-spacing:.5px;
         }
-
-        .logo-mark {
-          width: 40px;
-          height: 40px;
-          color: #a5f3fc;
+        .brand-tagline{margin-top:auto;padding-top:48px;}
+        .brand-tagline h1{
+          font-family:'Syne',sans-serif;font-size:38px;font-weight:700;
+          line-height:1.15;color:#e2f0f7;letter-spacing:-.5px;margin-bottom:18px;
         }
-
-        .logo-text {
-          font-family: 'Fraunces', serif;
-          font-size: 22px;
-          font-weight: 300;
-          color: #f0fafe;
-          letter-spacing: 0.5px;
+        .brand-tagline p{font-size:14px;color:#7fb3cc;line-height:1.6;max-width:300px;}
+        .brand-features{margin-top:40px;display:flex;flex-direction:column;gap:10px;}
+        .feature-item{display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(0,230,210,0.6);}
+        .feature-dot{width:5px;height:5px;border-radius:50%;background:#00e6d2;box-shadow:0 0 5px #00e6d2;flex-shrink:0;}
+        .brand-grid{
+          position:absolute;inset:0;display:grid;
+          grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(6,1fr);
+          opacity:.04;pointer-events:none;
         }
-
-        .brand-tagline {
-          margin-top: auto;
-          padding-top: 60px;
+        .grid-cell{border:1px solid rgba(0,230,210,0.5);animation:pulse 4s ease-in-out infinite alternate;}
+        @keyframes pulse{0%{opacity:.3}100%{opacity:1}}
+        .form-panel{
+          flex:.9;display:flex;align-items:center;justify-content:center;
+          padding:52px 40px;background:rgba(9,20,32,0.97);
         }
-
-        .brand-tagline h1 {
-          font-family: 'Fraunces', serif;
-          font-size: 42px;
-          font-weight: 300;
-          line-height: 1.15;
-          color: #f0fafe;
-          letter-spacing: -0.5px;
-          margin-bottom: 20px;
+        .form-inner{width:100%;max-width:360px;}
+        .form-header{margin-bottom:28px;}
+        .form-header h2{
+          font-family:'Syne',sans-serif;font-size:26px;font-weight:700;
+          color:#30ffea;text-shadow:0 0 16px rgba(0,230,210,0.4);margin-bottom:6px;
         }
-
-        .brand-tagline p {
-          font-size: 15px;
-          color: rgba(165,243,252,0.8);
-          line-height: 1.6;
-          max-width: 320px;
+        .form-header p{font-size:13px;color:#7fb3cc;}
+        .auth-form{display:flex;flex-direction:column;gap:16px;}
+        .field-group{display:flex;flex-direction:column;gap:6px;}
+        .field-group label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#4a7a96;}
+        .field-group input{
+          padding:11px 14px;background:rgba(0,0,0,0.25);
+          border:1px solid rgba(0,230,210,0.14);border-radius:8px;
+          color:#e2f0f7;font-family:'DM Sans',sans-serif;font-size:14px;
+          outline:none;transition:border-color .15s,box-shadow .15s;
         }
-
-        .brand-features {
-          margin-top: 48px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
+        .field-group input:focus{
+          border-color:#00e6d2;
+          box-shadow:0 0 0 3px rgba(0,230,210,0.1),0 0 12px rgba(0,230,210,0.12);
+          background:rgba(0,230,210,0.04);
         }
-
-        .feature-item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 13px;
-          color: rgba(165,243,252,0.75);
-          font-weight: 400;
+        .field-group input::placeholder{color:#4a7a96;}
+        .error-msg{
+          padding:10px 14px;background:rgba(255,83,112,0.1);
+          border:1px solid rgba(255,83,112,0.25);border-radius:8px;
+          font-size:13px;color:#ff8fa3;
         }
-
-        .feature-dot {
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background: #a5f3fc;
-          flex-shrink: 0;
+        .submit-btn{
+          padding:13px 20px;width:100%;
+          background:linear-gradient(135deg,#00b8a8,#00e6d2);
+          color:#071a24;border:none;border-radius:9px;
+          font-family:'Syne',sans-serif;font-size:14px;font-weight:700;
+          cursor:pointer;letter-spacing:.3px;
+          box-shadow:0 0 16px rgba(0,230,210,0.3),0 2px 8px rgba(0,0,0,0.3);
+          transition:all .16s;margin-top:4px;
+          display:flex;align-items:center;justify-content:center;min-height:46px;
         }
-
-        /* Animated grid */
-        .brand-grid {
-          position: absolute;
-          inset: 0;
-          display: grid;
-          grid-template-columns: repeat(8, 1fr);
-          grid-template-rows: repeat(6, 1fr);
-          opacity: 0.06;
-          pointer-events: none;
+        .submit-btn:hover:not(:disabled){box-shadow:0 0 28px rgba(0,230,210,0.5),0 4px 16px rgba(0,0,0,0.3);transform:translateY(-1px);}
+        .submit-btn:disabled{opacity:.5;cursor:not-allowed;}
+        .loading-dots{display:flex;gap:5px;align-items:center;}
+        .loading-dots span{width:6px;height:6px;background:#071a24;border-radius:50%;animation:bounce .8s ease-in-out infinite alternate;}
+        .loading-dots span:nth-child(2){animation-delay:.15s;}
+        .loading-dots span:nth-child(3){animation-delay:.3s;}
+        @keyframes bounce{0%{transform:translateY(0);opacity:.5}100%{transform:translateY(-4px);opacity:1}}
+        .form-footer{margin-top:24px;text-align:center;font-size:13px;color:#4a7a96;}
+        .switch-btn{
+          background:none;border:none;color:#00e6d2;
+          font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;
+          cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px;
         }
-
-        .grid-cell {
-          border: 1px solid rgba(165,243,252,0.5);
-          animation: pulse 4s ease-in-out infinite alternate;
-        }
-
-        @keyframes pulse {
-          0% { opacity: 0.3; }
-          100% { opacity: 1; }
-        }
-
-        /* FORM PANEL */
-        .form-panel {
-          flex: 0.9;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 60px 48px;
-          background: #f5f1eb;
-        }
-
-        .form-inner {
-          width: 100%;
-          max-width: 380px;
-        }
-
-        .form-header {
-          margin-bottom: 36px;
-        }
-
-        .form-header h2 {
-          font-family: 'Fraunces', serif;
-          font-size: 28px;
-          font-weight: 400;
-          color: #0c4a5a;
-          letter-spacing: -0.3px;
-          margin-bottom: 8px;
-        }
-
-        .form-header p {
-          font-size: 14px;
-          color: #6b8a93;
-          line-height: 1.5;
-        }
-
-        .auth-form {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .field-group {
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-        }
-
-        .field-group label {
-          font-size: 12px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.8px;
-          color: #4a7480;
-        }
-
-        .field-group input {
-          padding: 12px 16px;
-          border: 1.5px solid #c8dde2;
-          border-radius: 10px;
-          background: #faf8f5;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 14px;
-          color: #0c4a5a;
-          outline: none;
-          transition: border-color 0.15s, box-shadow 0.15s;
-        }
-
-        .field-group input:focus {
-          border-color: #0e7490;
-          box-shadow: 0 0 0 3px rgba(14,116,144,0.1);
-          background: #fff;
-        }
-
-        .field-group input::placeholder {
-          color: #b0c8cf;
-        }
-
-        .error-msg {
-          padding: 10px 14px;
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          border-radius: 8px;
-          font-size: 13px;
-          color: #dc2626;
-        }
-
-        .submit-btn {
-          padding: 13px 20px;
-          background: #0e7490;
-          color: #f0fafe;
-          border: none;
-          border-radius: 10px;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background 0.15s, transform 0.1s;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 46px;
-          margin-top: 4px;
-        }
-
-        .submit-btn:hover:not(:disabled) {
-          background: #0c6478;
-          transform: translateY(-1px);
-        }
-
-        .submit-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .loading-dots {
-          display: flex;
-          gap: 5px;
-          align-items: center;
-        }
-
-        .loading-dots span {
-          width: 6px;
-          height: 6px;
-          background: #a5f3fc;
-          border-radius: 50%;
-          animation: bounce 0.8s ease-in-out infinite alternate;
-        }
-
-        .loading-dots span:nth-child(2) { animation-delay: 0.15s; }
-        .loading-dots span:nth-child(3) { animation-delay: 0.3s; }
-
-        @keyframes bounce {
-          0% { transform: translateY(0); opacity: 0.5; }
-          100% { transform: translateY(-4px); opacity: 1; }
-        }
-
-        /* SIGNUP DISABLED */
-        .signup-disabled {
-          text-align: center;
-          padding: 40px 20px;
-          background: #eef5f7;
-          border-radius: 14px;
-          border: 1.5px dashed #b0cdd4;
-        }
-
-        .signup-icon {
-          font-size: 32px;
-          margin-bottom: 14px;
-        }
-
-        .signup-disabled h3 {
-          font-family: 'Fraunces', serif;
-          font-size: 18px;
-          font-weight: 400;
-          color: #0c4a5a;
-          margin-bottom: 10px;
-        }
-
-        .signup-disabled p {
-          font-size: 13px;
-          color: #6b8a93;
-          line-height: 1.6;
-          max-width: 260px;
-          margin: 0 auto;
-        }
-
-        .form-footer {
-          margin-top: 28px;
-          text-align: center;
-          font-size: 13px;
-          color: #7a9aa3;
-        }
-
-        .switch-btn {
-          background: none;
-          border: none;
-          color: #0e7490;
-          font-family: 'DM Sans', sans-serif;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          padding: 0;
-          text-decoration: underline;
-          text-underline-offset: 2px;
-        }
-
-        .switch-btn:hover { color: #0c6478; }
-
-        @media (max-width: 768px) {
-          .login-container { flex-direction: column; }
-          .brand-panel { min-height: 280px; flex: none; }
-          .brand-tagline h1 { font-size: 28px; }
-          .brand-grid { grid-template-columns: repeat(6, 1fr); }
-          .form-panel { padding: 40px 24px; }
+        .switch-btn:hover{color:#30ffea;}
+        @media(max-width:768px){
+          .login-container{flex-direction:column;}
+          .brand-panel{min-height:220px;flex:none;}
+          .brand-tagline h1{font-size:26px;}
+          .form-panel{padding:32px 20px;}
         }
       `}</style>
     </div>
