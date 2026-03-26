@@ -127,10 +127,10 @@ export async function syncHostawayCalendar(calendar: HostawayCalendar) {
   const icsText = await res.text()
   const events = parseIcal(icsText)
   
-  // Filter to future events only (within next 400 days)
+  // Filter to events where checkout (DTEND) is in the future
   const now = new Date()
   const future = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000)
-  const relevant = events.filter(e => e.dtstart && e.dtstart > now && e.dtstart < future)
+  const relevant = events.filter(e => e.dtend && e.dtend > now && e.dtend < future)
   
   // Get already-synced UIDs for this listing
   const existing = await prisma.job.findMany({
@@ -162,15 +162,17 @@ export async function syncHostawayCalendar(calendar: HostawayCalendar) {
           customerName: guestName,
           address,
           propertyLabel: name,
-          checkoutTime: event.dtstart!,
-          checkinTime: event.dtend || null,
+          // checkoutTime = when guest LEAVES (DTEND) = when cleaning happens
+          checkoutTime: event.dtend || event.dtstart!,
+          // checkinTime = when next guest arrives (not stored here, left null)
+          checkinTime: null,
           nextGuests: null,
           nextGuestCount: guests,
           sqft: null,
           beds: null,
           baths: null,
           worth: null,
-          notes: event.description || '',
+          notes: event.description || `Guest check-in: ${event.dtstart?.toLocaleDateString()}`,
           cleanerIds: '[]',
           duties: '[]',
           gmailMessageId: syntheticId,
