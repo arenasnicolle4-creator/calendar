@@ -5,49 +5,49 @@
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
 
 :root {
-  /* Base — deep navy */
-  --bg: #0b0f1a;
-  --surface: #111827;
-  --surface2: #1a2235;
-  --surface3: #243049;
-  --border: #1e2d47;
-  --border-light: #263555;
+  /* Base — warm light slate (not stark white) */
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface2: #f5f7fa;
+  --surface3: #ebeef3;
+  --border: #d8dde8;
+  --border-light: #e4e8f0;
 
   /* Text */
-  --text: #f0f4ff;
-  --text-muted: #8ba3c7;
-  --text-dim: #4a6080;
+  --text: #1a2236;
+  --text-muted: #4d607a;
+  --text-dim: #8a9ab5;
 
-  /* Primary — electric teal */
-  --teal: #00d4aa;
-  --teal-dark: #00a882;
-  --teal-bg: rgba(0,212,170,0.08);
-  --teal-border: rgba(0,212,170,0.2);
+  /* Primary — teal (kept from icon) */
+  --teal: #00b896;
+  --teal-dark: #009478;
+  --teal-bg: rgba(0,184,150,0.08);
+  --teal-border: rgba(0,184,150,0.25);
 
   /* Accent — coral */
-  --coral: #ff6b6b;
-  --coral-dark: #e85555;
-  --coral-bg: rgba(255,107,107,0.08);
+  --coral: #e8525a;
+  --coral-dark: #c93d45;
+  --coral-bg: rgba(232,82,90,0.08);
 
   /* Accent 2 — amber */
-  --amber: #ffd166;
-  --amber-bg: rgba(255,209,102,0.08);
+  --amber: #f59e0b;
+  --amber-bg: rgba(245,158,11,0.08);
 
   /* Accent 3 — violet */
-  --violet: #a78bfa;
-  --violet-bg: rgba(167,139,250,0.08);
+  --violet: #7c3aed;
+  --violet-bg: rgba(124,58,237,0.08);
 
   /* Status */
   --green: #10b981;
   --green-bg: rgba(16,185,129,0.1);
-  --red: #f43f5e;
-  --red-bg: rgba(244,63,94,0.1);
+  --red: #e8525a;
+  --red-bg: rgba(232,82,90,0.08);
 
   --radius: 12px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
-  --shadow-lg: 0 10px 40px rgba(0,0,0,0.5);
-  --shadow-glow: 0 0 20px rgba(0,212,170,0.15);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.07);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.09);
+  --shadow-lg: 0 10px 40px rgba(0,0,0,0.13);
+  --shadow-glow: 0 0 20px rgba(0,184,150,0.15);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
