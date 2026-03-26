@@ -400,6 +400,7 @@ export default function ProviderDashboard() {
 
   // ── PROFILE ───────────────────────────────────────────────────────────────────
   function ProfilePage() {
+    if (!user) return null
     return (
       <div>
         <PageHeader title="My Profile"/>
