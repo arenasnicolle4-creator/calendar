@@ -542,7 +542,7 @@ export default function Dashboard() {
           <div style={{padding:'20px 24px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div>
               <h2 style={{fontFamily:'Syne,sans-serif',fontSize:20,fontWeight:700,color:'var(--text)'}}>Gmail Accounts</h2>
-              <p style={{fontSize:12,color:'var(--text-muted)',marginTop:3}}>Auto-syncs Turno job emails daily at 8am Alaska time</p>
+              <p style={{fontSize:12,color:'var(--text-muted)',marginTop:3}}>Gmail connected — ready for future integrations</p>
             </div>
             <button onClick={()=>setShowGmailPanel(false)} style={{width:30,height:30,border:'1px solid var(--border)',borderRadius:8,background:'var(--surface2)',cursor:'pointer',color:'var(--text-muted)',fontSize:16}}>✕</button>
           </div>
@@ -962,7 +962,7 @@ export default function Dashboard() {
 
   function IntegrationsPage(){
     const integrations=[
-      {name:'Gmail',icon:'✉️',desc:'Auto-sync Turno job emails from Gmail',status:gmailAccounts.length>0?'connected':'available',count:gmailAccounts.length,color:'var(--coral)',type:'gmail'},
+      {name:'Gmail',icon:'✉️',desc:'Connect Gmail account (sync paused — manual entry available)',status:gmailAccounts.length>0?'connected':'available',count:gmailAccounts.length,color:'var(--coral)',type:'gmail'},
       {name:'Jobber',icon:'💼',desc:'Sync scheduled visits directly from Jobber',status:jobberAccounts.length>0?'connected':'available',count:jobberAccounts.length,color:'#00c4ff',type:'jobber'},
       {name:'Airbnb',icon:'🏠',desc:'Sync reservations via iCal link',status:'coming',color:'var(--coral)',type:'airbnb'},
       {name:'Hostaway',icon:'🔑',desc:'Channel manager sync',status:'coming',color:'var(--amber)',type:'hostaway'},
