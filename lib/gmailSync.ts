@@ -89,3 +89,6 @@ export async function syncAllAccounts() {
   }
   return results
 }
+
+// Alias for backwards-compat with app/api/gmail/sync/route.ts
+export const syncAllGmailAccounts = syncAllAccounts
