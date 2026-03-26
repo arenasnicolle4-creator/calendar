@@ -1,7 +1,8 @@
 // app/api/auth/jobber/callback/route.ts
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { exchangeJobberCode } from '@/lib/jobberSync'
+import { prisma } from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -9,71 +10,75 @@ export async function GET(req: Request) {
   const error = searchParams.get('error')
 
   if (error || !code) {
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/dashboard?error=jobber_${error || 'no_code'}`
-    )
+    return NextResponse.redirect(new URL('/dashboard?jobber=error', req.url))
   }
 
   try {
     const tokens = await exchangeJobberCode(code)
 
-    // Log what Jobber actually returns for debugging
-    console.log('Jobber token response keys:', Object.keys(tokens))
-    console.log('expires_in:', (tokens as any).expires_in)
-    console.log('expires_in type:', typeof (tokens as any).expires_in)
-
-    // Jobber tokens last 1 hour — use 55 minutes to be safe
-    // Don't rely on expires_in since Jobber may not return it consistently
-    const expiresAt = new Date(Date.now() + 55 * 60 * 1000)
-
-    let email = `jobber-${Date.now()}@cleansync.app`
+    // Fetch company info from Jobber
     let companyName: string | null = null
-
+    let email: string | null = null
     try {
-      const meRes = await fetch('https://api.getjobber.com/api/graphql', {
+      const res = await fetch('https://api.getjobber.com/api/graphql', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${tokens.access_token}`,
           'Content-Type': 'application/json',
           'X-JOBBER-GRAPHQL-VERSION': '2026-03-10',
         },
-        body: JSON.stringify({ query: `query { account { id name } }` }),
+        body: JSON.stringify({ query: '{ account { name } user { email } }' }),
       })
-      const meData = await meRes.json()
-      if (meData?.data?.account?.name) {
-        companyName = meData.data.account.name
-        const safeName = (companyName as string).toLowerCase().replace(/\s+/g, '-')
-        email = `${safeName}-${meData.data.account.id}@jobber.cleansync`
-      }
-    } catch (accountErr) {
-      console.error('Could not fetch Jobber account info:', accountErr)
+      const json = await res.json()
+      companyName = json.data?.account?.name || null
+      email = json.data?.user?.email || null
+    } catch { /* optional enrichment */ }
+
+    const expiresAt = new Date(Date.now() + 55 * 60 * 1000)
+
+    // Get logged-in user if available
+    const currentUser = await getCurrentUser()
+    const userId = currentUser?.id || null
+
+    // Find existing account by email (if we have one), otherwise create new
+    // FIX: use findFirst + update/create instead of upsert on email
+    // (email is not a @unique field in the new schema)
+    const existing = email
+      ? await prisma.jobberAccount.findFirst({ where: { email } })
+      : null
+
+    if (existing) {
+      await prisma.jobberAccount.update({
+        where: { id: existing.id },
+        data: {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          expiresAt,
+          companyName: companyName || existing.companyName,
+          userId: userId || existing.userId,
+        },
+      })
+    } else {
+      await prisma.jobberAccount.create({
+        data: {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          expiresAt,
+          companyName,
+          email,
+          userId,
+        },
+      })
     }
 
-    await prisma.jobberAccount.upsert({
-      where: { email },
-      update: {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        expiresAt,
-        companyName,
-      },
-      create: {
-        email,
-        companyName,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        expiresAt,
-      },
-    })
+    // Redirect to correct dashboard
+    const dest = currentUser?.role === 'cleaner'
+      ? '/dashboard/cleaner?jobber=connected'
+      : '/dashboard?jobber=connected'
 
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/dashboard?connected=jobber&page=integrations`
-    )
+    return NextResponse.redirect(new URL(dest, req.url))
   } catch (e) {
-    console.error('Jobber callback error:', String(e))
-    const msg = encodeURIComponent(String(e).slice(0, 100))
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/dashboard?error=jobber_${msg}`
-    )
+    console.error('Jobber callback error:', e)
+    return NextResponse.redirect(new URL('/dashboard?jobber=error', req.url))
   }
 }
