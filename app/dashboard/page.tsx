@@ -223,15 +223,15 @@ export default function Dashboard() {
   async function syncAll(){
     setSyncing('all');setSyncMsg(null)
     try{
-      const [gmailRes, jobberRes] = await Promise.allSettled([
-        fetch('/api/gmail/sync',{method:'POST'}).then(r=>r.json()),
+      const [jobberRes, hostawayRes] = await Promise.allSettled([
         fetch('/api/jobber/sync',{method:'POST'}).then(r=>r.json()),
+        fetch('/api/hostaway/sync',{method:'POST'}).then(r=>r.json()),
       ])
-      const gmailTotal = gmailRes.status==='fulfilled'&&Array.isArray(gmailRes.value)?gmailRes.value.reduce((s:number,x:any)=>s+(x.imported||0),0):0
       const jobberTotal = jobberRes.status==='fulfilled'&&Array.isArray(jobberRes.value)?jobberRes.value.reduce((s:number,x:any)=>s+(x.imported||0),0):(jobberRes.status==='fulfilled'?(jobberRes.value?.imported||0):0)
-      const total = gmailTotal + jobberTotal
+      const hostawayTotal = hostawayRes.status==='fulfilled'&&Array.isArray(hostawayRes.value)?hostawayRes.value.reduce((s:number,x:any)=>s+(x.imported||0),0):0
+      const total = jobberTotal + hostawayTotal
       setSyncMsg(total>0?`✓ ${total} new job(s) synced`:'✓ All accounts up to date')
-      loadJobs(); loadGmailAccounts(); loadJobberAccounts()
+      loadJobs(); loadJobberAccounts()
     } catch{ setSyncMsg('Sync error') }
     setSyncing(null); setTimeout(()=>setSyncMsg(null),5000)
   }
@@ -965,7 +965,7 @@ export default function Dashboard() {
       {name:'Gmail',icon:'✉️',desc:'Connect Gmail account (sync paused — manual entry available)',status:gmailAccounts.length>0?'connected':'available',count:gmailAccounts.length,color:'var(--coral)',type:'gmail'},
       {name:'Jobber',icon:'💼',desc:'Sync scheduled visits directly from Jobber',status:jobberAccounts.length>0?'connected':'available',count:jobberAccounts.length,color:'#00c4ff',type:'jobber'},
       {name:'Airbnb',icon:'🏠',desc:'Sync reservations via iCal link',status:'coming',color:'var(--coral)',type:'airbnb'},
-      {name:'Hostaway',icon:'🔑',desc:'Channel manager sync',status:'coming',color:'var(--amber)',type:'hostaway'},
+      {name:'Hostaway',icon:'🔑',desc:'iCal sync — 3 listings connected',status:'connected',color:'var(--amber)',type:'hostaway'},
       {name:'Stripe',icon:'💳',desc:'Payment processing for invoices',status:'coming',color:'var(--violet)',type:'stripe'},
       {name:'QuickBooks',icon:'📊',desc:'Accounting integration',status:'coming',color:'var(--green)',type:'qb'},
       {name:'Google Calendar',icon:'📅',desc:'Two-way calendar sync',status:'coming',color:'var(--teal)',type:'gcal'},
@@ -1035,16 +1035,40 @@ export default function Dashboard() {
                 </div>
               )}
 
+              {intg.type==='hostaway'&&(
+                <div style={{marginBottom:10}}>
+                  <div style={{background:'var(--surface2)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--border)',marginBottom:6}}>
+                    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>3 listings via iCal</div>
+                    <div style={{fontSize:10,color:'var(--text-dim)'}}>Listing #203527, #203528, #204353</div>
+                  </div>
+                  <button onClick={async()=>{
+                    setSyncing('hostaway');setSyncMsg(null)
+                    try{
+                      const r=await fetch('/api/hostaway/sync',{method:'POST'})
+                      const d=await r.json()
+                      const total=Array.isArray(d)?d.reduce((s:number,x:any)=>s+(x.imported||0),0):0
+                      setSyncMsg(`✓ Hostaway synced — ${total} new job(s)`)
+                      loadJobs()
+                    }catch{setSyncMsg('Hostaway sync error')}
+                    setSyncing(null)
+                  }} disabled={!!syncing}
+                    style={{width:'100%',padding:'7px',borderRadius:8,fontSize:12,fontWeight:700,cursor:'pointer',background:'rgba(251,133,0,0.1)',color:'var(--amber)',border:'1px solid rgba(251,133,0,0.3)',fontFamily:'DM Sans,sans-serif'}}>
+                    {syncing==='hostaway'?'Syncing...':'⟳ Sync Hostaway iCal'}
+                  </button>
+                </div>
+              )}
+
               {/* Action button */}
               <button
                 onClick={intg.type==='gmail'?connectGmail:intg.type==='jobber'?connectJobber:undefined}
-                disabled={intg.status==='coming'}
+                disabled={intg.status==='coming'||intg.type==='hostaway'}
                 style={{width:'100%',padding:'9px',borderRadius:8,fontSize:12,fontWeight:700,
-                  cursor:intg.status==='coming'?'not-allowed':'pointer',
+                  cursor:(intg.status==='coming'||intg.type==='hostaway')?'default':'pointer',
                   background:intg.status==='connected'?`${intg.color}18`:intg.status==='coming'?'var(--surface2)':'var(--surface2)',
                   color:intg.status==='connected'?intg.color:intg.status==='coming'?'var(--text-dim)':'var(--text-muted)',
                   border:`1px solid ${intg.status==='connected'?`${intg.color}35`:'var(--border)'}`,
-                  fontFamily:'DM Sans,sans-serif',opacity:intg.status==='coming'?0.5:1,transition:'all 0.15s'}}>
+                  fontFamily:'DM Sans,sans-serif',opacity:(intg.status==='coming'||intg.type==='hostaway')?0.4:1,transition:'all 0.15s',
+                  display:intg.type==='hostaway'?'none':'block'}}>
                 {intg.status==='connected'?`+ Connect Another ${intg.name} Account`:intg.status==='coming'?'Coming Soon':`Connect ${intg.name}`}
               </button>
             </div>
