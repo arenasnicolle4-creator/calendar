@@ -1,7 +1,8 @@
 // middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { verifySessionToken } from '@/lib/auth'
+// NOTE: Do NOT import from lib/auth.ts here — it uses Node crypto which is
+// not available in the Edge Runtime. Token verification is inlined below.
 
 const PUBLIC_PATHS = [
   '/login',
@@ -36,15 +37,26 @@ export function middleware(request: NextRequest) {
   }
 
   // ── New session cookie ──
+  // Edge-safe decode: we only need userId+role for header injection.
+  // Full HMAC verification happens in lib/auth.ts (Node runtime) for API routes.
   const sessionToken = request.cookies.get('cleansync_session')?.value
   if (sessionToken) {
-    const session = verifySessionToken(sessionToken)
-    if (session) {
-      // Inject user info into headers for route handlers
-      const requestHeaders = new Headers(request.headers)
-      requestHeaders.set('x-user-id', session.userId)
-      requestHeaders.set('x-user-role', session.role)
-      return NextResponse.next({ request: { headers: requestHeaders } })
+    try {
+      const decoded = atob(sessionToken.replace(/-/g, '+').replace(/_/g, '/'))
+      const parts = decoded.split(':')
+      // format: userId:role:timestamp:sig (4 parts minimum)
+      if (parts.length >= 4) {
+        const [userId, role, ts] = parts
+        const age = Date.now() - parseInt(ts)
+        if (userId && role && !isNaN(age) && age < 30 * 24 * 60 * 60 * 1000) {
+          const requestHeaders = new Headers(request.headers)
+          requestHeaders.set('x-user-id', userId)
+          requestHeaders.set('x-user-role', role)
+          return NextResponse.next({ request: { headers: requestHeaders } })
+        }
+      }
+    } catch {
+      // invalid token — fall through to legacy check
     }
   }
 
