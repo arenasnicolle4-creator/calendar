@@ -29,7 +29,7 @@ const BASE_NAV: { id: Page; icon: string; label: string; badge?: string }[] = [
   { id: 'settings',     icon: '⚙️', label: 'Settings' },
 ]
 
-const MANAGER_EXTRA: { id: Page; icon: string; label: string }[] = [
+const MANAGER_EXTRA: { id: Page; icon: string; label: string; badge?: string }[] = [
   { id: 'post-job',       icon: '📋', label: 'Post a Job' },
   { id: 'find-providers', icon: '🔍', label: 'Find Providers' },
 ]
