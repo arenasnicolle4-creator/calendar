@@ -145,11 +145,15 @@ export async function syncHostawayCalendar(calendar: HostawayCalendar) {
     const syntheticId = `hostaway-${listingId}-${event.uid}`
     if (seenUids.has(syntheticId)) continue
     
-    // Skip blocked dates (not actual bookings)
+    // Skip only year-long+ blocks (those are availability closures, not guest stays)
     const summary = event.summary || ''
-    if (summary.toLowerCase().includes('not available') || 
-        summary.toLowerCase().includes('blocked') ||
-        summary.toLowerCase().includes('airbnb (not available)')) continue
+    const isYearBlock = event.dtend && event.dtstart && 
+      (event.dtend.getTime() - event.dtstart.getTime()) > 180 * 24 * 60 * 60 * 1000
+    if (isYearBlock) continue
+    
+    // Use a friendly display name
+    const isBlocked = summary.toLowerCase().includes('blocked') || summary.trim() === ''
+    const displaySummary = isBlocked ? `Blocked / Clean` : summary
     
     const { guests, guestName } = extractGuestInfo(event.summary, event.description)
     const address = event.location || name
@@ -158,7 +162,7 @@ export async function syncHostawayCalendar(calendar: HostawayCalendar) {
       await prisma.job.create({
         data: {
           platform: 'hostaway',
-          displayName: summary || name,
+          displayName: displaySummary || name,
           customerName: guestName,
           address,
           propertyLabel: name,
