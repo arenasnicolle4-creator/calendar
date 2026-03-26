@@ -58,6 +58,15 @@ model Job {
   updatedAt       DateTime       @updatedAt
 }
 
+model HostawayCalendar {
+  id         String    @id @default(cuid())
+  listingId  String    @unique
+  name       String
+  icalUrl    String
+  lastSynced DateTime?
+  createdAt  DateTime  @default(now())
+}
+
 model Cleaner {
   id        String   @id @default(cuid())
   name      String
