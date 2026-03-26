@@ -33,7 +33,7 @@ async function fetchAssignment(id: number) {
 //                   project 32532925 → assignment 18287601
 const RATIO = (18287601 - 18042718) / (32532925 - 32026127) // 0.4832
 
-export async function findAssignment(targetProjectId: number, knownAssignId = 18042718, knownProjId = 32026127) {
+async function findAssignment(targetProjectId: number, knownAssignId = 18042718, knownProjId = 32026127) {
   const estimate = Math.round(knownAssignId + (targetProjectId - knownProjId) * RATIO)
   
   // Probe in steps of 3000 across a ±20000 window
