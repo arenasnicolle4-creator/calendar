@@ -1,4 +1,4 @@
-// app/api/turno/test/route.ts — find assignment ID for a given project ID
+// app/api/turno/test/route.ts — scan for assignments near known IDs
 import { NextResponse } from 'next/server'
 
 async function fetchAssignment(id: number) {
@@ -19,41 +19,42 @@ async function fetchAssignment(id: number) {
       property: d.project?.property?.alias,
       address: d.project?.property?.short_address,
       date: d.project?.start_date,
-      startTime: d.project?.start_time,
-      endTime: d.project?.end_time,
       customer: d.customer_name,
-      beds: d.project?.property?.beds,
-      bedrooms: d.project?.property?.bedrooms,
-      bathrooms: d.project?.property?.bathrooms,
     }
   } catch { return null }
 }
 
-// Known calibration: project 32026127 → assignment 18042718
-//                   project 32532925 → assignment 18287601
-const RATIO = (18287601 - 18042718) / (32532925 - 32026127) // 0.4832
-
-async function findAssignment(targetProjectId: number, knownAssignId = 18042718, knownProjId = 32026127) {
-  const estimate = Math.round(knownAssignId + (targetProjectId - knownProjId) * RATIO)
-  
-  // Probe in steps of 3000 across a ±20000 window
-  const step = 3000
-  const window = 20000
-  const probes: number[] = []
-  for (let offset = -window; offset <= window; offset += step) {
-    probes.push(estimate + offset)
-  }
-  
-  const results = await Promise.all(probes.map(fetchAssignment))
-  const found = results.filter(Boolean)
-  const exact = found.find(r => r!.projectId === targetProjectId)
-  
-  return { targetProjectId, estimate, exact, nearby: found.slice(0, 5) }
-}
-
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const projectId = parseInt(searchParams.get('projectId') || '32623827')
-  const result = await findAssignment(projectId)
-  return NextResponse.json(result)
+  const mode = searchParams.get('mode') || 'scan'
+
+  if (mode === 'scan') {
+    // Scan outward from known assignment 18287601 in steps of 1000
+    // to find other assignments belonging to this contractor
+    const base = 18287601
+    const probes: number[] = []
+    for (let i = 1; i <= 20; i++) {
+      probes.push(base + i * 1000)  // forward
+      probes.push(base + i * 5000)  // further forward
+    }
+    const results = (await Promise.all(probes.map(fetchAssignment))).filter(Boolean)
+    return NextResponse.json({ mode: 'scan', base, found: results })
+  }
+
+  if (mode === 'single') {
+    const id = parseInt(searchParams.get('id') || '18287601')
+    const result = await fetchAssignment(id)
+    return NextResponse.json(result)
+  }
+
+  // mode === 'project' — scan for a specific project ID
+  const targetProject = parseInt(searchParams.get('projectId') || '32623827')
+  // Scan a wide range around both known assignments
+  const probes: number[] = []
+  for (let id = 18280000; id <= 18450000; id += 2000) {
+    probes.push(id)
+  }
+  const results = (await Promise.all(probes.map(fetchAssignment))).filter(Boolean)
+  const exact = results.find(r => r!.projectId === targetProject)
+  return NextResponse.json({ targetProject, exact, allFound: results })
 }
