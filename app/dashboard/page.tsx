@@ -154,6 +154,7 @@ export default function Dashboard() {
   const [expandedColorProp, setExpandedColorProp] = useState<string|null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [jobberAccounts, setJobberAccounts] = useState<{id:string;email:string;companyName:string|null;lastSynced:string|null}[]>([])
+  const [hostawayAccounts, setHostawayAccounts] = useState<{id:string;listingId:string;name:string;icalUrl:string;lastSynced:string|null}[]>([])
   const today = new Date()
 
   useEffect(() => {
@@ -176,7 +177,8 @@ export default function Dashboard() {
   const loadCleaners = useCallback(async()=>{const r=await fetch('/api/cleaners');if(r.ok)setCleaners(await r.json())},[])
   const loadGmailAccounts = useCallback(async()=>{const r=await fetch('/api/gmail/accounts');if(r.ok)setGmailAccounts(await r.json())},[])
   const loadJobberAccounts = useCallback(async()=>{const r=await fetch('/api/jobber/accounts');if(r.ok)setJobberAccounts(await r.json())},[])
-  useEffect(()=>{loadJobs();loadCleaners();loadGmailAccounts();loadJobberAccounts()},[loadJobs,loadCleaners,loadGmailAccounts,loadJobberAccounts])
+  const loadHostawayAccounts = useCallback(async()=>{const r=await fetch('/api/hostaway/accounts');if(r.ok)setHostawayAccounts(await r.json())},[])
+  useEffect(()=>{loadJobs();loadCleaners();loadGmailAccounts();loadJobberAccounts();loadHostawayAccounts()},[loadJobs,loadCleaners,loadGmailAccounts,loadJobberAccounts,loadHostawayAccounts])
 
   function displayName(label: string) { return propNameMap[label] || shortName(label) }
   function savePropName(label: string, name: string) {
@@ -1156,7 +1158,7 @@ export default function Dashboard() {
       {name:'Gmail',icon:'✉️',desc:'Connect Gmail account (sync paused — manual entry available)',status:gmailAccounts.length>0?'connected':'available',count:gmailAccounts.length,color:'var(--coral)',type:'gmail'},
       {name:'Jobber',icon:'💼',desc:'Sync scheduled visits directly from Jobber',status:jobberAccounts.length>0?'connected':'available',count:jobberAccounts.length,color:'#00c4ff',type:'jobber'},
       {name:'Airbnb',icon:'🏠',desc:'Sync reservations via iCal link',status:'coming',color:'var(--coral)',type:'airbnb'},
-      {name:'Hostaway',icon:'🔑',desc:'iCal sync — 3 listings connected',status:'connected',color:'var(--amber)',type:'hostaway'},
+      {name:'Hostaway',icon:'🔑',desc:'iCal calendar sync',status:hostawayAccounts.length>0?'connected':'available',count:hostawayAccounts.length,color:'var(--amber)',type:'hostaway'},
       {name:'Stripe',icon:'💳',desc:'Payment processing for invoices',status:'coming',color:'var(--violet)',type:'stripe'},
       {name:'QuickBooks',icon:'📊',desc:'Accounting integration',status:'coming',color:'var(--green)',type:'qb'},
       {name:'Google Calendar',icon:'📅',desc:'Two-way calendar sync',status:'coming',color:'var(--teal)',type:'gcal'},
@@ -1227,41 +1229,31 @@ export default function Dashboard() {
               )}
 
               {intg.type==='hostaway'&&(
-                <div style={{marginBottom:10}}>
-                  <div style={{background:'var(--surface2)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--border)',marginBottom:6}}>
-                    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>3 listings via iCal</div>
-                    <div style={{fontSize:10,color:'var(--text-dim)'}}>Listing #203527, #203528, #204353</div>
-                  </div>
-                  <button onClick={async()=>{
-                    setSyncing('hostaway');setSyncMsg(null)
-                    try{
-                      const r=await fetch('/api/hostaway/sync',{method:'POST'})
-                      const d=await r.json()
-                      const total=Array.isArray(d)?d.reduce((s:number,x:any)=>s+(x.imported||0),0):0
-                      setSyncMsg(`✓ Hostaway synced — ${total} new job(s)`)
-                      loadJobs()
-                    }catch{setSyncMsg('Hostaway sync error')}
-                    setSyncing(null)
-                  }} disabled={!!syncing}
-                    style={{width:'100%',padding:'7px',borderRadius:8,fontSize:12,fontWeight:700,cursor:'pointer',background:'rgba(251,133,0,0.1)',color:'var(--amber)',border:'1px solid rgba(251,133,0,0.3)',fontFamily:'DM Sans,sans-serif'}}>
-                    {syncing==='hostaway'?'Syncing...':'⟳ Sync Hostaway iCal'}
-                  </button>
-                </div>
+                <HostawayPanel
+                  accounts={hostawayAccounts}
+                  onRefresh={loadHostawayAccounts}
+                  onJobsRefresh={loadJobs}
+                  syncing={syncing}
+                  setSyncing={setSyncing}
+                  setSyncMsg={setSyncMsg}
+                />
               )}
 
-              {/* Action button */}
+              {/* Action button — not shown for hostaway (managed in panel above) */}
+              {intg.type!=='hostaway'&&(
               <button
                 onClick={intg.type==='gmail'?connectGmail:intg.type==='jobber'?connectJobber:undefined}
-                disabled={intg.status==='coming'||intg.type==='hostaway'}
+                disabled={intg.status==='coming'}
                 style={{width:'100%',padding:'9px',borderRadius:8,fontSize:12,fontWeight:700,
-                  cursor:(intg.status==='coming'||intg.type==='hostaway')?'default':'pointer',
+                  cursor:intg.status==='coming'?'default':'pointer',
                   background:intg.status==='connected'?`${intg.color}18`:intg.status==='coming'?'var(--surface2)':'var(--surface2)',
                   color:intg.status==='connected'?intg.color:intg.status==='coming'?'var(--text-dim)':'var(--text-muted)',
                   border:`1px solid ${intg.status==='connected'?`${intg.color}35`:'var(--border)'}`,
-                  fontFamily:'DM Sans,sans-serif',opacity:(intg.status==='coming'||intg.type==='hostaway')?0.4:1,transition:'all 0.15s',
+                  fontFamily:'DM Sans,sans-serif',opacity:intg.status==='coming'?0.4:1,transition:'all 0.15s',
                   display:intg.type==='hostaway'?'none':'block'}}>
                 {intg.status==='connected'?`+ Connect Another ${intg.name} Account`:intg.status==='coming'?'Coming Soon':`Connect ${intg.name}`}
               </button>
+              )}
             </div>
           ))}
         </div>
@@ -1556,6 +1548,129 @@ function ColorRuleAdder({onAdd}:{onAdd:(r:ColorRule)=>void}){
         <button onClick={()=>setOpen(false)}
           style={{padding:'5px 8px',borderRadius:6,background:'var(--surface3)',color:'var(--text-muted)',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:11,cursor:'pointer'}}>Cancel</button>
       </div>
+    </div>
+  )
+}
+
+function HostawayPanel({accounts, onRefresh, onJobsRefresh, syncing, setSyncing, setSyncMsg}: any) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({listingId:'', name:'', icalUrl:''})
+  const [adding, setAdding] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function addListing() {
+    if (!form.listingId.trim() || !form.name.trim() || !form.icalUrl.trim()) {
+      setErr('All fields required'); return
+    }
+    setAdding(true); setErr('')
+    try {
+      const r = await fetch('/api/hostaway/accounts', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(form)
+      })
+      if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Failed') }
+      setForm({listingId:'', name:'', icalUrl:''})
+      setShowAdd(false)
+      onRefresh()
+    } catch(e) { setErr(String(e)) }
+    setAdding(false)
+  }
+
+  async function removeListing(id: string, name: string) {
+    if (!confirm(`Remove ${name}? This will not delete synced jobs.`)) return
+    await fetch(`/api/hostaway/accounts/${id}`, {method:'DELETE'})
+    onRefresh()
+  }
+
+  async function syncAll() {
+    setSyncing('hostaway'); setSyncMsg(null)
+    try {
+      const r = await fetch('/api/hostaway/sync', {method:'POST'})
+      const d = await r.json()
+      const total = Array.isArray(d) ? d.reduce((s:number,x:any)=>s+(x.imported||0),0) : 0
+      setSyncMsg(`✓ Hostaway synced — ${total} new job(s)`)
+      onJobsRefresh(); onRefresh()
+    } catch { setSyncMsg('Hostaway sync error') }
+    setSyncing(null)
+  }
+
+  async function syncOne(id: string, name: string) {
+    setSyncing(`hostaway-${id}`); setSyncMsg(null)
+    try {
+      const r = await fetch(`/api/hostaway/sync?id=${id}`, {method:'POST'})
+      const d = await r.json()
+      setSyncMsg(`✓ ${name} synced — ${d.imported||0} new job(s)`)
+      onJobsRefresh(); onRefresh()
+    } catch { setSyncMsg('Sync error') }
+    setSyncing(null)
+  }
+
+  const inputStyle = {
+    width:'100%', background:'var(--surface)', border:'1px solid var(--border)',
+    borderRadius:7, padding:'7px 10px', color:'var(--text)',
+    fontFamily:'DM Sans,sans-serif', fontSize:12, outline:'none', marginBottom:6
+  }
+
+  return(
+    <div style={{marginBottom:10}}>
+      {/* Listing list */}
+      {accounts.length > 0 && (
+        <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:8}}>
+          {accounts.map((acc:any) => (
+            <div key={acc.id} style={{background:'var(--surface2)',borderRadius:8,padding:'8px 10px',border:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:700,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acc.name}</div>
+                <div style={{fontSize:10,color:'var(--text-dim)'}}>#{acc.listingId} · Synced {acc.lastSynced ? new Date(acc.lastSynced).toLocaleDateString() : 'never'}</div>
+              </div>
+              <button onClick={()=>syncOne(acc.id, acc.name)} disabled={!!syncing}
+                style={{padding:'3px 8px',fontSize:10,fontWeight:700,borderRadius:5,background:'rgba(251,133,0,0.1)',color:'var(--amber)',border:'1px solid rgba(251,133,0,0.3)',cursor:'pointer',flexShrink:0}}>
+                ⟳
+              </button>
+              <button onClick={()=>removeListing(acc.id, acc.name)}
+                style={{padding:'3px 8px',fontSize:10,fontWeight:700,borderRadius:5,background:'var(--red-bg)',color:'var(--red)',border:'1px solid rgba(232,82,90,0.2)',cursor:'pointer',flexShrink:0}}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Sync all button */}
+      {accounts.length > 0 && (
+        <button onClick={syncAll} disabled={!!syncing}
+          style={{width:'100%',padding:'7px',borderRadius:8,fontSize:12,fontWeight:700,cursor:'pointer',background:'rgba(251,133,0,0.1)',color:'var(--amber)',border:'1px solid rgba(251,133,0,0.3)',fontFamily:'DM Sans,sans-serif',marginBottom:6}}>
+          {syncing==='hostaway'?'Syncing...':'⟳ Sync All Listings'}
+        </button>
+      )}
+
+      {/* Add listing form */}
+      {showAdd ? (
+        <div style={{background:'var(--surface2)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--border)'}}>
+          {err && <div style={{fontSize:11,color:'var(--red)',marginBottom:6}}>{err}</div>}
+          <input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}
+            placeholder="Listing name (e.g. Listing 1)" style={inputStyle}/>
+          <input value={form.listingId} onChange={e=>setForm(p=>({...p,listingId:e.target.value}))}
+            placeholder="Listing ID (e.g. 203528)" style={inputStyle}/>
+          <input value={form.icalUrl} onChange={e=>setForm(p=>({...p,icalUrl:e.target.value}))}
+            placeholder="iCal URL (https://platform.hostaway.com/ical/...)" style={{...inputStyle,marginBottom:8}}/>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>{setShowAdd(false);setErr('')}}
+              style={{flex:1,padding:'6px',borderRadius:6,background:'var(--surface3)',color:'var(--text-muted)',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:11,cursor:'pointer'}}>
+              Cancel
+            </button>
+            <button onClick={addListing} disabled={adding}
+              style={{flex:2,padding:'6px',borderRadius:6,background:'var(--amber)',color:'#000',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:11,fontWeight:700,cursor:'pointer',opacity:adding?0.6:1}}>
+              {adding?'Adding...':'+ Add Listing'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={()=>setShowAdd(true)}
+          style={{width:'100%',padding:'8px',borderRadius:8,fontSize:12,fontWeight:700,cursor:'pointer',background:'var(--surface2)',color:'var(--text-muted)',border:'1px solid var(--border)',fontFamily:'DM Sans,sans-serif'}}>
+          + Add iCal Listing
+        </button>
+      )}
     </div>
   )
 }
