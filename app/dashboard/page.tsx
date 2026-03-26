@@ -31,9 +31,18 @@ const NAV_ITEMS: { id: Page; icon: string; label: string; badge?: string }[] = [
 
 // ── COLORS ────────────────────────────────────────────────────────────────────
 const COLOR_PALETTE = [
-  '#00d4aa','#00b4d8','#4361ee','#7209b7','#f72585',
-  '#ff6b6b','#ffd166','#06d6a0','#118ab2','#ef476f',
-  '#fb8500','#8338ec','#3a86ff','#43aa8b','#f94144',
+  // Teals & greens
+  '#00b896','#00d4aa','#06d6a0','#43aa8b','#2d9e6b','#52b788','#40916c',
+  // Blues
+  '#00b4d8','#0096c7','#4361ee','#3a86ff','#118ab2','#1d4ed8','#2563eb','#1e40af',
+  // Purples & violets
+  '#7209b7','#8338ec','#7c3aed','#6d28d9','#a78bfa','#9d4edd','#c77dff',
+  // Pinks & reds
+  '#f72585','#ef476f','#e63946','#e8525a','#ff6b6b','#f43f5e',
+  // Oranges & ambers
+  '#fb8500','#f97316','#f59e0b','#ffd166','#ffb703','#e76f51',
+  // Warm neutrals
+  '#6b7280','#4b5563','#78716c','#92400e','#78350f',
 ]
 const DEFAULT_PROP_COLOR = '#ef4444' // red = unassigned manual property
 const DEFAULT_EVENT_COLOR = '#f97316' // orange = Jobber calendar events
@@ -131,6 +140,8 @@ export default function Dashboard() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [activePlatforms, setActivePlatforms] = useState(new Set(['airbnb','jobber','turno','hostaway']))
   const [selectedJob, setSelectedJob] = useState<Job|null>(null)
+  const [showAddJob, setShowAddJob] = useState(false)
+  const [addJobDate, setAddJobDate] = useState('')
   const [showGmailPanel, setShowGmailPanel] = useState(false)
   const [syncing, setSyncing] = useState<string|null>(null)
   const [syncMsg, setSyncMsg] = useState<string|null>(null)
@@ -434,6 +445,186 @@ export default function Dashboard() {
           </div>
         </div>
       </>
+    )
+  }
+
+  // ── ADD JOB MODAL ────────────────────────────────────────────────────────────
+  function AddJobModal(){
+    const [form, setForm] = useState({
+      displayName: '',
+      address: '',
+      propertyLabel: '',
+      platform: 'manual',
+      checkoutTime: addJobDate,
+      checkoutTimeHour: '10:00',
+      checkinTime: '',
+      checkinTimeHour: '15:00',
+      notes: '',
+      beds: '',
+      baths: '',
+    })
+    const [saving, setSaving] = useState(false)
+    const [error, setError] = useState('')
+
+    function set(k: string, v: string) { setForm(p=>({...p,[k]:v})) }
+
+    async function save() {
+      if (!form.displayName.trim() || !form.checkoutTime) {
+        setError('Name and date are required')
+        return
+      }
+      setSaving(true)
+      try {
+        const checkoutDT = new Date(`${form.checkoutTime}T${form.checkoutTimeHour}:00-08:00`)
+        const checkinDT = form.checkinTime ? new Date(`${form.checkinTime}T${form.checkinTimeHour}:00-08:00`) : null
+
+        const body = {
+          platform: form.platform,
+          displayName: form.displayName.trim(),
+          address: form.address.trim() || form.displayName.trim(),
+          propertyLabel: form.propertyLabel.trim() || form.displayName.trim(),
+          customerName: null,
+          checkoutTime: checkoutDT.toISOString(),
+          checkinTime: checkinDT?.toISOString() || null,
+          notes: form.notes,
+          beds: form.beds ? parseInt(form.beds) : null,
+          baths: form.baths ? parseFloat(form.baths) : null,
+          cleanerIds: '[]',
+          duties: '[]',
+        }
+        const r = await fetch('/api/jobs', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+        if (!r.ok) throw new Error('Failed to save')
+        loadJobs()
+        setShowAddJob(false)
+      } catch(e) {
+        setError('Error saving job')
+      }
+      setSaving(false)
+    }
+
+    const inputStyle = {
+      width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+      borderRadius: 8, padding: '8px 12px', color: 'var(--text)',
+      fontFamily: 'DM Sans,sans-serif', fontSize: 13, outline: 'none'
+    }
+    const labelStyle = { fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' as const, letterSpacing: 0.8, marginBottom: 4, display: 'block' }
+
+    return(
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setShowAddJob(false)}>
+        <div style={{background:'var(--surface)',borderRadius:18,width:'100%',maxWidth:480,boxShadow:'var(--shadow-lg)',border:'1px solid var(--border)'}} onClick={e=>e.stopPropagation()}>
+          {/* Header */}
+          <div style={{padding:'18px 22px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontFamily:'Syne,sans-serif',fontSize:17,fontWeight:700,color:'var(--text)'}}>Add Job</div>
+              <div style={{fontSize:11,color:'var(--text-dim)',marginTop:2}}>Create a manual cleaning job</div>
+            </div>
+            <button onClick={()=>setShowAddJob(false)} style={{width:30,height:30,borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',cursor:'pointer',color:'var(--text-muted)',fontSize:16}}>✕</button>
+          </div>
+          <div style={{padding:'18px 22px',display:'flex',flexDirection:'column',gap:14}}>
+            {error&&<div style={{padding:'8px 12px',borderRadius:7,background:'var(--red-bg)',color:'var(--red)',fontSize:12,border:'1px solid rgba(232,82,90,0.2)'}}>{error}</div>}
+
+            {/* Name */}
+            <div>
+              <label style={labelStyle}>Job Name *</label>
+              <input value={form.displayName} onChange={e=>set('displayName',e.target.value)}
+                placeholder="e.g. Listing 1 Cleaning" style={inputStyle}
+                onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+            </div>
+
+            {/* Property */}
+            <div>
+              <label style={labelStyle}>Property Label</label>
+              <select value={form.propertyLabel} onChange={e=>set('propertyLabel',e.target.value)}
+                style={{...inputStyle,cursor:'pointer'}}>
+                <option value="">— Select property or type below —</option>
+                {allPropNames.map(p=><option key={p} value={p}>{displayName(p)}</option>)}
+              </select>
+            </div>
+
+            {/* Address */}
+            <div>
+              <label style={labelStyle}>Address</label>
+              <input value={form.address} onChange={e=>set('address',e.target.value)}
+                placeholder="Street address" style={inputStyle}
+                onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+            </div>
+
+            {/* Checkout date/time */}
+            <div>
+              <label style={labelStyle}>Cleaning / Checkout Date & Time *</label>
+              <div style={{display:'flex',gap:8}}>
+                <input type="date" value={form.checkoutTime} onChange={e=>set('checkoutTime',e.target.value)}
+                  style={{...inputStyle,flex:2}}
+                  onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+                <input type="time" value={form.checkoutTimeHour} onChange={e=>set('checkoutTimeHour',e.target.value)}
+                  style={{...inputStyle,flex:1}}
+                  onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+              </div>
+            </div>
+
+            {/* Checkin date/time */}
+            <div>
+              <label style={labelStyle}>Next Checkin Date & Time (optional)</label>
+              <div style={{display:'flex',gap:8}}>
+                <input type="date" value={form.checkinTime} onChange={e=>set('checkinTime',e.target.value)}
+                  style={{...inputStyle,flex:2}}
+                  onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+                <input type="time" value={form.checkinTimeHour} onChange={e=>set('checkinTimeHour',e.target.value)}
+                  style={{...inputStyle,flex:1}}
+                  onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+              </div>
+            </div>
+
+            {/* Beds/baths row */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+              <div>
+                <label style={labelStyle}>Beds</label>
+                <input type="number" value={form.beds} onChange={e=>set('beds',e.target.value)}
+                  placeholder="—" style={inputStyle} min="0"
+                  onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+              </div>
+              <div>
+                <label style={labelStyle}>Baths</label>
+                <input type="number" value={form.baths} onChange={e=>set('baths',e.target.value)}
+                  placeholder="—" style={inputStyle} min="0" step="0.5"
+                  onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+              </div>
+              <div>
+                <label style={labelStyle}>Platform</label>
+                <select value={form.platform} onChange={e=>set('platform',e.target.value)}
+                  style={{...inputStyle,cursor:'pointer'}}>
+                  <option value="manual">Manual</option>
+                  <option value="airbnb">Airbnb</option>
+                  <option value="hostaway">Hostaway</option>
+                  <option value="jobber">Jobber</option>
+                  <option value="turno">Turno</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label style={labelStyle}>Notes</label>
+              <textarea value={form.notes} onChange={e=>set('notes',e.target.value)}
+                placeholder="Access codes, special instructions..." rows={2}
+                style={{...inputStyle,resize:'vertical' as const}}
+                onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+            </div>
+
+            {/* Actions */}
+            <div style={{display:'flex',gap:8,paddingTop:4}}>
+              <button onClick={()=>setShowAddJob(false)}
+                style={{flex:1,padding:'10px',borderRadius:9,background:'var(--surface2)',color:'var(--text-muted)',border:'1px solid var(--border)',fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:600,cursor:'pointer'}}>
+                Cancel
+              </button>
+              <button onClick={save} disabled={saving}
+                style={{flex:2,padding:'10px',borderRadius:9,background:'var(--teal)',color:'#fff',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?0.7:1}}>
+                {saving?'Saving...':'+ Create Job'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -1223,6 +1414,12 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+            {page==='calendar'&&(
+              <button onClick={()=>{setAddJobDate(new Date().toISOString().slice(0,10));setShowAddJob(true)}}
+                style={{padding:'6px 14px',borderRadius:8,background:'var(--teal)',color:'#fff',border:'none',fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
+                + Job
+              </button>
+            )}
             {/* Sync status */}
             {gmailAccounts.length>0&&(
               <button onClick={syncAll} disabled={syncing==='all'}
@@ -1330,6 +1527,7 @@ export default function Dashboard() {
       </div>
 
       {selectedJob&&<JobModal/>}
+      {showAddJob&&<AddJobModal/>}
       {showGmailPanel&&<GmailPanel/>}
     </div>
   )
