@@ -113,6 +113,7 @@ export default function ProviderDashboard() {
 
   // ── MARKETPLACE ──────────────────────────────────────────────────────────────
   function MarketplacePage() {
+    if (!user) return null
     const [bidJob, setBidJob] = useState<string|null>(null)
     const [bidForm, setBidForm] = useState({amount:'',notes:'',estimatedDays:''})
     const [submitting, setSubmitting] = useState(false)
@@ -267,6 +268,7 @@ export default function ProviderDashboard() {
 
   // ── SCHEDULE ─────────────────────────────────────────────────────────────────
   function SchedulePage() {
+    if (!user) return null
     const awarded = jobs.filter(j => ['awarded','in_progress'].includes(j.status) && j.bids.some(b=>b.status==='accepted'))
     const completed = jobs.filter(j => j.status==='completed' && j.bids.some(b=>b.status==='accepted'))
 
@@ -339,6 +341,7 @@ export default function ProviderDashboard() {
 
   // ── CONNECTIONS ───────────────────────────────────────────────────────────────
   function ConnectionsPage() {
+    if (!user) return null
     return (
       <div>
         <PageHeader title="Connections" subtitle={`${active.length} active · ${pending.length} pending`}/>
@@ -446,6 +449,7 @@ export default function ProviderDashboard() {
 
   // ── OVERVIEW ─────────────────────────────────────────────────────────────────
   function OverviewPage() {
+    if (!user) return null
     return (
       <div>
         {/* Welcome banner */}
