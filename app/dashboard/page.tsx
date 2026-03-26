@@ -17,16 +17,21 @@ interface Cleaner { id: string; name: string; color: string }
 interface GmailAccount { id: string; email: string; lastSynced: string | null }
 
 // ── NAV PAGES ─────────────────────────────────────────────────────────────────
-type Page = 'calendar' | 'properties' | 'clients' | 'team' | 'invoices' | 'integrations' | 'settings'
+type Page = 'calendar' | 'properties' | 'clients' | 'team' | 'invoices' | 'integrations' | 'settings' | 'post-job' | 'find-providers'
 
-const NAV_ITEMS: { id: Page; icon: string; label: string; badge?: string }[] = [
-  { id: 'calendar',     icon: '📅', label: 'Calendar' },
-  { id: 'properties',  icon: '🏠', label: 'Properties' },
-  { id: 'clients',     icon: '👥', label: 'Clients' },
-  { id: 'team',        icon: '🧹', label: 'Team' },
-  { id: 'invoices',    icon: '💰', label: 'Invoices', badge: 'NEW' },
-  { id: 'integrations',icon: '🔗', label: 'Integrations' },
-  { id: 'settings',    icon: '⚙️', label: 'Settings' },
+const BASE_NAV: { id: Page; icon: string; label: string; badge?: string }[] = [
+  { id: 'calendar',      icon: '📅', label: 'Calendar' },
+  { id: 'properties',   icon: '🏠', label: 'Properties' },
+  { id: 'clients',      icon: '👥', label: 'Clients' },
+  { id: 'team',         icon: '🧹', label: 'Team' },
+  { id: 'invoices',     icon: '💰', label: 'Invoices', badge: 'NEW' },
+  { id: 'integrations', icon: '🔗', label: 'Integrations' },
+  { id: 'settings',     icon: '⚙️', label: 'Settings' },
+]
+
+const MANAGER_EXTRA: { id: Page; icon: string; label: string }[] = [
+  { id: 'post-job',       icon: '📋', label: 'Post a Job' },
+  { id: 'find-providers', icon: '🔍', label: 'Find Providers' },
 ]
 
 // ── COLORS ────────────────────────────────────────────────────────────────────
@@ -157,6 +162,21 @@ export default function Dashboard() {
   const [hostawayAccounts, setHostawayAccounts] = useState<{id:string;listingId:string;name:string;icalUrl:string;lastSynced:string|null}[]>([])
   const today = new Date()
 
+  // ── ROLE CHECK ───────────────────────────────────────────────────────────────
+  const [userRole, setUserRole] = useState<string>('admin')
+  const [userName, setUserName] = useState<string>('')
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => {
+      if (d.user) {
+        if (d.user.role === 'provider') { router.replace('/dashboard/provider'); return }
+        setUserRole(d.user.role || 'admin')
+        setUserName(d.user.name || '')
+      }
+    }).catch(() => {})
+  }, [])
+
+  const NAV_ITEMS = userRole === 'manager' ? [...BASE_NAV, ...MANAGER_EXTRA] : BASE_NAV
+
   useEffect(() => {
     setColorMap(loadColorMap())
     setColorRules(loadColorRules())
@@ -253,7 +273,7 @@ export default function Dashboard() {
     loadJobs();if(selectedJob?.id===id)setSelectedJob(prev=>prev?{...prev,...data}:null)
   }
   async function deleteJob(id:string){await fetch(`/api/jobs/${id}`,{method:'DELETE'});setSelectedJob(null);loadJobs()}
-  async function handleLogout(){await fetch('/api/auth/login',{method:'DELETE'});router.push('/login')}
+  async function handleLogout(){await fetch('/api/auth/logout',{method:'POST'});router.push('/login')}
 
   const visibleJobs = jobs.filter(j=>activePlatforms.has(j.platform)&&!hiddenProps.has(j.propertyLabel))
   const allPropNames = [...new Set(jobs.map(j=>j.propertyLabel))].sort()
@@ -1355,7 +1375,7 @@ export default function Dashboard() {
           <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,var(--teal),#0099cc)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 0 12px rgba(0,212,170,0.3)'}}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="white" opacity="0.9"/><rect x="13" y="3" width="8" height="8" rx="2" fill="white" opacity="0.6"/><rect x="3" y="13" width="8" height="8" rx="2" fill="white" opacity="0.6"/><rect x="13" y="13" width="8" height="8" rx="2" fill="white" opacity="0.3"/></svg>
           </div>
-          {!sidebarCollapsed&&<div><div style={{fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:800,color:'var(--text)'}}>CleanSync</div><div style={{fontSize:10,color:'var(--teal)',fontWeight:600,letterSpacing:1}}>PRO</div></div>}
+          {!sidebarCollapsed&&<div><div style={{fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:800,color:'var(--text)'}}>CleanSync</div><div style={{fontSize:10,color:'var(--teal)',fontWeight:600,letterSpacing:1}}>{userRole==='manager'?'MANAGER':userRole==='cleaner'?'CLEANER':'PRO'}{userName&&` · ${userName.split(' ')[0]}`}</div></div>}
         </div>
 
         {/* Nav items */}
@@ -1441,6 +1461,8 @@ export default function Dashboard() {
             {page==='invoices'&&<InvoicesPage/>}
             {page==='integrations'&&<IntegrationsPage/>}
             {page==='settings'&&<SettingsPage/>}
+            {page==='post-job'&&<ManagerPostJobPage/>}
+            {page==='find-providers'&&<ManagerFindProvidersPage/>}
           </main>
 
           {/* RIGHT SIDEBAR — calendar page only */}
@@ -1525,7 +1547,254 @@ export default function Dashboard() {
   )
 }
 
-function ColorRuleAdder({onAdd}:{onAdd:(r:ColorRule)=>void}){
+// ── MANAGER: POST JOB ─────────────────────────────────────────────────────
+  function ManagerPostJobPage(){
+    const [serviceJobs,setServiceJobs]=React.useState<any[]>([])
+    const [properties,setProperties]=React.useState<any[]>([])
+    const [showPost,setShowPost]=React.useState(false)
+    const [expanded,setExpanded]=React.useState<string|null>(null)
+    const [form,setForm]=React.useState({propertyId:'',category:'',title:'',description:'',scheduledDate:'',budget:'',urgency:'normal'})
+    const [saving,setSaving]=React.useState(false)
+    const [acting,setActing]=React.useState<string|null>(null)
+    const [err,setErr]=React.useState('')
+
+    React.useEffect(()=>{
+      fetch('/api/service-jobs').then(r=>r.json()).then(d=>setServiceJobs(Array.isArray(d)?d:[]))
+      fetch('/api/properties').then(r=>r.json()).then(d=>setProperties(Array.isArray(d)?d:[]))
+    },[])
+
+    const CAT_LABELS:Record<string,string>={plumbing:'Plumber',electrical:'Electrician',lawn:'Lawn Care',snow:'Snow Removal',handyman:'Handyman',pest:'Pest Control',hvac:'HVAC',painting:'Painting',roofing:'Roofing',cleaning:'Cleaning',other:'Other'}
+    const CAT_COLORS:Record<string,string>={plumbing:'#2196f3',electrical:'#ffb86c',lawn:'#00e5a0',snow:'#a78bfa',handyman:'#ff8fa3',pest:'#ff5370',hvac:'#5bb8ff',painting:'#f9b3e8',roofing:'#ffb86c',cleaning:'#00e6d2',other:'#7fb3cc'}
+    const SS:Record<string,{bg:string;color:string;label:string}>={open:{bg:'rgba(0,212,170,0.1)',color:'var(--teal)',label:'Open'},bidding:{bg:'rgba(245,158,11,0.12)',color:'var(--amber)',label:'Bidding'},awarded:{bg:'rgba(167,139,250,0.12)',color:'var(--violet)',label:'Awarded'},in_progress:{bg:'rgba(0,196,255,0.12)',color:'#00c4ff',label:'In Progress'},completed:{bg:'rgba(16,185,129,0.12)',color:'var(--green)',label:'Done'},cancelled:{bg:'rgba(244,63,94,0.1)',color:'var(--red)',label:'Cancelled'}}
+
+    async function postJob(){
+      if(!form.propertyId||!form.category||!form.title||!form.description){setErr('Property, category, title and description required');return}
+      setSaving(true);setErr('')
+      const res=await fetch('/api/service-jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+      if(res.ok){setShowPost(false);setForm({propertyId:'',category:'',title:'',description:'',scheduledDate:'',budget:'',urgency:'normal'});fetch('/api/service-jobs').then(r=>r.json()).then(d=>setServiceJobs(Array.isArray(d)?d:[]))}
+      else{const d=await res.json();setErr(d.error||'Failed')}
+      setSaving(false)
+    }
+    async function decideBid(jobId:string,bidId:string,status:'accepted'|'rejected'){
+      setActing(bidId)
+      await fetch(`/api/service-jobs/${jobId}/bids/${bidId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})})
+      fetch('/api/service-jobs').then(r=>r.json()).then(d=>setServiceJobs(Array.isArray(d)?d:[]))
+      setActing(null)
+    }
+
+    const inp={width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 12px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:13,outline:'none'}
+
+    return(
+      <div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
+          <div>
+            <h1 style={{fontFamily:'Syne,sans-serif',fontSize:26,fontWeight:700,color:'var(--text)'}}>Post a Job</h1>
+            <p style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>Post jobs to your connected service providers</p>
+          </div>
+          <button onClick={()=>setShowPost(!showPost)} style={{padding:'9px 20px',borderRadius:9,background:'var(--teal)',color:'#000',border:'none',fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:700,cursor:'pointer'}}>+ Post Job</button>
+        </div>
+
+        {showPost&&(
+          <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:14,padding:22,marginBottom:24}}>
+            <div style={{fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:700,color:'var(--text)',marginBottom:16}}>New Job</div>
+            {err&&<div style={{color:'var(--red)',fontSize:12,marginBottom:10,padding:'8px 12px',background:'var(--red-bg)',borderRadius:7,border:'1px solid rgba(244,63,94,0.2)'}}>{err}</div>}
+            {properties.length===0?(
+              <div style={{color:'var(--text-dim)',fontSize:13,padding:'12px 0'}}>Add properties first — go to the Properties page.</div>
+            ):(
+              <>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:.8,color:'var(--text-dim)',display:'block',marginBottom:4}}>Property *</label>
+                    <select style={{...inp,cursor:'pointer'}} value={form.propertyId} onChange={e=>setForm(p=>({...p,propertyId:e.target.value}))}>
+                      <option value="">Select property...</option>
+                      {properties.map((p:any)=><option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:.8,color:'var(--text-dim)',display:'block',marginBottom:4}}>Category *</label>
+                    <select style={{...inp,cursor:'pointer'}} value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}>
+                      <option value="">Select category...</option>
+                      {Object.entries(CAT_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:.8,color:'var(--text-dim)',display:'block',marginBottom:4}}>Job Title *</label>
+                    <input style={inp} placeholder="e.g. Fix leaking kitchen faucet" value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:.8,color:'var(--text-dim)',display:'block',marginBottom:4}}>Scheduled Date</label>
+                    <input style={inp} type="date" value={form.scheduledDate} onChange={e=>setForm(p=>({...p,scheduledDate:e.target.value}))} onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:.8,color:'var(--text-dim)',display:'block',marginBottom:4}}>Max Budget (optional)</label>
+                    <input style={inp} type="number" placeholder="$0.00" value={form.budget} onChange={e=>setForm(p=>({...p,budget:e.target.value}))} onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:.8,color:'var(--text-dim)',display:'block',marginBottom:4}}>Urgency</label>
+                    <select style={{...inp,cursor:'pointer'}} value={form.urgency} onChange={e=>setForm(p=>({...p,urgency:e.target.value}))}>
+                      <option value="low">Low</option><option value="normal">Normal</option><option value="urgent">⚡ Urgent</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <label style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:.8,color:'var(--text-dim)',display:'block',marginBottom:4}}>Description *</label>
+                  <textarea style={{...inp,minHeight:80,resize:'vertical' as const}} placeholder="Describe the work needed in detail..." value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>setShowPost(false)} style={{flex:1,padding:'10px',borderRadius:9,background:'var(--surface2)',color:'var(--text-muted)',border:'1px solid var(--border)',fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+                  <button onClick={postJob} disabled={saving} style={{flex:2,padding:'10px',borderRadius:9,background:'var(--teal)',color:'#000',border:'none',fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?.6:1}}>{saving?'Posting...':'Post Job'}</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {serviceJobs.length===0?(
+          <div style={{textAlign:'center',padding:'60px',color:'var(--text-dim)',fontSize:13}}>No jobs posted yet. Click Post Job to get started.</div>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {serviceJobs.map((job:any)=>{
+              const ss=SS[job.status]||SS.open,isExp=expanded===job.id
+              const pendingBids=(job.bids||[]).filter((b:any)=>b.status==='pending')
+              return(
+                <div key={job.id} style={{background:'var(--surface)',border:`1px solid ${isExp?'rgba(0,212,170,0.3)':'var(--border)'}`,borderRadius:12,overflow:'hidden'}}>
+                  <div style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} onClick={()=>setExpanded(isExp?null:job.id)}>
+                    <div style={{width:10,height:10,borderRadius:'50%',background:CAT_COLORS[job.category]||'#7fb3cc',flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3,flexWrap:'wrap' as const}}>
+                        <span style={{fontSize:13,fontWeight:700,color:'var(--text)'}}>{job.title}</span>
+                        <span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:ss.bg,color:ss.color}}>{ss.label}</span>
+                        {job.urgency==='urgent'&&<span style={{fontSize:10,fontWeight:700,color:'var(--red)'}}>⚡ Urgent</span>}
+                      </div>
+                      <div style={{fontSize:11,color:'var(--text-dim)'}}>{job.property?.name} · {CAT_LABELS[job.category]||job.category}{job.budget&&` · Budget: $${job.budget}`}</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                      {pendingBids.length>0&&<span style={{fontSize:11,fontWeight:700,color:'var(--amber)',background:'rgba(245,158,11,0.12)',padding:'2px 9px',borderRadius:10,border:'1px solid rgba(245,158,11,0.25)'}}>{pendingBids.length} bid{pendingBids.length>1?'s':''}</span>}
+                      {job.assignedTo&&<span style={{fontSize:11,color:'var(--green)'}}>→ {job.assignedTo.name}</span>}
+                      <span style={{color:'var(--text-dim)',fontSize:11}}>{isExp?'▲':'▼'}</span>
+                    </div>
+                  </div>
+                  {isExp&&(
+                    <div style={{borderTop:'1px solid var(--border)',padding:'14px 16px'}}>
+                      <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:12}}>{job.description}</div>
+                      <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:1,color:'var(--teal)',marginBottom:10}}>Bids ({(job.bids||[]).length})</div>
+                      {(job.bids||[]).length===0?<div style={{fontSize:12,color:'var(--text-dim)'}}>No bids yet.</div>:(
+                        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                          {(job.bids||[]).map((bid:any)=>{
+                            const isAcc=bid.status==='accepted',isRej=bid.status==='rejected'
+                            return(
+                              <div key={bid.id} style={{background:isAcc?'rgba(16,185,129,0.07)':'rgba(0,0,0,0.12)',border:`1px solid ${isAcc?'rgba(16,185,129,0.25)':isRej?'rgba(244,63,94,0.15)':'var(--border)'}`,borderRadius:8,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,opacity:isRej?.5:1}}>
+                                <div style={{width:34,height:34,borderRadius:'50%',background:'var(--teal-bg)',border:'1.5px solid var(--teal-border)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:700,color:'var(--teal)',flexShrink:0}}>{bid.provider?.name?.charAt(0)||'?'}</div>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{bid.provider?.name}</div>
+                                  <div style={{fontSize:11,color:'var(--text-dim)'}}>{bid.provider?.company||bid.provider?.email}{bid.estimatedDays&&` · ${bid.estimatedDays}d`}</div>
+                                  {bid.notes&&<div style={{fontSize:11,color:'var(--text-muted)',marginTop:3,fontStyle:'italic'}}>"{bid.notes}"</div>}
+                                </div>
+                                <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+                                  <span style={{fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:800,color:isAcc?'var(--green)':'var(--teal)'}}>${bid.amount?.toFixed(2)}</span>
+                                  {isAcc&&<span style={{fontSize:10,fontWeight:700,color:'var(--green)',background:'var(--green-bg)',padding:'2px 8px',borderRadius:10}}>✓ Accepted</span>}
+                                  {isRej&&<span style={{fontSize:10,color:'var(--red)'}}>Passed</span>}
+                                  {bid.status==='pending'&&job.status!=='awarded'&&(
+                                    <div style={{display:'flex',gap:6}}>
+                                      <button onClick={()=>decideBid(job.id,bid.id,'rejected')} disabled={acting===bid.id} style={{padding:'5px 12px',borderRadius:6,background:'var(--red-bg)',border:'1px solid rgba(244,63,94,0.2)',color:'var(--red)',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>Pass</button>
+                                      <button onClick={()=>decideBid(job.id,bid.id,'accepted')} disabled={acting===bid.id} style={{padding:'5px 12px',borderRadius:6,background:'var(--teal)',color:'#000',border:'none',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'Syne,sans-serif'}}>{acting===bid.id?'...':'Accept'}</button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── MANAGER: FIND PROVIDERS ───────────────────────────────────────────────
+  function ManagerFindProvidersPage(){
+    const [q,setQ]=React.useState('')
+    const [roleFilter,setRoleFilter]=React.useState('')
+    const [results,setResults]=React.useState<any[]>([])
+    const [loading,setLoading]=React.useState(false)
+    const [inviting,setInviting]=React.useState<string|null>(null)
+
+    const CAT_LABELS:Record<string,string>={plumbing:'Plumber',electrical:'Electrician',lawn:'Lawn Care',snow:'Snow Removal',handyman:'Handyman',pest:'Pest Control',hvac:'HVAC',painting:'Painting',roofing:'Roofing',cleaning:'Cleaning',other:'Other',cleaner:'Cleaner'}
+    const CAT_COLORS:Record<string,string>={plumbing:'#2196f3',electrical:'#ffb86c',lawn:'#00e5a0',snow:'#a78bfa',handyman:'#ff8fa3',pest:'#ff5370',hvac:'#5bb8ff',cleaning:'#00e6d2',other:'#7fb3cc',cleaner:'#00e6d2'}
+
+    const doSearch=React.useCallback(async()=>{
+      if(q.length<2){setResults([]);return}
+      setLoading(true)
+      const p=new URLSearchParams({q})
+      if(roleFilter)p.set('role',roleFilter)
+      const res=await fetch(`/api/users/search?${p}`)
+      setResults(await res.json())
+      setLoading(false)
+    },[q,roleFilter])
+
+    React.useEffect(()=>{const t=setTimeout(doSearch,350);return()=>clearTimeout(t)},[doSearch])
+
+    async function invite(userId:string,type:string){
+      setInviting(userId)
+      await fetch('/api/connections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({providerId:userId,type})})
+      setResults(r=>r.map((u:any)=>u.id===userId?{...u,connectionStatus:'pending'}:u))
+      setInviting(null)
+    }
+
+    const inp={background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'8px 12px',color:'var(--text)',fontFamily:'DM Sans,sans-serif',fontSize:13,outline:'none',width:'100%'}
+
+    return(
+      <div>
+        <h1 style={{fontFamily:'Syne,sans-serif',fontSize:26,fontWeight:700,color:'var(--text)',marginBottom:6}}>Find Providers</h1>
+        <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:24}}>Search for cleaners and service providers to connect with</p>
+        <div style={{display:'flex',gap:10,marginBottom:24}}>
+          <input style={{...inp,flex:1}} placeholder="Search by name, company or email..." value={q} onChange={e=>setQ(e.target.value)} onFocus={e=>(e.target.style.borderColor='var(--teal)')} onBlur={e=>(e.target.style.borderColor='var(--border)')}/>
+          <select style={{...inp,width:180}} value={roleFilter} onChange={e=>setRoleFilter(e.target.value)}>
+            <option value="">All roles</option>
+            <option value="cleaner">Cleaners</option>
+            <option value="provider">Service Providers</option>
+          </select>
+        </div>
+        {loading&&<div style={{color:'var(--text-dim)',fontSize:13}}>Searching...</div>}
+        {results.length>0&&(
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {results.map((u:any)=>{
+              const color=CAT_COLORS[u.serviceCategory||(u.role==='cleaner'?'cleaner':'other')]
+              return(
+                <div key={u.id} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:12}}>
+                  <div style={{width:44,height:44,borderRadius:'50%',background:`${color}20`,border:`2px solid ${color}40`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:700,color,flexShrink:0}}>{u.name?.charAt(0).toUpperCase()}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:'Syne,sans-serif',fontSize:14,fontWeight:700,color:'var(--text)'}}>{u.name}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)',marginTop:1}}>{u.company||u.email}</div>
+                    {u.serviceCategory&&<div style={{fontSize:11,color,marginTop:2,fontWeight:600}}>{CAT_LABELS[u.serviceCategory]||u.serviceCategory}</div>}
+                  </div>
+                  <div>
+                    {u.connectionStatus==='active'?<span style={{fontSize:12,color:'var(--green)',fontWeight:600}}>✓ Connected</span>
+                      :u.connectionStatus==='pending'?<span style={{fontSize:12,color:'var(--amber)',fontWeight:600}}>Pending</span>
+                      :<button onClick={()=>invite(u.id,u.role==='cleaner'?'cleaner':(u.serviceCategory||'other'))} disabled={inviting===u.id}
+                        style={{padding:'7px 18px',borderRadius:7,background:'var(--teal)',color:'#000',border:'none',fontFamily:'Syne,sans-serif',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                        {inviting===u.id?'...':'+ Invite'}
+                      </button>
+                    }
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {!loading&&q.length>=2&&results.length===0&&<div style={{color:'var(--text-dim)',fontSize:13,textAlign:'center',padding:'40px 0'}}>No users found for "{q}"</div>}
+        {q.length<2&&<div style={{color:'var(--text-dim)',fontSize:13,textAlign:'center',padding:'60px 0'}}>Type at least 2 characters to search for providers</div>}
+      </div>
+    )
+  }
+
+({onAdd}:{onAdd:(r:ColorRule)=>void}){
   const [keyword,setKeyword]=useState('')
   const [color,setColor]=useState(COLOR_PALETTE[0])
   const [open,setOpen]=useState(false)
