@@ -4,80 +4,41 @@ import { prisma } from '@/lib/prisma'
 
 const VERSION = '2026-03-10'
 
-async function gql(accessToken: string, query: string) {
-  const res = await fetch('https://api.getjobber.com/api/graphql', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'X-JOBBER-GRAPHQL-VERSION': VERSION,
-    },
-    body: JSON.stringify({ query }),
-  })
-  return res.json()
-}
-
 export async function GET() {
   try {
-    const accounts = await prisma.jobberAccount.findMany()
-    if (!accounts.length) return NextResponse.json({ error: 'No Jobber accounts connected' })
+    const account = await prisma.jobberAccount.findFirst()
+    if (!account) return NextResponse.json({ error: 'No Jobber account found' }, { status: 404 })
 
-    const account = accounts[0]
-    // Use the stored token directly — no expiry check
-    const accessToken = account.accessToken
-
-    const startAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
-    const endAt = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString()
-
-    const scheduledData = await gql(accessToken, `query {
-      scheduledItems(
-        first: 10
-        filter: {
-          occursWithin: { startAt: "${startAt}", endAt: "${endAt}" }
-        }
-      ) {
-        nodes {
-          ... on Visit {
-            __typename
-            id
-            title
-            startAt
-            endAt
-            client { name }
-            job {
-              jobNumber
-              title
-              property { address { street city province } }
+    // Try a basic GraphQL call
+    const res = await fetch('https://api.getjobber.com/api/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${account.accessToken}`,
+        'Content-Type': 'application/json',
+        'X-JOBBER-GRAPHQL-VERSION': VERSION,
+      },
+      body: JSON.stringify({
+        query: `query {
+          scheduledItems(
+            first: 5
+            filter: { occursWithin: { startAt: "${new Date().toISOString()}", endAt: "${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()}" } }
+          ) {
+            nodes {
+              ... on Visit { __typename id title startAt endAt }
+              ... on Event  { __typename id title startAt endAt }
             }
+            pageInfo { hasNextPage endCursor }
           }
-          ... on Event {
-            __typename
-            id
-            title
-            startAt
-            endAt
-            description
-          }
-          ... on Task {
-            __typename
-            id
-            title
-          }
-          ... on Assessment {
-            __typename
-            id
-            title
-            startAt
-            endAt
-          }
-        }
-        pageInfo { hasNextPage endCursor }
-      }
-    }`)
+        }`,
+      }),
+    })
+
+    const scheduledData = await res.json()
 
     return NextResponse.json({
       storedExpiry: account.expiresAt,
-      tokenIsExpired: new Date(account.expiresAt) < new Date(),
+      // FIX: expiresAt is nullable — guard before constructing Date
+      tokenIsExpired: account.expiresAt ? new Date(account.expiresAt) < new Date() : null,
       scheduledItems: scheduledData,
     })
   } catch (e) {
