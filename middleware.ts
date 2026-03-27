@@ -12,7 +12,10 @@ const PUBLIC_PATHS = [
   '/api/auth/logout',
   '/api/auth/gmail/callback',
   '/api/auth/jobber/callback',
-  '/api/quotes',          // booking form posts here without a session
+  '/api/quotes',           // booking form posts here without a session
+  '/api/stripe/checkout',  // called from booking form (cross-origin)
+  '/api/stripe/success',   // Stripe redirect after payment
+  '/api/stripe/cancel',    // Stripe redirect on cancel
   '/_next',
   '/favicon.ico',
 ]
