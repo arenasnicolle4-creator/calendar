@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   '/api/auth/logout',
   '/api/auth/gmail/callback',
   '/api/auth/jobber/callback',
+  '/api/quotes',          // booking form posts here without a session
   '/_next',
   '/favicon.ico',
 ]
