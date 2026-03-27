@@ -48,12 +48,15 @@ export async function POST(req: Request) {
       // Pricing
       price_breakdown, subtotal, discount, discount_label, total_price,
       // Mode
-      submission_type, // 'quote' | 'instant_book'
+      submission_type,
       instant_book_savings,
+      instant_book_final_price,
+      instant_book_date,
+      instant_book_time,
     } = body
 
     if (!email || !first_name || !total_price) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: CORS })
     }
 
     // Upsert client by email
@@ -73,12 +76,21 @@ export async function POST(req: Request) {
       })
     }
 
-    // Parse total amount
-    const totalAmount = parseFloat(total_price?.replace('$', '') || '0')
-    const subtotalAmount = parseFloat(subtotal?.replace('$', '') || '0')
-    const discountAmount = parseFloat((discount || '0').replace(/[$-]/g, '') || '0')
-
     const isInstantBook = submission_type === 'instant_book'
+    const rawTotal   = parseFloat(total_price?.replace('$', '') || '0')
+    const savings    = instant_book_savings ? parseFloat(String(instant_book_savings)) : 0
+    // Final price = post-frequency-discount total minus 10% instant book savings
+    const finalTotal = isInstantBook ? rawTotal * 0.90 : rawTotal
+    const subtotalAmount  = parseFloat(subtotal?.replace('$', '') || '0')
+    const discountAmount  = parseFloat((discount || '0').replace(/[$-]/g, '') || '0')
+
+    // Build booking date from instant book selections
+    let bookingDate: Date | null = null
+    if (isInstantBook && instant_book_date) {
+      try {
+        bookingDate = new Date(`${instant_book_date}T12:00:00`)
+      } catch {}
+    }
 
     const quote = await prisma.quote.create({
       data: {
@@ -88,29 +100,27 @@ export async function POST(req: Request) {
         serviceType:    service_type || '',
         frequency:      frequency    || '',
         address:        [address, address2, city, state, zip].filter(Boolean).join(', '),
-        // House
         sqftRange:      sqft_range      || null,
         bedrooms:       bedrooms ? parseInt(bedrooms) : null,
         bathrooms:      house_bathrooms ? parseFloat(house_bathrooms) : (airbnb_bathrooms ? parseFloat(airbnb_bathrooms) : null),
-        // Airbnb
         airbnbSqft:     airbnb_sqft     || null,
         airbnbLaundry:  airbnb_laundry  || null,
         airbnbBeds:     airbnb_beds     ? parseInt(airbnb_beds)  : null,
         airbnbUnits:    airbnb_units    || null,
-        // Add-ons & notes
         addonsList:     addons_list     || '',
         keyAreas:       key_areas       || '',
         additionalNotes:additional_notes|| '',
-        preferredDate1: preferred_date_1 && preferred_date_1 !== 'Not specified' ? new Date(preferred_date_1) : null,
-        preferredDate2: preferred_date_2 && preferred_date_2 !== 'Not specified' ? new Date(preferred_date_2) : null,
-        preferredTimes: preferred_times || '',
-        // Pricing
+        // For instant book: preferredDate1 = the confirmed booking date
+        preferredDate1: isInstantBook && bookingDate ? bookingDate
+                        : (preferred_date_1 && preferred_date_1 !== 'Not specified' ? new Date(preferred_date_1) : null),
+        preferredDate2: !isInstantBook && preferred_date_2 && preferred_date_2 !== 'Not specified' ? new Date(preferred_date_2) : null,
+        preferredTimes: isInstantBook ? (instant_book_time || '') : (preferred_times || ''),
         priceBreakdown: price_breakdown || '',
         subtotal:       subtotalAmount,
         discount:       discountAmount,
         discountLabel:  discount_label  || '',
-        totalPrice:     totalAmount,
-        instantBookSavings: instant_book_savings ? parseFloat(String(instant_book_savings)) : null,
+        totalPrice:     finalTotal,
+        instantBookSavings: isInstantBook ? rawTotal * 0.10 : null,
       },
     })
 
