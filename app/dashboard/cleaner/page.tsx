@@ -27,7 +27,7 @@ interface Job {
   checkoutTime: string; platform: string; checkinTime: string | null
 }
 
-type Page = 'dashboard' | 'quotes' | 'clients' | 'calendar' | 'integrations' | 'settings'
+type Page = 'dashboard' | 'quotes' | 'clients' | 'calendar' | 'integrations' | 'settings' | 'quote-detail'
 
 // ── COLOR THEME ─────────────────────────────────────────────────────────────
 const D = {
@@ -105,7 +105,8 @@ export default function CleanerDashboard() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
-  const [selectedQuote, setSelectedQuote] = useState<Quote|null>(null)
+  const [activeQuoteId, setActiveQuoteId] = useState<string|null>(null)
+  const [selectedJob, setSelectedJob] = useState<Job|null>(null)
 
   const T = dark ? D : L
 
@@ -130,8 +131,18 @@ export default function CleanerDashboard() {
 
   async function updateStatus(id:string,status:string){
     await fetch(`/api/quotes/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})})
-    load()
-    setSelectedQuote(prev=>prev?.id===id?{...prev,status}:prev)
+    await load()
+  }
+
+  async function deleteQuote(id:string){
+    await fetch(`/api/quotes/${id}`,{method:'DELETE'})
+    if(activeQuoteId===id){setActiveQuoteId(null);setPage('quotes')}
+    await load()
+  }
+
+  function openQuoteDetail(q:Quote){
+    setActiveQuoteId(q.id)
+    setPage('quote-detail')
   }
 
   async function logout(){await fetch('/api/auth/logout',{method:'POST'});router.push('/login')}
@@ -152,15 +163,104 @@ export default function CleanerDashboard() {
   const card = {background:T.card,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:dark?'0 8px 30px rgba(0,0,0,0.4)':undefined}
   const inp  = {width:'100%',background:T.surf,border:`1px solid ${T.border}`,borderRadius:9,padding:'10px 13px',color:T.text,fontFamily:'Inter,sans-serif',fontSize:13,outline:'none'} as React.CSSProperties
 
-  // ── QUOTE MODAL ────────────────────────────────────────────────────────────
-  function QuoteModal(){
-    if(!selectedQuote)return null
-    const q=selectedQuote
-    const sc=STATUS[q.status]||STATUS.pending
-    const isIB=q.submissionType==='instant_book'
-    const [sending,setSending]=useState(false)
-    const [sent,setSent]=useState(false)
-    const [sendErr,setSendErr]=useState('')
+  // ── QUOTE DETAIL PAGE ─────────────────────────────────────────────────────
+  function QuoteDetailPage(){
+    const quote = quotes.find(q=>q.id===activeQuoteId)
+    if(!quote) return <div style={{padding:40,color:T.dim,textAlign:'center'}}>Quote not found. <button onClick={()=>setPage('quotes')} style={{color:T.cyan,background:'none',border:'none',cursor:'pointer',fontWeight:700,fontFamily:'Inter,sans-serif'}}>Back to Quotes</button></div>
+
+    const q = quote
+    const sc = STATUS[q.status]||STATUS.pending
+    const isIB = q.submissionType==='instant_book'
+
+    // Editable state
+    const [editing, setEditing] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+    const [sending, setSending] = useState(false)
+    const [sent, setSent] = useState(false)
+    const [sendErr, setSendErr] = useState('')
+    const [deleting, setDeleting] = useState(false)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+
+    // Editable fields
+    const [editTotal, setEditTotal] = useState(q.totalPrice.toString())
+    const [editSubtotal, setEditSubtotal] = useState(q.subtotal.toString())
+    const [editDiscount, setEditDiscount] = useState(q.discount.toString())
+    const [editDiscountLabel, setEditDiscountLabel] = useState(q.discountLabel)
+    const [editBreakdown, setEditBreakdown] = useState(q.priceBreakdown)
+    const [editService, setEditService] = useState(q.serviceType)
+    const [editFrequency, setEditFrequency] = useState(q.frequency)
+    const [editAddress, setEditAddress] = useState(q.address)
+    const [editSqft, setEditSqft] = useState(q.sqftRange||'')
+    const [editBeds, setEditBeds] = useState(q.bedrooms?.toString()||'')
+    const [editBaths, setEditBaths] = useState(q.bathrooms?.toString()||'')
+    const [editAddons, setEditAddons] = useState(q.addonsList)
+    const [editNotes, setEditNotes] = useState(q.additionalNotes)
+    const [editKeyAreas, setEditKeyAreas] = useState(q.keyAreas)
+
+    // Parse price breakdown into editable line items
+    const [lineItems, setLineItems] = useState<{label:string;amount:string}[]>(()=>{
+      const lines = q.priceBreakdown.split('\n').filter(Boolean)
+      return lines.map(line => {
+        const parts = line.split('..')
+        const label = parts[0]?.trim() || line
+        const amountMatch = line.match(/\$[\d,.]+/)
+        return { label, amount: amountMatch ? amountMatch[0].replace('$','') : '0' }
+      })
+    })
+
+    function addLineItem(){
+      setLineItems([...lineItems, {label:'New Item', amount:'0'}])
+    }
+    function removeLineItem(idx:number){
+      setLineItems(lineItems.filter((_,i)=>i!==idx))
+    }
+    function updateLineItem(idx:number, field:'label'|'amount', value:string){
+      const updated = [...lineItems]
+      updated[idx] = {...updated[idx], [field]: value}
+      setLineItems(updated)
+      // Recalculate subtotal from line items
+      const newSubtotal = updated.reduce((sum,li)=>sum + (parseFloat(li.amount)||0), 0)
+      setEditSubtotal(newSubtotal.toFixed(2))
+      const disc = parseFloat(editDiscount)||0
+      setEditTotal((newSubtotal - disc).toFixed(2))
+    }
+
+    function recalcTotal(){
+      const sub = parseFloat(editSubtotal)||0
+      const disc = parseFloat(editDiscount)||0
+      setEditTotal(Math.max(0, sub - disc).toFixed(2))
+    }
+
+    async function saveChanges(){
+      setSaving(true)
+      const breakdown = lineItems.map(li => `${li.label}...$${parseFloat(li.amount||'0').toFixed(2)}`).join('\n')
+      await fetch(`/api/quotes/${q.id}`,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          totalPrice: parseFloat(editTotal),
+          subtotal: parseFloat(editSubtotal),
+          discount: parseFloat(editDiscount),
+          discountLabel: editDiscountLabel,
+          priceBreakdown: breakdown,
+          serviceType: editService,
+          frequency: editFrequency,
+          address: editAddress,
+          sqftRange: editSqft||null,
+          bedrooms: editBeds ? parseInt(editBeds) : null,
+          bathrooms: editBaths ? parseFloat(editBaths) : null,
+          addonsList: editAddons,
+          additionalNotes: editNotes,
+          keyAreas: editKeyAreas,
+        })
+      })
+      await load()
+      setSaving(false)
+      setSaved(true)
+      setEditing(false)
+      setTimeout(()=>setSaved(false), 2500)
+    }
 
     async function sendEmail(){
       setSending(true);setSendErr('')
@@ -172,125 +272,298 @@ export default function CleanerDashboard() {
       }catch(e){setSendErr(String(e))}
       setSending(false)
     }
-    const bdBg=dark?'rgba(2,8,30,0.98)':'#ffffff'
-    const modalBorder=dark?`1px solid ${D.borderB}`:`1px solid ${L.borderB}`
-    const sec=(title:string,icon:string,children:React.ReactNode)=>(
-      <div style={{marginBottom:18}}>
-        <div style={{fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase' as const,color:T.cyan,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
-          <span>{icon}</span>{title}
-        </div>
-        <div style={{background:dark?'rgba(255,255,255,0.03)':L.cyanBg,borderRadius:10,padding:'12px',border:`1px solid ${T.border}`}}>
-          {children}
-        </div>
+
+    async function handleDelete(){
+      setDeleting(true)
+      await deleteQuote(q.id)
+      setDeleting(false)
+    }
+
+    const fieldStyle = editing ? {
+      ...inp,
+      background: dark ? 'rgba(255,255,255,0.08)' : '#f0f9ff',
+      border: `1px solid ${T.borderB}`,
+    } as React.CSSProperties : {
+      ...inp,
+      background: 'transparent',
+      border: `1px solid transparent`,
+      cursor: 'default',
+      padding: '10px 0',
+    } as React.CSSProperties
+
+    const sectionHeader = (title:string,icon:string) => (
+      <div style={{fontSize:11,fontWeight:800,letterSpacing:1.5,textTransform:'uppercase' as const,color:T.cyan,marginBottom:12,display:'flex',alignItems:'center',gap:6,paddingBottom:8,borderBottom:`1px solid ${T.border}`}}>
+        <span style={{fontSize:14}}>{icon}</span>{title}
       </div>
     )
-    const row=(label:string,value:string)=>(
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'5px 0',borderBottom:`1px solid ${T.border}`,gap:10}}>
-        <span style={{fontSize:11,color:T.dim,fontWeight:600,flexShrink:0,minWidth:110}}>{label}</span>
-        <span style={{fontSize:12,color:T.text,fontWeight:600,textAlign:'right' as const}}>{value}</span>
-      </div>
-    )
+
     return(
-      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setSelectedQuote(null)}>
-        <div style={{background:bdBg,border:modalBorder,borderRadius:22,width:'100%',maxWidth:580,maxHeight:'90vh',overflowY:'auto',boxShadow:dark?'0 30px 80px rgba(0,0,0,0.7)':'0 20px 60px rgba(0,0,0,0.15)'}} onClick={e=>e.stopPropagation()}>
-          {/* Header */}
-          <div style={{padding:'20px 22px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-            <div>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap' as const}}>
-                <span style={{fontSize:9,fontWeight:800,padding:'3px 9px',borderRadius:20,background:isIB?D.greenBg:D.cyanBg,color:isIB?D.green:D.cyan,border:`1px solid ${isIB?'rgba(16,185,129,0.3)':'rgba(93,235,241,0.3)'}`,letterSpacing:.5,textTransform:'uppercase' as const}}>
-                  {isIB?'⚡ Instant Book':'📋 Quote Request'}
-                </span>
-                <span style={{fontSize:9,fontWeight:800,padding:'3px 9px',borderRadius:20,color:sc.color,border:`1px solid ${sc.color}40`,background:dark?'rgba(255,255,255,0.05)':L.surf}}>{sc.label}</span>
-              </div>
-              <div style={{fontFamily:'Inter,sans-serif',fontSize:18,fontWeight:900,color:T.text}}>{q.client.firstName} {q.client.lastName}</div>
-              <div style={{fontSize:12,color:T.muted,marginTop:2}}>{fmtDate(q.createdAt)} · {q.serviceType}</div>
+      <div style={{maxWidth:960,margin:'0 auto'}}>
+        {/* Breadcrumb + Actions Bar */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <button onClick={()=>setPage('quotes')} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.surf,color:T.muted,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'Inter,sans-serif'}}>
+              ← Quotes
+            </button>
+            <span style={{color:T.dim,fontSize:12}}>/</span>
+            <span style={{fontSize:13,fontWeight:700,color:T.text}}>{q.client.firstName} {q.client.lastName}</span>
+            <span style={{fontSize:9,fontWeight:800,padding:'3px 9px',borderRadius:20,color:sc.color,border:`1px solid ${sc.color}40`,background:dark?'rgba(255,255,255,0.05)':L.surf}}>{sc.label}</span>
+            {isIB&&<span style={{fontSize:9,fontWeight:800,padding:'3px 9px',borderRadius:20,background:D.greenBg,color:D.green,border:'1px solid rgba(16,185,129,0.3)'}}>⚡ Instant Book</span>}
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            {saved&&<span style={{fontSize:12,color:D.green,fontWeight:700,display:'flex',alignItems:'center',gap:4}}>✓ Saved</span>}
+            {!editing ? (
+              <button onClick={()=>setEditing(true)} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${T.borderB}`,background:T.cyanBg,color:T.cyan,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'Inter,sans-serif'}}>
+                ✎ Edit Quote
+              </button>
+            ) : (
+              <>
+                <button onClick={()=>setEditing(false)} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'Inter,sans-serif'}}>
+                  Cancel
+                </button>
+                <button onClick={saveChanges} disabled={saving} style={{padding:'8px 18px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#0ea5e9,#0284c7)',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'Inter,sans-serif',boxShadow:'0 4px 14px rgba(14,165,233,0.35)',opacity:saving?.7:1}}>
+                  {saving ? 'Saving...' : '✓ Save Changes'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Header card */}
+        <div style={{...card,padding:'22px 26px',marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <div style={{width:52,height:52,borderRadius:'50%',background:T.cyanBg,border:`2px solid ${T.borderB}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:900,color:T.cyan,flexShrink:0}}>
+              {q.client.firstName.charAt(0).toUpperCase()}
             </div>
-            <div style={{textAlign:'right' as const,flexShrink:0}}>
-              <div style={{fontFamily:'Inter,sans-serif',fontSize:26,fontWeight:900,color:isIB?D.green:T.cyan}}>{fmtMoney(q.totalPrice)}</div>
-              {q.instantBookSavings!=null&&q.instantBookSavings>0&&<div style={{fontSize:11,color:D.green,fontWeight:700}}>🎉 Saving {fmtMoney(q.instantBookSavings)}/visit</div>}
+            <div>
+              <div style={{fontFamily:'Inter,sans-serif',fontSize:20,fontWeight:900,color:T.text}}>{q.client.firstName} {q.client.lastName}</div>
+              <div style={{fontSize:12,color:T.muted,marginTop:2}}>{q.client.email} · {q.client.phone||'No phone'}</div>
+              <div style={{fontSize:11,color:T.dim,marginTop:1}}>Submitted {fmtDate(q.createdAt)} · {q.serviceType}</div>
             </div>
           </div>
-          <div style={{padding:'18px 22px'}}>
-            {sec('Client','👤',<>
-              {row('Name',`${q.client.firstName} ${q.client.lastName}`)}
-              {row('Email',q.client.email)}
-              {row('Phone',q.client.phone||'—')}
-              {row('Address',[q.client.address,q.client.city,q.client.state,q.client.zip].filter(Boolean).join(', ')||'—')}
-            </>)}
-            {sec('Service Details','🏠',<>
-              {row('Service',q.serviceType)}
-              {row('Frequency',q.frequency)}
-              {row('Address',q.address||'—')}
-              {q.sqftRange&&row('Sq Ft',parseInt(q.sqftRange).toLocaleString()+' sq ft')}
-              {q.bedrooms!=null&&row('Bedrooms',String(q.bedrooms))}
-              {q.bathrooms!=null&&row('Bathrooms',String(q.bathrooms))}
-              {q.airbnbSqft&&row('Airbnb Sq Ft',q.airbnbSqft)}
-              {q.airbnbBeds!=null&&row('Beds',String(q.airbnbBeds))}
-              {q.airbnbUnits&&row('Units',q.airbnbUnits)}
-            </>)}
-            {sec('Scheduling','📅',<>
-              {row('Preferred Date 1',fmtDate(q.preferredDate1))}
-              {row('Preferred Date 2',fmtDate(q.preferredDate2))}
-              {row('Preferred Times',q.preferredTimes||'—')}
-            </>)}
-            {sec('Pricing','💰',<>
-              {q.priceBreakdown.split('\n').filter(Boolean).map((line,i)=>(
-                <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.border}`,fontSize:12}}>
-                  <span style={{color:T.muted}}>{line.split('..')[0]?.trim()}</span>
-                  <span style={{color:T.text,fontWeight:700}}>{line.includes('$')?'$'+line.split('$')[1]:''}</span>
-                </div>
-              ))}
-              {q.discount>0&&(
-                <div style={{display:'flex',justifyContent:'space-between',padding:'7px 0',marginTop:4}}>
-                  <span style={{color:D.green,fontWeight:700,fontSize:12}}>✓ {q.discountLabel}</span>
-                  <span style={{color:D.green,fontWeight:800,fontSize:12}}>-{fmtMoney(q.discount)}</span>
-                </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontFamily:'Inter,sans-serif',fontSize:32,fontWeight:900,color:isIB?D.green:T.cyan,lineHeight:1}}>{fmtMoney(parseFloat(editTotal)||q.totalPrice)}</div>
+            {q.instantBookSavings!=null&&q.instantBookSavings>0&&<div style={{fontSize:12,color:D.green,fontWeight:700,marginTop:3}}>Saving {fmtMoney(q.instantBookSavings)}/visit</div>}
+            <div style={{fontSize:11,color:T.dim,marginTop:2}}>per visit</div>
+          </div>
+        </div>
+
+        {/* Main content grid */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:16,alignItems:'start'}}>
+          {/* Left column */}
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+            {/* Pricing / Line Items */}
+            <div style={{...card,padding:'22px'}}>
+              {sectionHeader('Pricing & Line Items','💰')}
+              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                {lineItems.map((li,idx)=>(
+                  <div key={idx} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${T.border}`}}>
+                    {editing ? (
+                      <>
+                        <input value={li.label} onChange={e=>updateLineItem(idx,'label',e.target.value)} style={{...fieldStyle,flex:1}} />
+                        <div style={{display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
+                          <span style={{color:T.muted,fontSize:13,fontWeight:700}}>$</span>
+                          <input value={li.amount} onChange={e=>updateLineItem(idx,'amount',e.target.value)} style={{...fieldStyle,width:80,textAlign:'right'}} type="number" step="0.01" />
+                        </div>
+                        <button onClick={()=>removeLineItem(idx)} style={{width:26,height:26,borderRadius:6,border:`1px solid rgba(239,68,68,0.3)`,background:D.redBg,color:D.red,cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{flex:1,fontSize:13,color:T.muted,fontWeight:500}}>{li.label}</span>
+                        <span style={{fontSize:13,color:T.text,fontWeight:700}}>${parseFloat(li.amount||'0').toFixed(2)}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {editing&&(
+                <button onClick={addLineItem} style={{marginTop:10,padding:'7px 14px',borderRadius:7,border:`1px dashed ${T.borderB}`,background:'transparent',color:T.cyan,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'Inter,sans-serif',width:'100%'}}>
+                  + Add Line Item
+                </button>
               )}
+              {/* Discount */}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',marginTop:6,borderTop:`1px solid ${T.border}`}}>
+                {editing ? (
+                  <>
+                    <input value={editDiscountLabel} onChange={e=>setEditDiscountLabel(e.target.value)} placeholder="Discount label" style={{...fieldStyle,flex:1,fontSize:12,color:D.green}} />
+                    <div style={{display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
+                      <span style={{color:D.green,fontSize:12,fontWeight:700}}>-$</span>
+                      <input value={editDiscount} onChange={e=>{setEditDiscount(e.target.value);}} onBlur={recalcTotal} style={{...fieldStyle,width:80,textAlign:'right',color:D.green}} type="number" step="0.01" />
+                    </div>
+                  </>
+                ) : (
+                  q.discount > 0 && <>
+                    <span style={{fontSize:12,color:D.green,fontWeight:700}}>✓ {q.discountLabel}</span>
+                    <span style={{fontSize:12,color:D.green,fontWeight:800}}>-{fmtMoney(q.discount)}</span>
+                  </>
+                )}
+              </div>
               {q.instantBookSavings!=null&&q.instantBookSavings>0&&(
-                <div style={{display:'flex',justifyContent:'space-between',padding:'6px 10px',background:D.greenBg,borderRadius:8,marginTop:4,border:'1px solid rgba(16,185,129,0.3)'}}>
-                  <span style={{color:D.green,fontWeight:700,fontSize:12}}>⚡ Instant Book (10% × 5 cleans)</span>
+                <div style={{display:'flex',justifyContent:'space-between',padding:'8px 12px',background:D.greenBg,borderRadius:8,marginTop:4,border:'1px solid rgba(16,185,129,0.3)'}}>
+                  <span style={{color:D.green,fontWeight:700,fontSize:12}}>⚡ Instant Book Discount (10%)</span>
                   <span style={{color:D.green,fontWeight:800,fontSize:12}}>-{fmtMoney(q.instantBookSavings)}/visit</span>
                 </div>
               )}
-              <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderTop:`2px solid ${T.borderB}`,marginTop:8}}>
-                <span style={{color:T.text,fontWeight:800,fontSize:14}}>Total per visit</span>
-                <span style={{color:isIB?D.green:T.cyan,fontWeight:900,fontSize:18}}>{fmtMoney(q.totalPrice)}</span>
+              {/* Total */}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 0',borderTop:`2px solid ${T.borderB}`,marginTop:10}}>
+                <span style={{color:T.text,fontWeight:800,fontSize:15}}>Total per visit</span>
+                {editing ? (
+                  <div style={{display:'flex',alignItems:'center',gap:2}}>
+                    <span style={{color:isIB?D.green:T.cyan,fontSize:20,fontWeight:900}}>$</span>
+                    <input value={editTotal} onChange={e=>setEditTotal(e.target.value)} style={{...fieldStyle,width:100,textAlign:'right',fontSize:20,fontWeight:900,color:isIB?D.green:T.cyan}} type="number" step="0.01" />
+                  </div>
+                ) : (
+                  <span style={{color:isIB?D.green:T.cyan,fontWeight:900,fontSize:22}}>{fmtMoney(q.totalPrice)}</span>
+                )}
               </div>
-            </>)}
-            {q.addonsList&&q.addonsList!=='None selected'&&sec('Add-ons','✨',
-              <div style={{color:T.muted,fontSize:12,lineHeight:1.8}}>{q.addonsList}</div>
-            )}
-            {(q.keyAreas||q.additionalNotes)&&sec('Notes','📝',<>
-              {q.keyAreas&&row('Key Areas',q.keyAreas)}
-              {q.additionalNotes&&row('Notes',q.additionalNotes)}
-            </>)}
+            </div>
+
+            {/* Service Details */}
+            <div style={{...card,padding:'22px'}}>
+              {sectionHeader('Service Details','🏠')}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                {[
+                  {label:'Service Type',value:editService,setter:setEditService,key:'service'},
+                  {label:'Frequency',value:editFrequency,setter:setEditFrequency,key:'freq'},
+                  {label:'Square Footage',value:editSqft,setter:setEditSqft,key:'sqft'},
+                  {label:'Bedrooms',value:editBeds,setter:setEditBeds,key:'beds'},
+                  {label:'Bathrooms',value:editBaths,setter:setEditBaths,key:'baths'},
+                ].map(f=>(
+                  <div key={f.key}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.label}</div>
+                    {editing ? (
+                      <input value={f.value} onChange={e=>f.setter(e.target.value)} style={fieldStyle} />
+                    ) : (
+                      <div style={{fontSize:13,fontWeight:600,color:T.text,padding:'10px 0'}}>{f.value||'—'}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Property Address</div>
+                {editing ? (
+                  <input value={editAddress} onChange={e=>setEditAddress(e.target.value)} style={fieldStyle} />
+                ) : (
+                  <div style={{fontSize:13,fontWeight:600,color:T.text,padding:'10px 0'}}>{q.address||'—'}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Add-ons & Notes */}
+            <div style={{...card,padding:'22px'}}>
+              {sectionHeader('Add-ons & Notes','📝')}
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Add-ons</div>
+                {editing ? (
+                  <textarea value={editAddons} onChange={e=>setEditAddons(e.target.value)} rows={3} style={{...fieldStyle,resize:'vertical'}} />
+                ) : (
+                  <div style={{fontSize:13,color:T.muted,lineHeight:1.6,padding:'6px 0'}}>{q.addonsList&&q.addonsList!=='None selected' ? q.addonsList : '—'}</div>
+                )}
+              </div>
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Key Areas</div>
+                {editing ? (
+                  <textarea value={editKeyAreas} onChange={e=>setEditKeyAreas(e.target.value)} rows={2} style={{...fieldStyle,resize:'vertical'}} />
+                ) : (
+                  <div style={{fontSize:13,color:T.muted,lineHeight:1.6,padding:'6px 0'}}>{q.keyAreas||'—'}</div>
+                )}
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Additional Notes</div>
+                {editing ? (
+                  <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} rows={3} style={{...fieldStyle,resize:'vertical'}} />
+                ) : (
+                  <div style={{fontSize:13,color:T.muted,lineHeight:1.6,padding:'6px 0'}}>{q.additionalNotes||'—'}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right column */}
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+            {/* Client Info */}
+            <div style={{...card,padding:'22px'}}>
+              {sectionHeader('Client','👤')}
+              {[
+                {l:'Name',v:`${q.client.firstName} ${q.client.lastName}`},
+                {l:'Email',v:q.client.email},
+                {l:'Phone',v:q.client.phone||'—'},
+                {l:'Address',v:[q.client.address,q.client.city,q.client.state,q.client.zip].filter(Boolean).join(', ')||'—'},
+                {l:'Client Since',v:fmtDate(q.client.createdAt)},
+              ].map(f=>(
+                <div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${T.border}`,gap:8}}>
+                  <span style={{fontSize:11,color:T.dim,fontWeight:600,flexShrink:0}}>{f.l}</span>
+                  <span style={{fontSize:12,color:T.text,fontWeight:600,textAlign:'right'}}>{f.v}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Scheduling */}
+            <div style={{...card,padding:'22px'}}>
+              {sectionHeader('Scheduling','📅')}
+              {[
+                {l:'Preferred Date 1',v:fmtDate(q.preferredDate1)},
+                {l:'Preferred Date 2',v:fmtDate(q.preferredDate2)},
+                {l:'Preferred Times',v:q.preferredTimes||'—'},
+              ].map(f=>(
+                <div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${T.border}`,gap:8}}>
+                  <span style={{fontSize:11,color:T.dim,fontWeight:600,flexShrink:0}}>{f.l}</span>
+                  <span style={{fontSize:12,color:T.text,fontWeight:600,textAlign:'right'}}>{f.v}</span>
+                </div>
+              ))}
+            </div>
+
             {/* Actions */}
-            <div style={{display:'flex',gap:8,marginTop:18,flexWrap:'wrap' as const}}>
-              {/* Send quote email button */}
-              {!isIB && (
-                <button onClick={sendEmail} disabled={sending||sent} style={{width:'100%',padding:'12px',borderRadius:10,background:sent?D.greenBg:dark?'linear-gradient(135deg,#0ea5e9,#0284c7)':'linear-gradient(135deg,#0ea5e9,#0284c7)',color:'#fff',border:'none',fontSize:13,fontWeight:800,cursor:sent?'default':'pointer',fontFamily:'Inter,sans-serif',marginBottom:8,boxShadow:sent?'none':'0 6px 20px rgba(14,165,233,0.35)',opacity:sending?.7:1}}>
-                  {sent ? '✓ Quote Email Sent!' : sending ? 'Sending...' : '✉ Send Quote to Client'}
-                </button>
-              )}
-              {sendErr&&<div style={{width:'100%',padding:'8px 12px',borderRadius:8,background:D.redBg,color:D.red,fontSize:12,border:'1px solid rgba(239,68,68,0.3)',marginBottom:4}}>{sendErr}</div>}
-              {q.status==='pending'&&(
-                <button onClick={()=>updateStatus(q.id,'reviewed')} style={{flex:1,padding:'11px',borderRadius:10,background:T.cyanBg,border:`1px solid ${T.borderB}`,color:T.cyan,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>Mark Reviewed</button>
-              )}
-              {['pending','reviewed'].includes(q.status)&&(
-                <button onClick={()=>updateStatus(q.id,'booked')} style={{flex:2,padding:'11px',borderRadius:10,background:'linear-gradient(135deg,#10b981,#059669)',color:'#fff',border:'none',fontSize:12,fontWeight:800,cursor:'pointer',fontFamily:'Inter,sans-serif',boxShadow:'0 6px 20px rgba(16,185,129,0.3)'}}>
-                  ✓ Confirm Booking
-                </button>
-              )}
-              {q.status==='booked'&&(
-                <button onClick={()=>updateStatus(q.id,'completed')} style={{flex:2,padding:'11px',borderRadius:10,background:'linear-gradient(135deg,#7c3aed,#6d28d9)',color:'#fff',border:'none',fontSize:12,fontWeight:800,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>
-                  Mark Completed
-                </button>
-              )}
-              {q.status!=='cancelled'&&(
-                <button onClick={()=>updateStatus(q.id,'cancelled')} style={{padding:'11px 14px',borderRadius:10,background:D.redBg,border:'1px solid rgba(239,68,68,0.3)',color:D.red,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>
-                  Cancel
-                </button>
-              )}
+            <div style={{...card,padding:'22px'}}>
+              {sectionHeader('Actions','⚡')}
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {/* Send quote email */}
+                {!isIB && (
+                  <button onClick={sendEmail} disabled={sending||sent} style={{width:'100%',padding:'12px',borderRadius:10,background:sent?D.greenBg:dark?'linear-gradient(135deg,#0ea5e9,#0284c7)':'linear-gradient(135deg,#0ea5e9,#0284c7)',color:'#fff',border:sent?`1px solid rgba(16,185,129,0.3)`:'none',fontSize:13,fontWeight:800,cursor:sent?'default':'pointer',fontFamily:'Inter,sans-serif',boxShadow:sent?'none':'0 6px 20px rgba(14,165,233,0.35)',opacity:sending?.7:1}}>
+                    {sent ? '✓ Quote Email Sent!' : sending ? 'Sending...' : '✉ Send Quote to Client'}
+                  </button>
+                )}
+                {sendErr&&<div style={{padding:'8px 12px',borderRadius:8,background:D.redBg,color:D.red,fontSize:12,border:'1px solid rgba(239,68,68,0.3)'}}>{sendErr}</div>}
+
+                {/* Status actions */}
+                {q.status==='pending'&&(
+                  <button onClick={()=>updateStatus(q.id,'reviewed')} style={{width:'100%',padding:'11px',borderRadius:10,background:T.cyanBg,border:`1px solid ${T.borderB}`,color:T.cyan,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>Mark Reviewed</button>
+                )}
+                {['pending','reviewed'].includes(q.status)&&(
+                  <button onClick={()=>updateStatus(q.id,'booked')} style={{width:'100%',padding:'11px',borderRadius:10,background:'linear-gradient(135deg,#10b981,#059669)',color:'#fff',border:'none',fontSize:12,fontWeight:800,cursor:'pointer',fontFamily:'Inter,sans-serif',boxShadow:'0 6px 20px rgba(16,185,129,0.3)'}}>
+                    ✓ Confirm Booking
+                  </button>
+                )}
+                {q.status==='booked'&&(
+                  <button onClick={()=>updateStatus(q.id,'completed')} style={{width:'100%',padding:'11px',borderRadius:10,background:'linear-gradient(135deg,#7c3aed,#6d28d9)',color:'#fff',border:'none',fontSize:12,fontWeight:800,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>
+                    Mark Completed
+                  </button>
+                )}
+                {q.status!=='cancelled'&&(
+                  <button onClick={()=>updateStatus(q.id,'cancelled')} style={{width:'100%',padding:'11px',borderRadius:10,background:D.redBg,border:'1px solid rgba(239,68,68,0.3)',color:D.red,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>
+                    Cancel Quote
+                  </button>
+                )}
+
+                {/* Delete */}
+                <div style={{borderTop:`1px solid ${T.border}`,paddingTop:12,marginTop:4}}>
+                  {!confirmDelete ? (
+                    <button onClick={()=>setConfirmDelete(true)} style={{width:'100%',padding:'10px',borderRadius:8,border:`1px solid rgba(239,68,68,0.2)`,background:'transparent',color:D.red,fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:'Inter,sans-serif',opacity:0.7}}>
+                      🗑 Delete Quote
+                    </button>
+                  ) : (
+                    <div style={{background:D.redBg,borderRadius:10,padding:'14px',border:'1px solid rgba(239,68,68,0.3)'}}>
+                      <div style={{fontSize:12,fontWeight:700,color:D.red,marginBottom:8}}>Delete this quote permanently?</div>
+                      <div style={{display:'flex',gap:8}}>
+                        <button onClick={()=>setConfirmDelete(false)} style={{flex:1,padding:'8px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'Inter,sans-serif'}}>Cancel</button>
+                        <button onClick={handleDelete} disabled={deleting} style={{flex:1,padding:'8px',borderRadius:7,border:'none',background:'#ef4444',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'Inter,sans-serif',opacity:deleting?.6:1}}>
+                          {deleting?'Deleting...':'Yes, Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -359,7 +632,7 @@ export default function CleanerDashboard() {
                   const sc=STATUS[q.status]||STATUS.pending
                   const isIB=q.submissionType==='instant_book'
                   return(
-                    <div key={q.id} onClick={()=>setSelectedQuote(q)} style={{...card,padding:'12px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,transition:'border-color .15s'}}
+                    <div key={q.id} onClick={()=>openQuoteDetail(q)} style={{...card,padding:'12px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,transition:'border-color .15s'}}
                       onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderB}}
                       onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
                       <div style={{width:38,height:38,borderRadius:'50%',background:T.cyanBg,border:`2px solid ${T.borderB}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:900,color:T.cyan,flexShrink:0}}>
@@ -391,7 +664,9 @@ export default function CleanerDashboard() {
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {upcoming.slice(0,7).map(j=>(
-                  <div key={j.id} style={{...card,padding:'9px 12px',display:'flex',alignItems:'center',gap:10}}>
+                  <div key={j.id} onClick={()=>setSelectedJob(j)} style={{...card,padding:'9px 12px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',transition:'border-color .15s'}}
+                    onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderB}}
+                    onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:T.cyan,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.displayName}</div>
@@ -412,9 +687,20 @@ export default function CleanerDashboard() {
   function QuotesPage(){
     const [filter,setFilter]=useState('all')
     const [search,setSearch]=useState('')
+    const [deleteId,setDeleteId]=useState<string|null>(null)
+    const [deletingId,setDeletingId]=useState<string|null>(null)
     const filtered=quotes
       .filter(q=>filter==='all'||q.status===filter)
       .filter(q=>!search||`${q.client.firstName} ${q.client.lastName} ${q.client.email} ${q.serviceType}`.toLowerCase().includes(search.toLowerCase()))
+
+    async function handleDelete(id:string,e:React.MouseEvent){
+      e.stopPropagation()
+      setDeletingId(id)
+      await deleteQuote(id)
+      setDeletingId(null)
+      setDeleteId(null)
+    }
+
     return(
       <div>
         <div style={{marginBottom:24}}><h1 style={{fontFamily:'Inter,sans-serif',fontSize:24,fontWeight:900,color:T.text}}>Quotes & Bookings</h1><p style={{fontSize:13,color:T.muted,marginTop:4}}>{quotes.length} total · {pending.length} pending</p></div>
@@ -437,25 +723,44 @@ export default function CleanerDashboard() {
             {filtered.map(q=>{
               const sc=STATUS[q.status]||STATUS.pending
               const isIB=q.submissionType==='instant_book'
+              const isDelTarget = deleteId===q.id
               return(
-                <div key={q.id} onClick={()=>setSelectedQuote(q)} style={{...card,padding:'14px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:14,transition:'border-color .15s'}}
-                  onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderB}}
-                  onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
-                  <div style={{width:44,height:44,borderRadius:'50%',background:T.cyanBg,border:`2px solid ${T.borderB}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:900,color:T.cyan,flexShrink:0}}>
-                    {q.client.firstName.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3,flexWrap:'wrap' as const}}>
-                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{q.client.firstName} {q.client.lastName}</span>
-                      {isIB&&<span style={{fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:10,background:D.greenBg,color:D.green,border:'1px solid rgba(16,185,129,0.3)'}}>⚡ INSTANT BOOK</span>}
-                      <span style={{fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:10,color:sc.color,border:`1px solid ${sc.color}40`,background:dark?'rgba(255,255,255,0.04)':L.surf}}>{sc.label}</span>
+                <div key={q.id} style={{position:'relative'}}>
+                  <div onClick={()=>openQuoteDetail(q)} style={{...card,padding:'14px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:14,transition:'border-color .15s',opacity:isDelTarget?0.5:1}}
+                    onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderB}}
+                    onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
+                    <div style={{width:44,height:44,borderRadius:'50%',background:T.cyanBg,border:`2px solid ${T.borderB}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:900,color:T.cyan,flexShrink:0}}>
+                      {q.client.firstName.charAt(0).toUpperCase()}
                     </div>
-                    <div style={{fontSize:11,color:T.dim}}>{q.serviceType} · {q.frequency} · {fmtRel(q.createdAt)}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3,flexWrap:'wrap' as const}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>{q.client.firstName} {q.client.lastName}</span>
+                        {isIB&&<span style={{fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:10,background:D.greenBg,color:D.green,border:'1px solid rgba(16,185,129,0.3)'}}>⚡ INSTANT BOOK</span>}
+                        <span style={{fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:10,color:sc.color,border:`1px solid ${sc.color}40`,background:dark?'rgba(255,255,255,0.04)':L.surf}}>{sc.label}</span>
+                      </div>
+                      <div style={{fontSize:11,color:T.dim}}>{q.serviceType} · {q.frequency} · {fmtRel(q.createdAt)}</div>
+                    </div>
+                    <div style={{textAlign:'right' as const,flexShrink:0,marginRight:36}}>
+                      <div style={{fontFamily:'Inter,sans-serif',fontSize:18,fontWeight:900,color:isIB?D.green:T.cyan}}>{fmtMoney(q.totalPrice)}</div>
+                      {q.instantBookSavings!=null&&q.instantBookSavings>0&&<div style={{fontSize:10,color:D.green,fontWeight:700}}>saving {fmtMoney(q.instantBookSavings)}</div>}
+                    </div>
                   </div>
-                  <div style={{textAlign:'right' as const,flexShrink:0}}>
-                    <div style={{fontFamily:'Inter,sans-serif',fontSize:18,fontWeight:900,color:isIB?D.green:T.cyan}}>{fmtMoney(q.totalPrice)}</div>
-                    {q.instantBookSavings!=null&&q.instantBookSavings>0&&<div style={{fontSize:10,color:D.green,fontWeight:700}}>saving {fmtMoney(q.instantBookSavings)}</div>}
-                  </div>
+                  {/* Delete button */}
+                  {!isDelTarget ? (
+                    <button onClick={(e)=>{e.stopPropagation();setDeleteId(q.id)}} title="Delete quote" style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',width:28,height:28,borderRadius:6,border:`1px solid rgba(239,68,68,0.15)`,background:'transparent',color:D.red,cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',opacity:0.4,transition:'opacity .15s'}}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.opacity='1';(e.currentTarget as HTMLButtonElement).style.background=D.redBg}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.opacity='0.4';(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>
+                      🗑
+                    </button>
+                  ) : (
+                    <div onClick={e=>e.stopPropagation()} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',display:'flex',gap:4,alignItems:'center',background:dark?'rgba(2,8,20,0.95)':L.card,padding:'5px 8px',borderRadius:8,border:`1px solid rgba(239,68,68,0.3)`,boxShadow:'0 4px 16px rgba(0,0,0,0.3)'}}>
+                      <span style={{fontSize:11,color:D.red,fontWeight:600,marginRight:4}}>Delete?</span>
+                      <button onClick={(e)=>handleDelete(q.id,e)} disabled={deletingId===q.id} style={{padding:'4px 10px',borderRadius:5,border:'none',background:'#ef4444',color:'#fff',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'Inter,sans-serif',opacity:deletingId===q.id?.6:1}}>
+                        {deletingId===q.id?'...':'Yes'}
+                      </button>
+                      <button onClick={(e)=>{e.stopPropagation();setDeleteId(null)}} style={{padding:'4px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:'Inter,sans-serif'}}>No</button>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -515,7 +820,7 @@ export default function CleanerDashboard() {
                             {cq.slice(0,4).map(q=>{
                               const sc=STATUS[q.status]||STATUS.pending
                               return(
-                                <div key={q.id} onClick={()=>setSelectedQuote(q)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',background:T.surf,borderRadius:8,cursor:'pointer',border:`1px solid ${T.border}`}}>
+                                <div key={q.id} onClick={()=>openQuoteDetail(q)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',background:T.surf,borderRadius:8,cursor:'pointer',border:`1px solid ${T.border}`}}>
                                   <div>
                                     <div style={{fontSize:12,fontWeight:600,color:T.text}}>{q.serviceType}</div>
                                     <div style={{fontSize:10,color:T.dim}}>{fmtDate(q.createdAt)}</div>
@@ -553,6 +858,12 @@ export default function CleanerDashboard() {
     const trail=(dow+last.getDate())%7;if(trail) for(let i=1;i<=7-trail;i++) cells.push({type:'pad',n:i})
     function jobsOn(d:Date){return upcoming.filter(j=>sameDay(new Date(j.checkoutTime),d))}
     function quotesOn(d:Date){return quotes.filter(q=>(q.preferredDate1&&sameDay(new Date(q.preferredDate1),d))||(q.preferredDate2&&sameDay(new Date(q.preferredDate2),d)))}
+
+    // Day detail panel
+    const [selectedDate, setSelectedDate] = useState<Date|null>(null)
+    const selJobs = selectedDate ? jobsOn(selectedDate) : []
+    const selQuotes = selectedDate ? quotesOn(selectedDate) : []
+
     return(
       <div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
@@ -573,33 +884,111 @@ export default function CleanerDashboard() {
             </div>
           ))}
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:1}}>
-          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>(
-            <div key={d} style={{textAlign:'center' as const,padding:'8px 0',fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase' as const,color:T.cyan,background:T.cyanBg,borderRadius:4}}>{d}</div>
-          ))}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridAutoRows:'100px',gap:1,background:T.border,borderRadius:12,overflow:'hidden'}}>
-          {cells.map((cell,idx)=>{
-            if(cell.type==='pad') return <div key={`p${idx}`} style={{background:dark?'rgba(255,255,255,0.01)':L.surf,opacity:.4,padding:'6px 6px'}}><span style={{fontSize:11,color:T.dim}}>{cell.n}</span></div>
-            const{day,date}=cell,isT=sameDay(date,today)
-            const dj=jobsOn(date),dq=quotesOn(date)
-            return(
-              <div key={day} style={{background:isT?T.cyanBg:dark?D.surf:L.surf,padding:'5px 4px',borderTop:isT?`2px solid ${T.cyan}`:'2px solid transparent',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-                <div style={{fontSize:11,fontWeight:700,color:isT?T.cyan:T.dim,marginBottom:3,width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?T.cyanBg:'transparent'}}>{day}</div>
-                <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden'}}>
-                  {dj.slice(0,2).map(j=>(
-                    <div key={j.id} style={{padding:'1px 4px',borderRadius:3,background:T.cyanBg,borderLeft:`2px solid ${T.cyan}`,fontSize:9,fontWeight:700,color:T.cyan,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtTime(j.checkoutTime)} {j.displayName}</div>
-                  ))}
-                  {dq.slice(0,1).map(q=>(
-                    <div key={q.id} onClick={()=>setSelectedQuote(q)} style={{padding:'1px 4px',borderRadius:3,background:q.submissionType==='instant_book'?D.amberBg:D.greenBg,borderLeft:`2px solid ${q.submissionType==='instant_book'?D.amber:D.green}`,fontSize:9,fontWeight:700,color:q.submissionType==='instant_book'?D.amber:D.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>
-                      {q.client.firstName} {q.client.lastName.charAt(0)}.
+
+        <div style={{display:'grid',gridTemplateColumns: selectedDate ? '1fr 300px' : '1fr',gap:16}}>
+          {/* Calendar grid */}
+          <div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:1}}>
+              {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>(
+                <div key={d} style={{textAlign:'center' as const,padding:'8px 0',fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase' as const,color:T.cyan,background:T.cyanBg,borderRadius:4}}>{d}</div>
+              ))}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridAutoRows:'100px',gap:1,background:T.border,borderRadius:12,overflow:'hidden'}}>
+              {cells.map((cell,idx)=>{
+                if(cell.type==='pad') return <div key={`p${idx}`} style={{background:dark?'rgba(255,255,255,0.01)':L.surf,opacity:.4,padding:'6px 6px'}}><span style={{fontSize:11,color:T.dim}}>{cell.n}</span></div>
+                const{day,date}=cell,isT=sameDay(date,today)
+                const dj=jobsOn(date),dq=quotesOn(date)
+                const hasEvents = dj.length > 0 || dq.length > 0
+                const isSelected = selectedDate && sameDay(date, selectedDate)
+                return(
+                  <div key={day}
+                    onClick={()=>setSelectedDate(isSelected ? null : date)}
+                    style={{
+                      background:isSelected ? (dark?'rgba(93,235,241,0.15)':'rgba(14,165,233,0.12)') : isT?T.cyanBg:dark?D.surf:L.surf,
+                      padding:'5px 4px',
+                      borderTop:isSelected ? `2px solid ${T.cyan}` : isT?`2px solid ${T.cyan}`:'2px solid transparent',
+                      display:'flex',flexDirection:'column',overflow:'hidden',
+                      cursor: hasEvents ? 'pointer' : 'default',
+                      transition:'background .12s',
+                    }}>
+                    <div style={{fontSize:11,fontWeight:700,color:isT?T.cyan:T.dim,marginBottom:3,width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?T.cyanBg:'transparent'}}>{day}</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:2,flex:1,overflow:'hidden'}}>
+                      {dj.slice(0,2).map(j=>(
+                        <div key={j.id} onClick={(e)=>{e.stopPropagation();setSelectedJob(j);setSelectedDate(date)}} style={{padding:'1px 4px',borderRadius:3,background:T.cyanBg,borderLeft:`2px solid ${T.cyan}`,fontSize:9,fontWeight:700,color:T.cyan,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>{fmtTime(j.checkoutTime)} {j.displayName}</div>
+                      ))}
+                      {dq.slice(0,1).map(q=>(
+                        <div key={q.id} onClick={(e)=>{e.stopPropagation();openQuoteDetail(q)}} style={{padding:'1px 4px',borderRadius:3,background:q.submissionType==='instant_book'?D.amberBg:D.greenBg,borderLeft:`2px solid ${q.submissionType==='instant_book'?D.amber:D.green}`,fontSize:9,fontWeight:700,color:q.submissionType==='instant_book'?D.amber:D.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>
+                          {q.client.firstName} {q.client.lastName.charAt(0)}.
+                        </div>
+                      ))}
+                      {dj.length+dq.length>3&&<div style={{fontSize:8,color:T.dim,fontWeight:700}}>+{dj.length+dq.length-3} more</div>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Day detail panel */}
+          {selectedDate && (
+            <div style={{...card,padding:'18px',position:'sticky',top:24,maxHeight:'calc(100vh - 120px)',overflowY:'auto'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+                <div>
+                  <div style={{fontFamily:'Inter,sans-serif',fontSize:16,fontWeight:800,color:T.text}}>
+                    {selectedDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}
+                  </div>
+                  <div style={{fontSize:11,color:T.muted,marginTop:2}}>{selJobs.length} job{selJobs.length!==1?'s':''} · {selQuotes.length} quote{selQuotes.length!==1?'s':''}</div>
+                </div>
+                <button onClick={()=>setSelectedDate(null)} style={{width:26,height:26,borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:13}}>×</button>
+              </div>
+
+              {selJobs.length > 0 && (
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:'uppercase',color:T.cyan,marginBottom:8}}>Synced Jobs</div>
+                  {selJobs.map(j=>(
+                    <div key={j.id} onClick={()=>setSelectedJob(j)} style={{padding:'10px 12px',background:T.cyanBg,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:6,cursor:'pointer',transition:'border-color .12s'}}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderB}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text}}>{j.displayName}</div>
+                      <div style={{fontSize:11,color:T.muted,marginTop:2}}>{j.propertyLabel}</div>
+                      <div style={{display:'flex',gap:10,marginTop:4}}>
+                        <span style={{fontSize:10,color:T.cyan,fontWeight:600}}>{fmtTime(j.checkoutTime)}</span>
+                        <span style={{fontSize:10,color:T.dim,fontWeight:600,textTransform:'capitalize'}}>{j.platform}</span>
+                      </div>
                     </div>
                   ))}
-                  {dj.length+dq.length>3&&<div style={{fontSize:8,color:T.dim,fontWeight:700}}>+{dj.length+dq.length-3} more</div>}
                 </div>
-              </div>
-            )
-          })}
+              )}
+
+              {selQuotes.length > 0 && (
+                <div>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,textTransform:'uppercase',color:D.green,marginBottom:8}}>Quotes & Bookings</div>
+                  {selQuotes.map(q=>{
+                    const sc = STATUS[q.status]||STATUS.pending
+                    return(
+                      <div key={q.id} onClick={()=>openQuoteDetail(q)} style={{padding:'10px 12px',background:q.submissionType==='instant_book'?D.amberBg:D.greenBg,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:6,cursor:'pointer',transition:'border-color .12s'}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderB}}
+                        onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <div style={{fontSize:13,fontWeight:700,color:T.text}}>{q.client.firstName} {q.client.lastName}</div>
+                          <span style={{fontSize:14,fontWeight:900,color:q.submissionType==='instant_book'?D.green:T.cyan}}>{fmtMoney(q.totalPrice)}</span>
+                        </div>
+                        <div style={{display:'flex',gap:8,marginTop:4,alignItems:'center'}}>
+                          <span style={{fontSize:10,color:T.muted}}>{q.serviceType}</span>
+                          <span style={{fontSize:8,fontWeight:800,padding:'1px 6px',borderRadius:8,color:sc.color,border:`1px solid ${sc.color}40`}}>{sc.label}</span>
+                          {q.submissionType==='instant_book'&&<span style={{fontSize:8,fontWeight:800,color:D.green}}>⚡</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {selJobs.length===0 && selQuotes.length===0 && (
+                <div style={{textAlign:'center',padding:'24px 0',color:T.dim,fontSize:12}}>No events on this day.</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -687,6 +1076,38 @@ export default function CleanerDashboard() {
     )
   }
 
+  // ── JOB DETAIL MODAL ──────────────────────────────────────────────────────
+  function JobModal(){
+    if(!selectedJob) return null
+    const j = selectedJob
+    return(
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setSelectedJob(null)}>
+        <div style={{background:dark?'rgba(2,8,30,0.98)':'#ffffff',border:dark?`1px solid ${D.borderB}`:`1px solid ${L.borderB}`,borderRadius:18,width:'100%',maxWidth:420,boxShadow:dark?'0 30px 80px rgba(0,0,0,0.7)':'0 20px 60px rgba(0,0,0,0.15)',padding:'24px'}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+            <div>
+              <div style={{fontFamily:'Inter,sans-serif',fontSize:18,fontWeight:900,color:T.text}}>{j.displayName}</div>
+              <div style={{fontSize:12,color:T.muted,marginTop:3}}>{j.propertyLabel}</div>
+            </div>
+            <button onClick={()=>setSelectedJob(null)} style={{width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+          </div>
+          {[
+            {l:'Platform',v:j.platform,icon:'🔌'},
+            {l:'Checkout',v:`${fmtDate(j.checkoutTime)} at ${fmtTime(j.checkoutTime)}`,icon:'📅'},
+            {l:'Check-in',v:j.checkinTime ? `${fmtDate(j.checkinTime)} at ${fmtTime(j.checkinTime)}` : '—',icon:'🏠'},
+          ].map(f=>(
+            <div key={f.l} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
+              <span style={{fontSize:14}}>{f.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:1}}>{f.l}</div>
+                <div style={{fontSize:13,fontWeight:600,color:T.text,marginTop:1}}>{f.v}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   const NAV_ITEMS:[Page,string,string,number?][]=[
     ['dashboard','◉','Dashboard'],
     ['quotes','📋','Quotes',pending.length||undefined],
@@ -714,7 +1135,7 @@ export default function CleanerDashboard() {
         {/* Nav */}
         <div style={{flex:1,padding:'10px 7px',display:'flex',flexDirection:'column',gap:2,overflowY:'auto'}}>
           {NAV_ITEMS.map(([id,icon,label,badge])=>{
-            const active=page===id
+            const active = page===id || (page==='quote-detail' && id==='quotes')
             return(
               <button key={id} onClick={()=>setPage(id as Page)} style={{display:'flex',alignItems:'center',gap:10,padding:collapsed?'10px':'9px 11px',borderRadius:9,border:'none',cursor:'pointer',background:active?'rgba(93,235,241,0.12)':'transparent',color:active?'#5debf1':'rgba(255,255,255,0.5)',fontFamily:'Inter,sans-serif',fontSize:13,fontWeight:active?700:500,transition:'all .14s',textAlign:'left',width:'100%',justifyContent:collapsed?'center':'flex-start',position:'relative'}}>
                 <span style={{fontSize:15,flexShrink:0}}>{icon}</span>
@@ -748,6 +1169,7 @@ export default function CleanerDashboard() {
       <main style={{flex:1,overflowY:'auto',padding:24}}>
         {page==='dashboard'    &&<DashboardPage/>}
         {page==='quotes'       &&<QuotesPage/>}
+        {page==='quote-detail' &&<QuoteDetailPage/>}
         {page==='clients'      &&<ClientsPage/>}
         {page==='calendar'     &&<CalendarPage/>}
         {page==='integrations' &&<IntegrationsPage/>}
@@ -770,7 +1192,7 @@ export default function CleanerDashboard() {
         )}
       </main>
 
-      {selectedQuote&&<QuoteModal/>}
+      {selectedJob&&<JobModal/>}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
