@@ -1,18 +1,27 @@
 // app/api/quotes/route.ts
-// Receives form submissions from the booking form and creates Quote + Client records
-
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS })
+}
 
 export async function GET() {
   try {
     const quotes = await prisma.quote.findMany({
       orderBy: { createdAt: 'desc' },
       take: 100,
+      include: { client: true },
     })
-    return NextResponse.json(quotes)
+    return NextResponse.json(quotes, { headers: CORS })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 500, headers: CORS })
   }
 }
 
@@ -105,9 +114,9 @@ export async function POST(req: Request) {
       },
     })
 
-    return NextResponse.json({ ok: true, quoteId: quote.id, clientId: client.id }, { status: 201 })
+    return NextResponse.json({ ok: true, quoteId: quote.id, clientId: client.id }, { status: 201, headers: CORS })
   } catch (e) {
     console.error('Quote creation error:', e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 500, headers: CORS })
   }
 }
