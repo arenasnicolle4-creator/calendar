@@ -158,6 +158,20 @@ export default function CleanerDashboard() {
     const q=selectedQuote
     const sc=STATUS[q.status]||STATUS.pending
     const isIB=q.submissionType==='instant_book'
+    const [sending,setSending]=useState(false)
+    const [sent,setSent]=useState(false)
+    const [sendErr,setSendErr]=useState('')
+
+    async function sendEmail(){
+      setSending(true);setSendErr('')
+      try{
+        const r=await fetch(`/api/quotes/${q.id}/email`,{method:'POST'})
+        const d=await r.json()
+        if(r.ok){setSent(true);load()}
+        else setSendErr(d.error||'Failed to send')
+      }catch(e){setSendErr(String(e))}
+      setSending(false)
+    }
     const bdBg=dark?'rgba(2,8,30,0.98)':'#ffffff'
     const modalBorder=dark?`1px solid ${D.borderB}`:`1px solid ${L.borderB}`
     const sec=(title:string,icon:string,children:React.ReactNode)=>(
@@ -252,6 +266,13 @@ export default function CleanerDashboard() {
             </>)}
             {/* Actions */}
             <div style={{display:'flex',gap:8,marginTop:18,flexWrap:'wrap' as const}}>
+              {/* Send quote email button */}
+              {!isIB && (
+                <button onClick={sendEmail} disabled={sending||sent} style={{width:'100%',padding:'12px',borderRadius:10,background:sent?D.greenBg:dark?'linear-gradient(135deg,#0ea5e9,#0284c7)':'linear-gradient(135deg,#0ea5e9,#0284c7)',color:'#fff',border:'none',fontSize:13,fontWeight:800,cursor:sent?'default':'pointer',fontFamily:'Inter,sans-serif',marginBottom:8,boxShadow:sent?'none':'0 6px 20px rgba(14,165,233,0.35)',opacity:sending?.7:1}}>
+                  {sent ? '✓ Quote Email Sent!' : sending ? 'Sending...' : '✉ Send Quote to Client'}
+                </button>
+              )}
+              {sendErr&&<div style={{width:'100%',padding:'8px 12px',borderRadius:8,background:D.redBg,color:D.red,fontSize:12,border:'1px solid rgba(239,68,68,0.3)',marginBottom:4}}>{sendErr}</div>}
               {q.status==='pending'&&(
                 <button onClick={()=>updateStatus(q.id,'reviewed')} style={{flex:1,padding:'11px',borderRadius:10,background:T.cyanBg,border:`1px solid ${T.borderB}`,color:T.cyan,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'Inter,sans-serif'}}>Mark Reviewed</button>
               )}
