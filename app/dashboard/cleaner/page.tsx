@@ -34,7 +34,7 @@ interface Invoice {
   paidAt: string | null; notes: string | null; lineItems: string
   createdAt: string; updatedAt: string; from?: User; to?: User
 }
-type Page = 'dashboard'|'quotes'|'quote-detail'|'create-quote'|'jobs'|'create-job'
+type Page = 'dashboard'|'quotes'|'quote-detail'|'create-quote'|'jobs'|'create-job'|'convert-to-job'
   |'clients'|'create-client'|'client-detail'|'invoices'|'create-invoice'|'invoice-detail'
   |'calendar'|'reports'|'activity'|'integrations'|'settings'
 
@@ -156,6 +156,8 @@ export default function CleanerDashboard() {
   async function createInvoice(data:Record<string,any>){const r=await fetch('/api/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();await load();if(d.id){setActiveInvoiceId(d.id);setPage('invoice-detail');showToast('Invoice created')};return d}
   async function updateInvoice(id:string,data:Record<string,any>){await fetch(`/api/invoices/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});await load();showToast('Invoice updated')}
   async function deleteInvoice(id:string){await fetch(`/api/invoices/${id}`,{method:'DELETE'});await load();if(activeInvoiceId===id){setActiveInvoiceId(null);setPage('invoices')};showToast('Invoice deleted')}
+  async function convertToJob(quoteId:string){setActiveQuoteId(quoteId);setPage('convert-to-job')}
+  async function createPaymentLink(invoiceId:string){const r=await fetch(`/api/invoices/${invoiceId}/payment-link`,{method:'POST'});const d=await r.json();if(r.ok&&d.url){window.open(d.url,'_blank');await load();showToast('Payment link opened')}else showToast(d.error||'Failed to create link','err')}
 
   function openQuote(q:Quote){setActiveQuoteId(q.id);setPage('quote-detail')}
   function openClient(c:QuoteClient){setActiveClientId(c.id);setPage('client-detail')}
@@ -407,9 +409,9 @@ export default function CleanerDashboard() {
     const [eTotal,setETotal]=useState(q.totalPrice.toString()),[eSub,setESub]=useState(q.subtotal.toString()),[eDisc,setEDisc]=useState(q.discount.toString()),[eDiscL,setEDiscL]=useState(q.discountLabel)
     const [eService,setEService]=useState(q.serviceType),[eFreq,setEFreq]=useState(q.frequency),[eAddr,setEAddr]=useState(q.address),[eSqft,setESqft]=useState(q.sqftRange||''),[eBeds,setEBeds]=useState(q.bedrooms?.toString()||''),[eBaths,setEBaths]=useState(q.bathrooms?.toString()||'')
     const [eAddons,setEAddons]=useState(q.addonsList),[eNotes,setENotes]=useState(q.additionalNotes),[eKey,setEKey]=useState(q.keyAreas)
-    const [li,setLi]=useState<{label:string;amount:string}[]>(()=>{const ls=q.priceBreakdown.split('\n').filter(Boolean);return ls.length>0?ls.map(l=>{const m=l.match(/\$[\d,.]+/);return{label:l.split('...')[0]?.trim()||l,amount:m?m[0].replace('$',''):'0'}}):[{label:'Base Service',amount:q.totalPrice.toString()}]})
-    function updLi(i:number,f:'label'|'amount',v:string){const u=[...li];u[i]={...u[i],[f]:v};setLi(u);const s=u.reduce((a,x)=>a+(parseFloat(x.amount)||0),0);setESub(s.toFixed(2));setETotal(Math.max(0,s-(parseFloat(eDisc)||0)).toFixed(2))}
-    async function handleSave(){setSaving(true);const bd=li.map(x=>`${x.label}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');await saveQuote(q.id,{totalPrice:parseFloat(eTotal),subtotal:parseFloat(eSub),discount:parseFloat(eDisc),discountLabel:eDiscL,priceBreakdown:bd,serviceType:eService,frequency:eFreq,address:eAddr,sqftRange:eSqft||null,bedrooms:eBeds?parseInt(eBeds):null,bathrooms:eBaths?parseFloat(eBaths):null,addonsList:eAddons,additionalNotes:eNotes,keyAreas:eKey});setSaving(false);setEditing(false)}
+    const [li,setLi]=useState<{label:string;detail:string;amount:string}[]>(()=>{const ls=q.priceBreakdown.split('\n').filter(Boolean);return ls.length>0?ls.map(l=>{const m=l.match(/\$[\d,.]+/);const parts=l.split('...')[0]?.trim()||l;const [lbl,det]=(parts.includes('||')?parts.split('||'):[parts,'']);return{label:lbl.trim(),detail:det.trim(),amount:m?m[0].replace('$',''):'0'}}):[{label:'Base Service',detail:'',amount:q.totalPrice.toString()}]})
+    function updLi(i:number,f:'label'|'amount'|'detail',v:string){const u=[...li];u[i]={...u[i],[f]:v};setLi(u);if(f==='amount'||f==='label'){const s=u.reduce((a,x)=>a+(parseFloat(x.amount)||0),0);setESub(s.toFixed(2));setETotal(Math.max(0,s-(parseFloat(eDisc)||0)).toFixed(2))}}
+    async function handleSave(){setSaving(true);const bd=li.map(x=>`${x.label}${x.detail?'||'+x.detail:''}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');await saveQuote(q.id,{totalPrice:parseFloat(eTotal),subtotal:parseFloat(eSub),discount:parseFloat(eDisc),discountLabel:eDiscL,priceBreakdown:bd,serviceType:eService,frequency:eFreq,address:eAddr,sqftRange:eSqft||null,bedrooms:eBeds?parseInt(eBeds):null,bathrooms:eBaths?parseFloat(eBaths):null,addonsList:eAddons,additionalNotes:eNotes,keyAreas:eKey});setSaving(false);setEditing(false)}
     async function handleEmail(){setSending(true);await sendQuoteEmail(q.id);setSending(false)}
     async function handleDel(){setDeleting(true);await deleteQuote(q.id);setDeleting(false)}
     async function toInvoice(){const items=li.map(x=>({description:x.label,amount:parseFloat(x.amount)||0,quantity:1}));await createInvoice({toClientId:q.clientId,amount:parseFloat(eTotal),lineItems:JSON.stringify(items),notes:`Quote → ${q.client.firstName} ${q.client.lastName}`})}
@@ -448,10 +450,13 @@ export default function CleanerDashboard() {
         <div style={{display:'flex',flexDirection:'column',gap:14}}>
           {/* Line Items */}
           <div style={{...card,padding:'22px'}}>{hdr('Pricing','💰')}
-            {li.map((x,i)=>(<div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderBottom:`1px solid ${T.border}`}}>
-              {editing?<><input value={x.label} onChange={e=>updLi(i,'label',e.target.value)} style={{...ef,flex:1}}/><span style={{color:T.muted,fontWeight:600}}>$</span><input value={x.amount} onChange={e=>updLi(i,'amount',e.target.value)} style={{...ef,width:80,textAlign:'right'}} type="number" step="0.01"/><button onClick={()=>setLi(li.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button></>:<><span style={{flex:1,fontSize:13,color:T.muted}}>{x.label}</span><span style={{fontSize:13,color:T.text,fontWeight:600}}>${parseFloat(x.amount||'0').toFixed(2)}</span></>}
+            {li.map((x,i)=>(<div key={i} style={{padding:'7px 0',borderBottom:`1px solid ${T.border}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                {editing?<><input value={x.label} onChange={e=>updLi(i,'label',e.target.value)} style={{...ef,flex:1}} placeholder="Item name"/><span style={{color:T.muted,fontWeight:600}}>$</span><input value={x.amount} onChange={e=>updLi(i,'amount',e.target.value)} style={{...ef,width:80,textAlign:'right'}} type="number" step="0.01"/><button onClick={()=>setLi(li.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button></>:<><span style={{flex:1,fontSize:13,color:T.muted}}>{x.label}</span><span style={{fontSize:13,color:T.text,fontWeight:600}}>${parseFloat(x.amount||'0').toFixed(2)}</span></>}
+              </div>
+              {editing?<input value={x.detail} onChange={e=>updLi(i,'detail',e.target.value)} style={{...ef,marginTop:4,fontSize:11,color:T.dim}} placeholder="Description / details for this item…"/>:x.detail&&<div style={{fontSize:11,color:T.dim,marginTop:3,paddingLeft:2,lineHeight:1.5}}>{x.detail}</div>}
             </div>))}
-            {editing&&<button onClick={()=>setLi([...li,{label:'New Item',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.accentBorder}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,fontFamily:'"DM Sans",sans-serif',width:'100%'}}>+ Add Item</button>}
+            {editing&&<button onClick={()=>setLi([...li,{label:'New Item',detail:'',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.accentBorder}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,fontFamily:'"DM Sans",sans-serif',width:'100%'}}>+ Add Item</button>}
             {(q.discount>0||editing)&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderTop:`1px solid ${T.border}`,marginTop:6}}>
               {editing?<><input value={eDiscL} onChange={e=>setEDiscL(e.target.value)} placeholder="Discount" style={{...ef,flex:1,color:T.green}}/><span style={{color:T.green,fontWeight:600}}>-$</span><input value={eDisc} onChange={e=>setEDisc(e.target.value)} onBlur={()=>setETotal(Math.max(0,(parseFloat(eSub)||0)-(parseFloat(eDisc)||0)).toFixed(2))} style={{...ef,width:80,textAlign:'right',color:T.green}} type="number" step="0.01"/></>:<><span style={{fontSize:12,color:T.green,fontWeight:500}}>✓ {q.discountLabel}</span><span style={{fontSize:12,color:T.green,fontWeight:600}}>-{fmtMoney(q.discount)}</span></>}
             </div>}
@@ -500,6 +505,7 @@ export default function CleanerDashboard() {
               {q.status==='booked'&&<button onClick={()=>updateQuoteStatus(q.id,'completed')} style={{width:'100%',padding:'10px',borderRadius:10,background:`linear-gradient(135deg,${T.violet},#6d28d9)`,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Mark Completed</button>}
               {q.status!=='cancelled'&&<button onClick={()=>updateQuoteStatus(q.id,'cancelled')} style={{width:'100%',padding:'10px',borderRadius:10,background:T.redBg,border:`1px solid ${T.red}20`,color:T.red,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Cancel</button>}
               <button onClick={toInvoice} style={{width:'100%',padding:'10px',borderRadius:10,background:T.amberBg,border:`1px solid ${T.amber}20`,color:T.amber,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Convert to Invoice</button>
+              {['booked','completed'].includes(q.status)&&<button onClick={()=>convertToJob(q.id)} style={{width:'100%',padding:'10px',borderRadius:10,background:T.violetBg,border:`1px solid ${T.violet}20`,color:T.violet,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>🗓 Convert to Job</button>}
               <div style={{borderTop:`1px solid ${T.border}`,paddingTop:10,marginTop:4}}>
                 {!confirmDel?<button onClick={()=>setConfirmDel(true)} style={{width:'100%',padding:'9px',borderRadius:8,border:`1px solid ${T.red}15`,background:'transparent',color:T.red,fontSize:11,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif',opacity:0.6}}>Delete Quote</button>:(
                   <div style={{background:T.redBg,borderRadius:10,padding:'14px',border:`1px solid ${T.red}20`}}>
@@ -522,9 +528,9 @@ export default function CleanerDashboard() {
     const [selC,setSelC]=useState('');const [newC,setNewC]=useState(false)
     const [nc,setNc]=useState({firstName:'',lastName:'',email:'',phone:'',address:'',city:'',state:'AK',zip:''})
     const [qf,setQf]=useState({serviceType:'Standard Clean',frequency:'One-Time',address:'',sqftRange:'',bedrooms:'',bathrooms:'',addonsList:'',keyAreas:'',additionalNotes:'',preferredDate1:'',preferredDate2:'',preferredTimes:''})
-    const [items,setItems]=useState<{label:string;amount:string}[]>([{label:'Base Service',amount:'0'}])
+    const [items,setItems]=useState<{label:string;detail:string;amount:string}[]>([{label:'Base Service',detail:'',amount:'0'}])
     const [sub,setSub]=useState(false);const total=items.reduce((s,x)=>s+(parseFloat(x.amount)||0),0)
-    async function go(){if(!selC&&!nc.email){showToast('Select or create a client','err');return};setSub(true);const bd=items.map(x=>`${x.label}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');const d:any={service_type:qf.serviceType,frequency:qf.frequency,address:qf.address,sqft_range:qf.sqftRange,bedrooms:qf.bedrooms,house_bathrooms:qf.bathrooms,addons_list:qf.addonsList,key_areas:qf.keyAreas,additional_notes:qf.additionalNotes,preferred_date_1:qf.preferredDate1||undefined,preferred_date_2:qf.preferredDate2||undefined,preferred_times:qf.preferredTimes,price_breakdown:bd,subtotal:`$${total.toFixed(2)}`,total_price:`$${total.toFixed(2)}`,discount:'$0',discount_label:'',submission_type:'quote'};if(selC){const c=clients.find(x=>x.id===selC);if(c){d.email=c.email;d.first_name=c.firstName;d.last_name=c.lastName;d.phone=c.phone}}else{d.email=nc.email;d.first_name=nc.firstName;d.last_name=nc.lastName;d.phone=nc.phone;d.address=nc.address||qf.address;d.city=nc.city;d.state=nc.state;d.zip=nc.zip};await createQuote(d);setSub(false)}
+    async function go(){if(!selC&&!nc.email){showToast('Select or create a client','err');return};setSub(true);const bd=items.map(x=>`${x.label}${x.detail?'||'+x.detail:''}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');const d:any={service_type:qf.serviceType,frequency:qf.frequency,address:qf.address,sqft_range:qf.sqftRange,bedrooms:qf.bedrooms,house_bathrooms:qf.bathrooms,addons_list:qf.addonsList,key_areas:qf.keyAreas,additional_notes:qf.additionalNotes,preferred_date_1:qf.preferredDate1||undefined,preferred_date_2:qf.preferredDate2||undefined,preferred_times:qf.preferredTimes,price_breakdown:bd,subtotal:`$${total.toFixed(2)}`,total_price:`$${total.toFixed(2)}`,discount:'$0',discount_label:'',submission_type:'quote'};if(selC){const c=clients.find(x=>x.id===selC);if(c){d.email=c.email;d.first_name=c.firstName;d.last_name=c.lastName;d.phone=c.phone}}else{d.email=nc.email;d.first_name=nc.firstName;d.last_name=nc.lastName;d.phone=nc.phone;d.address=nc.address||qf.address;d.city=nc.city;d.state=nc.state;d.zip=nc.zip};await createQuote(d);setSub(false)}
     return pageWrap(640,<>
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('quotes')} style={{...btnS,padding:'7px 14px'}}>← Back</button><h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:20,fontWeight:700,color:T.text}}>New Quote</h1></div>
       <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Client','👤')}
@@ -541,8 +547,11 @@ export default function CleanerDashboard() {
         <div style={{marginTop:10}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Preferred Date</div><input type="date" value={qf.preferredDate1} onChange={e=>setQf({...qf,preferredDate1:e.target.value})} style={inp}/></div>
       </div>
       <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Line Items','💰')}
-        {items.map((x,i)=><div key={i} style={{display:'flex',gap:8,padding:'7px 0',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}><input value={x.label} onChange={e=>{const u=[...items];u[i]={...u[i],label:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Description"/><span style={{color:T.muted,fontWeight:600}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:90,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>)}
-        <button onClick={()=>setItems([...items,{label:'',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.accentBorder}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add Item</button>
+        {items.map((x,i)=><div key={i} style={{padding:'7px 0',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}><input value={x.label} onChange={e=>{const u=[...items];u[i]={...u[i],label:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Item name"/><span style={{color:T.muted,fontWeight:600}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:90,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>
+          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:4,fontSize:11}} placeholder="Description / what this item covers…"/>
+        </div>)}
+        <button onClick={()=>setItems([...items,{label:'',detail:'',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.accentBorder}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add Item</button>
         <div style={{display:'flex',justifyContent:'space-between',padding:'14px 0',borderTop:`1.5px solid ${T.borderB}`,marginTop:12}}><span style={{fontWeight:700,fontSize:14,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:22,color:T.accent,letterSpacing:-0.5}}>{fmtMoney(total)}</span></div>
       </div>
       <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Notes','📝')}<textarea value={qf.additionalNotes} onChange={e=>setQf({...qf,additionalNotes:e.target.value})} rows={3} placeholder="Notes…" style={{...inp,resize:'vertical'}}/></div>
@@ -629,34 +638,48 @@ export default function CleanerDashboard() {
               })}
             </div>
 
-            {/* Right: preview */}
-            {selJob&&(
+            {/* Right: editable preview */}
+            {selJob&&(()=>{
+              const [editJ,setEditJ]=useState(false)
+              const [ej,setEj]=useState({displayName:selJob.displayName,propertyLabel:selJob.propertyLabel,address:selJob.address,notes:selJob.notes||'',customerName:selJob.customerName||'',worth:selJob.worth?.toString()||''})
+              const [savingJ,setSavingJ]=useState(false)
+              async function saveJob(){setSavingJ(true);await fetch(`/api/jobs/${selJob.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({displayName:ej.displayName,propertyLabel:ej.propertyLabel,address:ej.address,notes:ej.notes||null,customerName:ej.customerName||null,worth:ej.worth?parseFloat(ej.worth):null})});await load();setSavingJ(false);setEditJ(false);showToast('Job updated')}
+              async function delJob(){await fetch(`/api/jobs/${selJob.id}`,{method:'DELETE'});await load();setSelJobId(null);showToast('Job deleted')}
+              const jInp=editJ?{...inp,background:dark?'rgba(255,255,255,0.04)':'#f5f9fd',border:`1px solid ${T.borderB}`,padding:'8px 12px',fontSize:12} as React.CSSProperties:{} as React.CSSProperties
+              return(
               <div style={{...card,padding:'24px',position:'sticky',top:20}}>
-                <div style={{marginBottom:20}}>
-                  <div style={{fontSize:18,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{selJob.displayName}</div>
-                  <div style={{fontSize:12,color:T.muted,marginTop:4}}>{selJob.propertyLabel}</div>
-                  <div style={{display:'flex',gap:6,marginTop:10}}>
-                    {badge(selJob.platform,PLAT[selJob.platform]||T.accent,`${PLAT[selJob.platform]||T.accent}15`)}
-                    {sameDay(new Date(selJob.checkoutTime),now)&&badge('Today',T.accent,T.accentBg)}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+                  <div style={{flex:1}}>
+                    {editJ?<input value={ej.displayName} onChange={e=>setEj({...ej,displayName:e.target.value})} style={{...jInp,fontSize:16,fontWeight:700,marginBottom:4}}/>:<div style={{fontSize:18,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{selJob.displayName}</div>}
+                    {editJ?<input value={ej.propertyLabel} onChange={e=>setEj({...ej,propertyLabel:e.target.value})} style={{...jInp,color:T.muted}}/>:<div style={{fontSize:12,color:T.muted,marginTop:4}}>{selJob.propertyLabel}</div>}
                   </div>
+                  <button onClick={()=>{if(editJ){saveJob()}else{setEditJ(true);setEj({displayName:selJob.displayName,propertyLabel:selJob.propertyLabel,address:selJob.address,notes:selJob.notes||'',customerName:selJob.customerName||'',worth:selJob.worth?.toString()||''})}}} style={{...btnS,padding:'6px 14px',fontSize:11,color:editJ?T.accent:T.muted,borderColor:editJ?T.accentBorder:T.border}}>{savingJ?'Saving…':editJ?'Save':'Edit'}</button>
                 </div>
-                {[{l:'Checkout',v:`${fmtDate(selJob.checkoutTime)} · ${fmtTime(selJob.checkoutTime)}`,i:'📅'},{l:'Check-in',v:selJob.checkinTime?`${fmtDate(selJob.checkinTime)} · ${fmtTime(selJob.checkinTime)}`:'—',i:'🏠'},{l:'Address',v:selJob.address||'—',i:'📍'},{l:'Guest',v:selJob.customerName||'—',i:'👤'},{l:'Worth',v:selJob.worth?fmtMoney(selJob.worth):'—',i:'💰'}].map(f=>(
+                <div style={{display:'flex',gap:6,marginBottom:16}}>
+                  {badge(selJob.platform,PLAT[selJob.platform]||T.accent,`${PLAT[selJob.platform]||T.accent}15`)}
+                  {sameDay(new Date(selJob.checkoutTime),now)&&badge('Today',T.accent,T.accentBg)}
+                </div>
+                {[{l:'Checkout',v:`${fmtDate(selJob.checkoutTime)} · ${fmtTime(selJob.checkoutTime)}`,i:'📅'},{l:'Check-in',v:selJob.checkinTime?`${fmtDate(selJob.checkinTime)} · ${fmtTime(selJob.checkinTime)}`:'—',i:'🏠'},{l:'Address',v:selJob.address||'—',i:'📍',k:'address'},{l:'Guest',v:selJob.customerName||'—',i:'👤',k:'customerName'},{l:'Worth',v:selJob.worth?fmtMoney(selJob.worth):'—',i:'💰',k:'worth'}].map(f=>(
                   <div key={f.l} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
                     <span style={{fontSize:13}}>{f.i}</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1}}>{f.l}</div>
-                      <div style={{fontSize:13,fontWeight:500,color:T.text,marginTop:2}}>{f.v}</div>
+                      {editJ&&(f as any).k?<input value={(ej as any)[(f as any).k]||''} onChange={e=>setEj({...ej,[(f as any).k]:e.target.value})} style={{...jInp,marginTop:2}}/>:<div style={{fontSize:13,fontWeight:500,color:T.text,marginTop:2}}>{f.v}</div>}
                     </div>
                   </div>
                 ))}
-                {selJob.notes&&<div style={{marginTop:14,padding:'10px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.6}}>{selJob.notes}</div>}
+                {editJ?<div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div><textarea value={ej.notes} onChange={e=>setEj({...ej,notes:e.target.value})} rows={3} style={{...jInp,width:'100%',resize:'vertical'}}/></div>:selJob.notes&&<div style={{marginTop:14,padding:'10px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.6}}>{selJob.notes}</div>}
                 {(selJob.sqft||selJob.beds||selJob.baths)&&<div style={{display:'flex',gap:10,marginTop:14}}>
                   {selJob.sqft&&<div style={{background:T.surf,borderRadius:8,padding:'8px 12px',border:`1px solid ${T.border}`,fontSize:11,color:T.muted}}><span style={{fontWeight:600,color:T.text}}>{selJob.sqft}</span> sqft</div>}
                   {selJob.beds&&<div style={{background:T.surf,borderRadius:8,padding:'8px 12px',border:`1px solid ${T.border}`,fontSize:11,color:T.muted}}><span style={{fontWeight:600,color:T.text}}>{selJob.beds}</span> bed{selJob.beds>1?'s':''}</div>}
                   {selJob.baths&&<div style={{background:T.surf,borderRadius:8,padding:'8px 12px',border:`1px solid ${T.border}`,fontSize:11,color:T.muted}}><span style={{fontWeight:600,color:T.text}}>{selJob.baths}</span> bath{selJob.baths>1?'s':''}</div>}
                 </div>}
+                {editJ&&<div style={{display:'flex',gap:8,marginTop:16}}>
+                  <button onClick={()=>setEditJ(false)} style={{...btnS,flex:1,fontSize:11}}>Cancel</button>
+                  <button onClick={delJob} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${T.red}20`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,fontWeight:500,fontFamily:'"DM Sans",sans-serif'}}>Delete</button>
+                </div>}
               </div>
-            )}
+            )})()}
           </div>
         )}
       </div>
@@ -679,6 +702,175 @@ export default function CleanerDashboard() {
         <button onClick={go} disabled={sub} style={{...btnP,width:'100%',marginTop:16,padding:'12px',opacity:sub?.6:1}}>{sub?'Creating…':'Create Job'}</button>
       </div>
     </>)
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CONVERT QUOTE → JOB (with calendar preview, one-off vs recurring)
+  // ══════════════════════════════════════════════════════════════════════════
+  function ConvertToJobPage(){
+    const quote=quotes.find(q=>q.id===activeQuoteId)
+    if(!quote) return <div style={{padding:60,color:T.dim,textAlign:'center'}}>Quote not found. <button onClick={()=>setPage('quotes')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Back</button></div>
+    const q=quote,cn=`${q.client.firstName} ${q.client.lastName}`.trim()
+
+    // Form state
+    const defaultDate=q.preferredDate1?new Date(q.preferredDate1).toISOString().split('T')[0]:q.instantBookDate?new Date(q.instantBookDate).toISOString().split('T')[0]:''
+    const [jDate,setJDate]=useState(defaultDate)
+    const [jTime,setJTime]=useState('10:00')
+    const [jName,setJName]=useState(`${q.serviceType} — ${cn}`)
+    const [jAddr,setJAddr]=useState(q.address||[q.client.address,q.client.city,q.client.state].filter(Boolean).join(', '))
+    const [jNotes,setJNotes]=useState(q.additionalNotes||'')
+    const [recurring,setRecurring]=useState(q.frequency!=='One-Time')
+    const [freq,setFreq]=useState<'weekly'|'bi-weekly'|'every-3-weeks'|'monthly'>(q.frequency.toLowerCase().includes('bi')?'bi-weekly':q.frequency.toLowerCase().includes('week')?'weekly':q.frequency.toLowerCase().includes('3')?'every-3-weeks':'monthly')
+    const [endDate,setEndDate]=useState('')
+    const [submitting,setSubmitting]=useState(false)
+
+    // Mini calendar for the selected month
+    const calMonth=jDate?new Date(jDate+'T12:00:00'):new Date()
+    const yr=calMonth.getFullYear(),mo=calMonth.getMonth()
+    const first=new Date(yr,mo,1),dow=first.getDay(),last=new Date(yr,mo+1,0)
+    const cells:({type:'pad';n:number}|{type:'day';day:number;date:Date})[]=[]
+    for(let i=0;i<dow;i++) cells.push({type:'pad',n:new Date(yr,mo,-dow+i+1).getDate()})
+    for(let d=1;d<=last.getDate();d++) cells.push({type:'day',day:d,date:new Date(yr,mo,d)})
+    const trail=(dow+last.getDate())%7;if(trail) for(let i=1;i<=7-trail;i++) cells.push({type:'pad',n:i})
+
+    // Compute recurring dates for preview
+    const newJobDates:Date[]=[]
+    if(jDate){
+      const start=new Date(jDate+'T12:00:00')
+      if(!recurring){newJobDates.push(start)}else{
+        const end=endDate?new Date(endDate+'T23:59:59'):new Date(yr,mo+3,0)
+        const step=freq==='weekly'?7:freq==='bi-weekly'?14:freq==='every-3-weeks'?21:30
+        let cur=new Date(start)
+        while(cur<=end&&newJobDates.length<52){newJobDates.push(new Date(cur));if(freq==='monthly'){cur=new Date(cur.getFullYear(),cur.getMonth()+1,cur.getDate())}else{cur=new Date(cur.getTime()+step*86400000)}}
+      }
+    }
+
+    function existingOn(d:Date){return jobs.filter(j=>sameDay(new Date(j.checkoutTime),d))}
+    function newOn(d:Date){return newJobDates.filter(nd=>sameDay(nd,d))}
+    const today=new Date()
+
+    async function handleSubmit(){
+      if(!jDate){showToast('Select a date','err');return}
+      setSubmitting(true)
+      // Create jobs for each date
+      for(const d of newJobDates){
+        const checkout=new Date(d);const [h,m]=jTime.split(':');checkout.setHours(parseInt(h)||10,parseInt(m)||0,0,0)
+        await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          platform:'manual',displayName:jName,propertyLabel:jAddr.split(',')[0]||cn,address:jAddr,
+          customerName:cn,checkoutTime:checkout.toISOString(),checkinTime:null,
+          sqft:q.sqftRange?parseInt(q.sqftRange.replace(/[^\d]/g,''))||null:null,beds:q.bedrooms,baths:q.bathrooms,
+          worth:q.totalPrice,notes:[`From quote #${q.id.slice(-6)}`,recurring?`Recurring: ${freq}`:'One-off',jNotes].filter(Boolean).join('\n'),
+          cleanerIds:'[]',duties:'[]',
+        })})
+      }
+      // Mark quote completed if booked
+      if(q.status==='booked') await fetch(`/api/quotes/${q.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'completed'})})
+      await load();showToast(`${newJobDates.length} job${newJobDates.length>1?'s':''} created`);setPage('jobs');setSubmitting(false)
+    }
+
+    return(
+      <div style={{maxWidth:1000,margin:'0 auto'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
+          <button onClick={()=>{setActiveQuoteId(q.id);setPage('quote-detail')}} style={{...btnS,padding:'7px 14px'}}>← Back to Quote</button>
+          <h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:20,fontWeight:700,color:T.text}}>Schedule Job from Quote</h1>
+        </div>
+
+        {/* Quote summary bar */}
+        <div style={{...card,padding:'16px 20px',marginBottom:20,display:'flex',alignItems:'center',gap:14}}>
+          {avatar(q.client.firstName.charAt(0).toUpperCase(),40)}
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:600,color:T.text}}>{cn}</div>
+            <div style={{fontSize:11,color:T.dim}}>{q.serviceType} · {q.frequency} · {q.address}</div>
+          </div>
+          <div style={{fontSize:18,fontWeight:700,color:T.accent,letterSpacing:-0.3}}>{fmtMoney(q.totalPrice)}</div>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:20,alignItems:'start'}}>
+          {/* Left: Job config */}
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            {/* One-off vs Recurring */}
+            <div style={{...card,padding:'20px'}}>
+              {hdr('Schedule Type')}
+              <div style={{display:'flex',gap:6,marginBottom:16}}>
+                <button onClick={()=>setRecurring(false)} style={{flex:1,padding:'10px',borderRadius:10,border:`1px solid ${!recurring?T.accentBorder:T.border}`,background:!recurring?T.accentBg:'transparent',color:!recurring?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>One-Off</button>
+                <button onClick={()=>setRecurring(true)} style={{flex:1,padding:'10px',borderRadius:10,border:`1px solid ${recurring?T.accentBorder:T.border}`,background:recurring?T.accentBg:'transparent',color:recurring?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Recurring</button>
+              </div>
+              {recurring&&<div style={{marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Frequency</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4}}>
+                  {([['weekly','Weekly'],['bi-weekly','Bi-Weekly'],['every-3-weeks','Every 3 Wks'],['monthly','Monthly']] as const).map(([k,l])=>(
+                    <button key={k} onClick={()=>setFreq(k)} style={{padding:'8px',borderRadius:8,border:`1px solid ${freq===k?T.accentBorder:T.border}`,background:freq===k?T.accentBg:'transparent',color:freq===k?T.accent:T.muted,fontSize:11,fontWeight:freq===k?600:400,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>{l}</button>
+                  ))}
+                </div>
+              </div>}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Start Date *</div><input type="date" value={jDate} onChange={e=>setJDate(e.target.value)} style={inp}/></div>
+                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Time</div><input type="time" value={jTime} onChange={e=>setJTime(e.target.value)} style={inp}/></div>
+              </div>
+              {recurring&&<div style={{marginTop:10}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>End Date (optional)</div><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={inp}/></div>}
+              {newJobDates.length>0&&<div style={{marginTop:12,padding:'10px 12px',background:T.accentBg,borderRadius:8,border:`1px solid ${T.accentBorder}`,fontSize:12,color:T.accent,fontWeight:500}}>
+                {recurring?`${newJobDates.length} jobs will be created (${freq})`:`1 job on ${fmtDate(jDate)}`}
+              </div>}
+            </div>
+
+            {/* Job details */}
+            <div style={{...card,padding:'20px'}}>
+              {hdr('Job Details')}
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Job Name</div><input value={jName} onChange={e=>setJName(e.target.value)} style={inp}/></div>
+                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Address</div><input value={jAddr} onChange={e=>setJAddr(e.target.value)} style={inp}/></div>
+                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div><textarea value={jNotes} onChange={e=>setJNotes(e.target.value)} rows={3} style={{...inp,resize:'vertical'}} placeholder="Special instructions…"/></div>
+              </div>
+            </div>
+
+            <button onClick={handleSubmit} disabled={submitting} style={{...btnP,width:'100%',padding:'14px',fontSize:14,opacity:submitting?.6:1}}>{submitting?'Creating…':`Create ${newJobDates.length>1?newJobDates.length+' Jobs':'Job'}`}</button>
+          </div>
+
+          {/* Right: Calendar preview */}
+          <div style={{...card,padding:'20px',position:'sticky',top:20}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.text}}>{calMonth.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</div>
+              <div style={{display:'flex',gap:4}}>
+                <button onClick={()=>{const d=new Date(yr,mo-1,15);setJDate(d.toISOString().split('T')[0].slice(0,7)+'-'+jDate.split('-')[2]||'01')}} style={{width:26,height:26,borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12}}>‹</button>
+                <button onClick={()=>{const d=new Date(yr,mo+1,15);setJDate(d.toISOString().split('T')[0].slice(0,7)+'-'+(jDate.split('-')[2]||'01'))}} style={{width:26,height:26,borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12}}>›</button>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:10,marginBottom:10}}>
+              {[{c:T.accent,l:'Existing'},{c:T.green,l:'New Job'}].map(x=><div key={x.l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.muted}}><div style={{width:7,height:7,borderRadius:2,background:x.c}}/>{x.l}</div>)}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:1}}>
+              {['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{textAlign:'center',padding:'5px 0',fontSize:9,fontWeight:600,color:T.dim,letterSpacing:0.5}}>{d}</div>)}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:T.border,borderRadius:10,overflow:'hidden'}}>
+              {cells.map((cell,idx)=>{
+                if(cell.type==='pad') return <div key={`p${idx}`} style={{background:dark?'rgba(255,255,255,0.008)':L.surf,padding:'6px 4px',minHeight:54}}><span style={{fontSize:10,color:T.dim,opacity:0.4}}>{cell.n}</span></div>
+                const{day,date}=cell,isT=sameDay(date,today),ex=existingOn(date),nw=newOn(date),hasNew=nw.length>0
+                return(
+                  <div key={day} style={{background:hasNew?(dark?'rgba(52,211,153,0.08)':'rgba(5,150,105,0.05)'):isT?T.accentBg:dark?D.surf:L.surf,padding:'4px',minHeight:54,borderTop:hasNew?`2px solid ${T.green}`:isT?`2px solid ${T.accent}`:'2px solid transparent'}}>
+                    <div style={{fontSize:10,fontWeight:600,color:hasNew?T.green:isT?T.accent:T.dim,marginBottom:2}}>{day}</div>
+                    {ex.slice(0,2).map(j=><div key={j.id} style={{padding:'1px 3px',borderRadius:3,background:T.accentBg,borderLeft:`2px solid ${T.accent}`,fontSize:8,fontWeight:600,color:T.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:1}}>{j.displayName}</div>)}
+                    {hasNew&&<div style={{padding:'1px 3px',borderRadius:3,background:T.greenBg,borderLeft:`2px solid ${T.green}`,fontSize:8,fontWeight:600,color:T.green,marginBottom:1}}>★ New</div>}
+                    {ex.length>2&&<div style={{fontSize:7,color:T.dim}}>+{ex.length-2}</div>}
+                  </div>
+                )
+              })}
+            </div>
+            {/* Next month preview for recurring */}
+            {recurring&&newJobDates.length>0&&(()=>{
+              const futureByMonth:Record<string,number>={}
+              newJobDates.forEach(d=>{const k=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});futureByMonth[k]=(futureByMonth[k]||0)+1})
+              return <div style={{marginTop:14}}>
+                <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:8}}>Schedule Summary</div>
+                {Object.entries(futureByMonth).map(([m,c])=><div key={m} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${T.border}`,fontSize:12}}>
+                  <span style={{color:T.text,fontWeight:500}}>{m}</span>
+                  <span style={{color:T.green,fontWeight:600}}>{c} job{c>1?'s':''}</span>
+                </div>)}
+              </div>
+            })()}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -852,6 +1044,10 @@ export default function CleanerDashboard() {
         </div>
         {inv.notes&&<div style={{padding:'12px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,marginBottom:16}}>{inv.notes}</div>}
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
+          <div style={{display:'flex',gap:7}}>
+            <button onClick={()=>window.open(`/api/invoices/${inv.id}/pdf`,'_blank')} style={{flex:1,padding:'10px',borderRadius:10,background:T.accentBg,border:`1px solid ${T.accentBorder}`,color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>📄 View PDF</button>
+            {inv.status!=='paid'&&<button onClick={()=>createPaymentLink(inv.id)} style={{flex:1,padding:'10px',borderRadius:10,background:`linear-gradient(135deg,#635bff,#4f46e5)`,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>💳 Payment Link</button>}
+          </div>
           {inv.status==='draft'&&<button onClick={()=>updateInvoice(inv.id,{status:'sent'})} style={{...btnP,width:'100%',textAlign:'center'}}>Mark Sent</button>}
           {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'paid',paidAt:new Date().toISOString()})} style={{width:'100%',padding:'12px',borderRadius:10,background:`linear-gradient(135deg,${T.green},#059669)`,color:dark?'#030d1c':'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>✓ Mark Paid</button>}
           {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'overdue'})} style={{width:'100%',padding:'10px',borderRadius:10,background:T.redBg,border:`1px solid ${T.red}20`,color:T.red,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Mark Overdue</button>}
@@ -1137,7 +1333,7 @@ export default function CleanerDashboard() {
     ['integrations','🔗','Integrations'],
     ['settings','⚙️','Settings'],
   ]
-  const activeNav=(['quote-detail','create-quote'].includes(page)?'quotes':['create-job'].includes(page)?'jobs':['create-client','client-detail'].includes(page)?'clients':['create-invoice','invoice-detail'].includes(page)?'invoices':page) as Page
+  const activeNav=(['quote-detail','create-quote','convert-to-job'].includes(page)?'quotes':['create-job'].includes(page)?'jobs':['create-client','client-detail'].includes(page)?'clients':['create-invoice','invoice-detail'].includes(page)?'invoices':page) as Page
 
   return(
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:T.bg,fontFamily:'"DM Sans",-apple-system,sans-serif',backgroundImage:dark?'radial-gradient(ellipse at 20% 30%,rgba(5,48,100,0.35) 0%,transparent 50%),radial-gradient(ellipse at 80% 70%,rgba(8,64,130,0.25) 0%,transparent 40%)':'none'}}>
@@ -1172,7 +1368,7 @@ export default function CleanerDashboard() {
       </nav>
 
       <main style={{flex:1,overflowY:'auto',padding:'20px 28px'}}>
-        {page==='dashboard'&&<DashboardPage/>}{page==='quotes'&&<QuotesPage/>}{page==='quote-detail'&&<QuoteDetailPage/>}{page==='create-quote'&&<CreateQuotePage/>}
+        {page==='dashboard'&&<DashboardPage/>}{page==='quotes'&&<QuotesPage/>}{page==='quote-detail'&&<QuoteDetailPage/>}{page==='create-quote'&&<CreateQuotePage/>}{page==='convert-to-job'&&<ConvertToJobPage/>}
         {page==='jobs'&&<JobsPage/>}{page==='create-job'&&<CreateJobPage/>}
         {page==='clients'&&<ClientsPage/>}{page==='create-client'&&<CreateClientPage/>}{page==='client-detail'&&<ClientDetailPage/>}
         {page==='invoices'&&<InvoicesPage/>}{page==='create-invoice'&&<CreateInvoicePage/>}{page==='invoice-detail'&&<InvoiceDetailPage/>}
