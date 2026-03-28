@@ -1604,12 +1604,12 @@ export default function CleanerDashboard() {
   // ACTIVITY PAGE
   // ══════════════════════════════════════════════════════════════════════════
   function ActivityPage(){
-    const [filter,setFilter]=useState<'all'|'quotes'|'invoices'>('all')
+    const [filter,setFilter]=useState<'all'|'quote'|'invoice'>('all')
     type Event = {id:string;type:'quote'|'invoice';title:string;desc:string;time:string;color:string;status:string}
     const events:Event[] = [
       ...quotes.map(q=>({id:q.id,type:'quote' as const,title:`${q.client.firstName} ${q.client.lastName}`,desc:`${q.serviceType} · ${fmtMoney(q.totalPrice)}`,time:q.createdAt,color:(STATUS[q.status]||STATUS.pending).color,status:q.status})),
       ...invoices.map(i=>({id:i.id,type:'invoice' as const,title:`Invoice #${i.id.slice(-6)}`,desc:fmtMoney(i.amount),time:i.createdAt,color:(INV_STATUS[i.status]||INV_STATUS.draft).color,status:i.status})),
-    ].filter(e=>filter==='all'||e.type===filter||(filter==='quotes'&&e.type==='quote')||(filter==='invoices'&&e.type==='invoice'))
+    ].filter(e=>filter==='all'||e.type===filter)
     .sort((a,b)=>new Date(b.time).getTime()-new Date(a.time).getTime())
 
     return(
@@ -1617,8 +1617,8 @@ export default function CleanerDashboard() {
         <h1 style={{fontFamily:'Inter,sans-serif',fontSize:24,fontWeight:900,color:T.text,marginBottom:4}}>Activity</h1>
         <p style={{fontSize:13,color:T.muted,marginBottom:16}}>Timeline of all business activity</p>
         <div style={{display:'flex',gap:3,background:T.surf,borderRadius:9,padding:3,border:`1px solid ${T.border}`,marginBottom:20,width:'fit-content'}}>
-          {(['all','quotes','invoices'] as const).map(f=>(
-            <button key={f} onClick={()=>setFilter(f)} style={{padding:'5px 14px',borderRadius:6,border:'none',cursor:'pointer',fontSize:11,fontWeight:700,background:filter===f?T.cyanBg:'transparent',color:filter===f?T.cyan:T.dim,fontFamily:'Inter,sans-serif',textTransform:'capitalize'}}>{f}</button>
+          {([['all','All'],['quote','Quotes'],['invoice','Invoices']] as const).map(([f,label])=>(
+            <button key={f} onClick={()=>setFilter(f)} style={{padding:'5px 14px',borderRadius:6,border:'none',cursor:'pointer',fontSize:11,fontWeight:700,background:filter===f?T.cyanBg:'transparent',color:filter===f?T.cyan:T.dim,fontFamily:'Inter,sans-serif'}}>{label}</button>
           ))}
         </div>
         {events.length===0?<div style={{textAlign:'center',padding:'60px 0',color:T.dim}}>No activity yet.</div>:(
