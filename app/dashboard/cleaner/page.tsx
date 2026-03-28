@@ -1060,7 +1060,7 @@ export default function CleanerDashboard() {
     </>)
   }
   // ══════════════════════════════════════════════════════════════════════════
-  // CALENDAR — property colors, rename, rules, expandable cells, job popup
+  // CALENDAR — fixed grid, elegant, readable
   // ══════════════════════════════════════════════════════════════════════════
   function CalendarPage(){
     const [calDate,setCalDate]=useState(new Date())
@@ -1071,13 +1071,11 @@ export default function CleanerDashboard() {
     for(let d=1;d<=last.getDate();d++) cells.push({type:'day',day:d,date:new Date(yr,mo,d)})
     const trail=(dow+last.getDate())%7;if(trail) for(let i=1;i<=7-trail;i++) cells.push({type:'pad',n:i})
     const rows=cells.length/7
-
-    // All jobs (not just upcoming) for calendar
     const allJobs=jobs.sort((a,b)=>new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
     function jobsOn(d:Date){return allJobs.filter(j=>sameDay(new Date(j.checkoutTime),d))}
     function quotesOn(d:Date){return quotes.filter(q=>(q.preferredDate1&&sameDay(new Date(q.preferredDate1),d))||(q.preferredDate2&&sameDay(new Date(q.preferredDate2),d)))}
 
-    // Property colors, names, rules (localStorage)
+    // Property colors/names/rules (persisted)
     const [propColors,setPropColors]=useState<Record<string,string>>(()=>{if(typeof window==='undefined')return{};try{return JSON.parse(localStorage.getItem('cs_propColors')||'{}')}catch{return{}}})
     const [propNames,setPropNames]=useState<Record<string,string>>(()=>{if(typeof window==='undefined')return{};try{return JSON.parse(localStorage.getItem('cs_propNames')||'{}')}catch{return{}}})
     const [colorRules,setColorRules]=useState<{keyword:string;color:string}[]>(()=>{if(typeof window==='undefined')return[];try{return JSON.parse(localStorage.getItem('cs_colorRules')||'[]')}catch{return[]}})
@@ -1085,234 +1083,239 @@ export default function CleanerDashboard() {
     function savePropNames(n:Record<string,string>){setPropNames(n);localStorage.setItem('cs_propNames',JSON.stringify(n))}
     function saveColorRules(r:{keyword:string;color:string}[]){setColorRules(r);localStorage.setItem('cs_colorRules',JSON.stringify(r))}
 
-    const COLORS=['#00b896','#0096c7','#4361ee','#7209b7','#f72585','#fb8500','#f59e0b','#ef4444','#10b981','#6d28d9','#e76f51','#00c4ff']
+    const PALETTE=['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#14b8a6','#6366f1','#84cc16','#e11d48']
     function getJobColor(j:Job):string{
       const label=j.propertyLabel||j.displayName
-      // Check rules first
       const lower=label.toLowerCase()
       for(const r of colorRules){if(r.keyword&&lower.includes(r.keyword.toLowerCase()))return r.color}
-      // Then explicit color
       if(propColors[label])return propColors[label]
-      // Platform defaults
-      if(j.platform==='hostaway')return'#fb8500';if(j.platform==='jobber')return'#00c4ff';if(j.platform==='airbnb')return'#ff385c'
-      return T.accent
+      if(j.platform==='hostaway')return'#f59e0b';if(j.platform==='jobber')return'#3b82f6';if(j.platform==='airbnb')return'#ef4444'
+      return'#6366f1'
     }
     function getDisplayName(j:Job):string{return propNames[j.propertyLabel||j.displayName]||j.displayName}
 
-    // Expanded day (for "More" toggle)
     const [expandedDay,setExpandedDay]=useState<number|null>(null)
-    // Settings panel
     const [showSettings,setShowSettings]=useState(false)
-    const [newRule,setNewRule]=useState({keyword:'',color:'#fb8500'})
-    // Rename editing
+    const [newRule,setNewRule]=useState({keyword:'',color:'#f59e0b'})
     const [renameKey,setRenameKey]=useState<string|null>(null)
     const [renameTo,setRenameTo]=useState('')
-
-    // All unique property labels
     const allProps=[...new Set(allJobs.map(j=>j.propertyLabel||j.displayName))].sort()
 
-    // Job detail popup (not the old modal - stays on calendar)
+    // Job detail popup
     const [calJob,setCalJob]=useState<Job|null>(null)
-    const [editingJob,setEditingJob]=useState(false)
-    const [ej,setEj]=useState({address:'',sqft:'',beds:'',baths:'',notes:'',customerName:'',worth:''})
-    const [savingJob,setSavingJob]=useState(false)
+    const [editingCJ,setEditingCJ]=useState(false)
+    const [eCJ,setECJ]=useState({address:'',sqft:'',beds:'',baths:'',notes:'',customerName:'',worth:''})
+    const [savingCJ,setSavingCJ]=useState(false)
+    function openCalJob(j:Job,e:React.MouseEvent){e.stopPropagation();setCalJob(j);setEditingCJ(false);setECJ({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})}
+    async function saveCalJob(){if(!calJob)return;setSavingCJ(true);await fetch(`/api/jobs/${calJob.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:eCJ.address||null,sqft:eCJ.sqft?parseInt(eCJ.sqft):null,beds:eCJ.beds?parseInt(eCJ.beds):null,baths:eCJ.baths?parseFloat(eCJ.baths):null,notes:eCJ.notes||null,customerName:eCJ.customerName||null,worth:eCJ.worth?parseFloat(eCJ.worth):null})});await load();setSavingCJ(false);setEditingCJ(false);showToast('Job updated')}
 
-    function openCalJob(j:Job,e:React.MouseEvent){e.stopPropagation();setCalJob(j);setEditingJob(false);setEj({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})}
-    async function saveCalJob(){if(!calJob)return;setSavingJob(true);await fetch(`/api/jobs/${calJob.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:ej.address||null,sqft:ej.sqft?parseInt(ej.sqft):null,beds:ej.beds?parseInt(ej.beds):null,baths:ej.baths?parseFloat(ej.baths):null,notes:ej.notes||null,customerName:ej.customerName||null,worth:ej.worth?parseFloat(ej.worth):null})});await load();setSavingJob(false);setEditingJob(false);showToast('Job updated')}
-
-    const cellH=Math.max(80,Math.floor((typeof window!=='undefined'?window.innerHeight-280:600)/rows))
-    const MAX_VISIBLE=3
+    const MAX_VIS=3
+    const cellH=Math.max(90,Math.floor((typeof window!=='undefined'?window.innerHeight-290:580)/rows))
 
     return(<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:'calc(100vh - 80px)'}}>
       {/* Header */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
         <div>
-          <h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:22,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{calDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h1>
-          <div style={{fontSize:12,color:T.muted,marginTop:3}}>{upcoming.length} upcoming · {allProps.length} properties</div>
+          <h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:24,fontWeight:700,color:T.text,letterSpacing:-0.4}}>{calDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h1>
+          <div style={{fontSize:12,color:T.muted,marginTop:4}}>{upcoming.length} upcoming · {allProps.length} properties</div>
         </div>
-        <div style={{display:'flex',gap:6}}>
-          <button onClick={()=>setShowSettings(!showSettings)} style={{height:32,padding:'0 12px',borderRadius:8,border:`1px solid ${showSettings?T.accentBorder:T.border}`,background:showSettings?T.accentBg:T.surf,color:showSettings?T.accent:T.muted,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>⚙ Properties</button>
-          <button onClick={()=>setCalDate(new Date(yr,mo-1,1))} style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.border}`,background:T.surf,color:T.muted,cursor:'pointer',fontSize:14}}>‹</button>
-          <button onClick={()=>setCalDate(new Date())} style={{padding:'0 14px',height:32,borderRadius:8,border:`1px solid ${T.border}`,background:T.surf,color:T.accent,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>Today</button>
-          <button onClick={()=>setCalDate(new Date(yr,mo+1,1))} style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.border}`,background:T.surf,color:T.muted,cursor:'pointer',fontSize:14}}>›</button>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <button onClick={()=>setShowSettings(!showSettings)} style={{height:34,padding:'0 14px',borderRadius:9,border:`1px solid ${showSettings?T.accentBorder:T.border}`,background:showSettings?T.accentBg:'transparent',color:showSettings?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"DM Sans",sans-serif',transition:'all .15s'}}>⚙ Colors</button>
+          <div style={{width:1,height:20,background:T.border,margin:'0 4px'}}/>
+          <button onClick={()=>setCalDate(new Date(yr,mo-1,1))} style={{width:34,height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+          <button onClick={()=>setCalDate(new Date())} style={{padding:'0 16px',height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>Today</button>
+          <button onClick={()=>setCalDate(new Date(yr,mo+1,1))} style={{width:34,height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
         </div>
       </div>
 
-      {/* Property Settings Panel */}
+      {/* Settings Panel */}
       {showSettings&&(
-        <div style={{...card,padding:'20px',marginBottom:14}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-            <div style={{fontSize:14,fontWeight:700,color:T.text}}>Property Colors & Names</div>
-            <button onClick={()=>setShowSettings(false)} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:11}}>×</button>
+        <div style={{...card,padding:'22px',marginBottom:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Property Colors & Names</div>
+            <button onClick={()=>setShowSettings(false)} style={{width:26,height:26,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:12}}>×</button>
           </div>
-          {/* Properties list */}
-          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16,maxHeight:200,overflowY:'auto'}}>
-            {allProps.map(p=>{const c=propColors[p];const ruleColor=colorRules.find(r=>p.toLowerCase().includes(r.keyword.toLowerCase()));const displayColor=c||ruleColor?.color||T.accent;const isRenaming=renameKey===p;return(
-              <div key={p} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`}}>
-                {/* Color picker */}
-                <div style={{position:'relative'}}>
-                  <div style={{width:18,height:18,borderRadius:4,background:displayColor,cursor:'pointer',border:'1px solid rgba(255,255,255,0.1)'}} onClick={()=>{const idx=COLORS.indexOf(displayColor);const next=COLORS[(idx+1)%COLORS.length];const u={...propColors,[p]:next};savePropColors(u)}}/>
-                </div>
-                {/* Name */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:8,marginBottom:18,maxHeight:220,overflowY:'auto'}}>
+            {allProps.map(p=>{const currentColor=propColors[p]||(colorRules.find(r=>p.toLowerCase().includes(r.keyword.toLowerCase()))?.color)||'#6366f1';const isRenaming=renameKey===p;return(
+              <div key={p} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`}}>
+                <div style={{width:22,height:22,borderRadius:6,background:currentColor,cursor:'pointer',border:'2px solid rgba(255,255,255,0.08)',flexShrink:0,transition:'transform .1s'}} onClick={()=>{const idx=PALETTE.indexOf(currentColor);savePropColors({...propColors,[p]:PALETTE[(idx+1)%PALETTE.length]})}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.transform='scale(1.15)'}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.transform='scale(1)'}} title="Click to change color"/>
                 {isRenaming?(
                   <div style={{flex:1,display:'flex',gap:4}}>
-                    <input value={renameTo} onChange={e=>setRenameTo(e.target.value)} style={{...inp,padding:'4px 8px',fontSize:11,flex:1}} autoFocus onKeyDown={e=>{if(e.key==='Enter'){const u={...propNames,[p]:renameTo};savePropNames(u);setRenameKey(null)}}}/>
-                    <button onClick={()=>{const u={...propNames,[p]:renameTo};savePropNames(u);setRenameKey(null)}} style={{padding:'4px 8px',borderRadius:5,border:'none',background:T.accent,color:dark?'#030d1c':'#fff',cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button>
-                    <button onClick={()=>setRenameKey(null)} style={{padding:'4px 6px',borderRadius:5,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:10}}>×</button>
+                    <input value={renameTo} onChange={e=>setRenameTo(e.target.value)} style={{...inp,padding:'5px 10px',fontSize:12,flex:1}} autoFocus onKeyDown={e=>{if(e.key==='Enter'){savePropNames({...propNames,[p]:renameTo});setRenameKey(null)}if(e.key==='Escape')setRenameKey(null)}}/>
+                    <button onClick={()=>{savePropNames({...propNames,[p]:renameTo});setRenameKey(null)}} style={{padding:'5px 10px',borderRadius:6,border:'none',background:T.accent,color:dark?'#030d1c':'#fff',cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button>
                   </div>
                 ):(
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{propNames[p]||p}</div>
-                    {propNames[p]&&<div style={{fontSize:9,color:T.dim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>({p})</div>}
+                  <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>{setRenameKey(p);setRenameTo(propNames[p]||p)}}>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{propNames[p]||p}</div>
+                    {propNames[p]&&propNames[p]!==p&&<div style={{fontSize:9,color:T.dim,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p}</div>}
                   </div>
                 )}
-                {!isRenaming&&<button onClick={()=>{setRenameKey(p);setRenameTo(propNames[p]||p)}} style={{fontSize:10,color:T.muted,background:'none',border:'none',cursor:'pointer',fontFamily:'"DM Sans",sans-serif',fontWeight:500}}>rename</button>}
               </div>
             )})}
-            {allProps.length===0&&<div style={{fontSize:12,color:T.dim,padding:10}}>No properties yet. Jobs will appear here once synced.</div>}
+            {allProps.length===0&&<div style={{fontSize:12,color:T.dim,padding:12}}>No properties yet.</div>}
           </div>
-          {/* Color Rules */}
-          {hdr('Color Rules')}
-          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
+          {/* Rules */}
+          <div style={{fontSize:11,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.muted,marginBottom:10}}>Color Rules</div>
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}>
             {colorRules.map((r,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',background:T.surf,borderRadius:6,border:`1px solid ${T.border}`}}>
-                <div style={{width:14,height:14,borderRadius:3,background:r.color,flexShrink:0}}/>
-                <span style={{fontSize:11,color:T.text,flex:1}}>Contains "{r.keyword}"</span>
-                <button onClick={()=>{const u=colorRules.filter((_,j)=>j!==i);saveColorRules(u)}} style={{fontSize:10,color:T.dim,background:'none',border:'none',cursor:'pointer'}}>×</button>
+              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`}}>
+                <div style={{width:16,height:16,borderRadius:4,background:r.color,flexShrink:0}}/>
+                <span style={{fontSize:12,color:T.text,flex:1}}>Contains "<span style={{fontWeight:600}}>{r.keyword}</span>"</span>
+                <button onClick={()=>saveColorRules(colorRules.filter((_,j)=>j!==i))} style={{fontSize:11,color:T.dim,background:'none',border:'none',cursor:'pointer',padding:'2px 4px'}}>×</button>
               </div>
             ))}
           </div>
-          <div style={{display:'flex',gap:6}}>
-            <input value={newRule.keyword} onChange={e=>setNewRule({...newRule,keyword:e.target.value})} placeholder='e.g. "Mike"' style={{...inp,flex:1,padding:'7px 10px',fontSize:11}}/>
-            <div style={{display:'flex',gap:2}}>
-              {COLORS.slice(0,6).map(c=><div key={c} onClick={()=>setNewRule({...newRule,color:c})} style={{width:18,height:18,borderRadius:4,background:c,cursor:'pointer',border:newRule.color===c?'2px solid #fff':'1px solid rgba(255,255,255,0.1)'}}/>)}
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input value={newRule.keyword} onChange={e=>setNewRule({...newRule,keyword:e.target.value})} placeholder='Keyword, e.g. "Mike"' style={{...inp,flex:1,padding:'8px 12px',fontSize:12}}/>
+            <div style={{display:'flex',gap:3,flexShrink:0}}>
+              {PALETTE.slice(0,8).map(c=><div key={c} onClick={()=>setNewRule({...newRule,color:c})} style={{width:20,height:20,borderRadius:5,background:c,cursor:'pointer',border:newRule.color===c?'2px solid #fff':`2px solid transparent`,transition:'border .1s'}}/>)}
             </div>
-            <button onClick={()=>{if(newRule.keyword.trim()){saveColorRules([...colorRules,{keyword:newRule.keyword.trim(),color:newRule.color}]);setNewRule({keyword:'',color:'#fb8500'})}}} style={{padding:'6px 12px',borderRadius:6,border:'none',background:T.accent,color:dark?'#030d1c':'#fff',cursor:'pointer',fontSize:10,fontWeight:600}}>Add</button>
+            <button onClick={()=>{if(newRule.keyword.trim()){saveColorRules([...colorRules,{keyword:newRule.keyword.trim(),color:newRule.color}]);setNewRule({keyword:'',color:'#f59e0b'})}}} style={{padding:'8px 16px',borderRadius:8,border:'none',background:T.accent,color:dark?'#030d1c':'#fff',cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0}}>Add</button>
           </div>
         </div>
       )}
 
-      {/* Day headers */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:1}}>
-        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{textAlign:'center',padding:'7px 0',fontSize:10,fontWeight:600,letterSpacing:1.5,textTransform:'uppercase',color:T.accent,background:T.accentBg,borderRadius:4}}>{d}</div>)}
-      </div>
+      {/* Calendar Table */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',border:`1px solid ${T.border}`,borderRadius:16,overflow:'hidden',background:dark?'rgba(3,10,28,0.5)':'#fff'}}>
+        {/* Day headers - INSIDE the table border */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',borderBottom:`1px solid ${T.border}`}}>
+          {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d=>(
+            <div key={d} style={{padding:'10px 0',textAlign:'center',fontSize:11,fontWeight:600,letterSpacing:0.8,color:T.muted,background:dark?'rgba(255,255,255,0.015)':'rgba(0,0,0,0.02)'}}>{d}</div>
+          ))}
+        </div>
 
-      {/* Calendar grid */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridAutoRows:`minmax(${cellH}px,auto)`,gap:1,background:T.border,borderRadius:14,overflow:'hidden',flex:1}}>
-        {cells.map((cell,idx)=>{
-          if(cell.type==='pad') return <div key={`p${idx}`} style={{background:dark?'rgba(255,255,255,0.008)':L.surf,opacity:.35,padding:'5px',minHeight:cellH}}><span style={{fontSize:11,color:T.dim}}>{cell.n}</span></div>
-          const{day,date}=cell,isT=sameDay(date,today)
-          const dj=jobsOn(date),dq=quotesOn(date)
-          const allEvents=[...dj.map(j=>({type:'job' as const,j})),...dq.map(q=>({type:'quote' as const,q}))]
-          const isExpanded=expandedDay===day
-          const visible=isExpanded?allEvents:allEvents.slice(0,MAX_VISIBLE)
-          const overflow=allEvents.length-MAX_VISIBLE
+        {/* Grid */}
+        <div style={{flex:1,display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridTemplateRows:`repeat(${rows},minmax(${cellH}px,1fr))`}}>
+          {cells.map((cell,idx)=>{
+            const isLast=idx===cells.length-1
+            const colIdx=idx%7
+            const rowIdx=Math.floor(idx/7)
+            const borderR=colIdx<6?`1px solid ${T.border}`:'none'
+            const borderB=rowIdx<rows-1?`1px solid ${T.border}`:'none'
 
-          return(
-            <div key={day} style={{background:isT?T.accentBg:dark?D.surf:L.surf,padding:'4px',borderTop:isT?`2px solid ${T.accent}`:'2px solid transparent',display:'flex',flexDirection:'column',minHeight:cellH}}>
-              <div style={{fontSize:11,fontWeight:600,color:isT?T.accent:T.dim,marginBottom:3,width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?T.accentBg:'transparent'}}>{day}</div>
-              <div style={{display:'flex',flexDirection:'column',gap:2,flex:1}}>
-                {visible.map((ev,vi)=>{
-                  if(ev.type==='job'){const j=ev.j;const c=getJobColor(j);return(
-                    <div key={j.id} onClick={e=>openCalJob(j,e)} style={{padding:'2px 5px',borderRadius:4,background:`${c}12`,borderLeft:`2px solid ${c}`,fontSize:9,fontWeight:600,color:c,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}} title={getDisplayName(j)}>
-                      {fmtTime(j.checkoutTime)} {getDisplayName(j)}
-                    </div>
-                  )}
-                  if(ev.type==='quote'){const q=ev.q;return(
-                    <div key={q.id} onClick={e=>{e.stopPropagation();openQuote(q)}} style={{padding:'2px 5px',borderRadius:4,background:T.greenBg,borderLeft:`2px solid ${T.green}`,fontSize:9,fontWeight:600,color:T.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>
-                      {q.client.firstName} {q.client.lastName.charAt(0)}.
-                    </div>
-                  )}
-                  return null
-                })}
-                {!isExpanded&&overflow>0&&(
-                  <button onClick={e=>{e.stopPropagation();setExpandedDay(day)}} style={{fontSize:8,color:T.accent,fontWeight:700,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'1px 4px',fontFamily:'"DM Sans",sans-serif'}}>+{overflow} more</button>
-                )}
-                {isExpanded&&allEvents.length>MAX_VISIBLE&&(
-                  <button onClick={e=>{e.stopPropagation();setExpandedDay(null)}} style={{fontSize:8,color:T.dim,fontWeight:600,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'1px 4px',fontFamily:'"DM Sans",sans-serif'}}>Show less</button>
-                )}
+            if(cell.type==='pad'){
+              return <div key={`p${idx}`} style={{borderRight:borderR,borderBottom:borderB,padding:'8px',background:dark?'rgba(255,255,255,0.008)':'rgba(0,0,0,0.01)'}}>
+                <span style={{fontSize:13,color:T.dim,opacity:0.35,fontWeight:500}}>{cell.n}</span>
               </div>
-            </div>
-          )
-        })}
+            }
+
+            const{day,date}=cell,isT=sameDay(date,today)
+            const dj=jobsOn(date),dq=quotesOn(date)
+            const allEv=[...dj.map(j=>({t:'j' as const,j})),...dq.map(q=>({t:'q' as const,q}))]
+            const isExp=expandedDay===day
+            const vis=isExp?allEv:allEv.slice(0,MAX_VIS)
+            const overflow=allEv.length-MAX_VIS
+
+            return(
+              <div key={day} style={{borderRight:borderR,borderBottom:borderB,padding:'6px 7px',display:'flex',flexDirection:'column',background:isT?(dark?'rgba(93,216,224,0.04)':'rgba(8,145,178,0.03)'):'transparent',position:'relative',overflow:isExp?'visible':'hidden'}}>
+                {/* Day number */}
+                <div style={{marginBottom:5,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <span style={{fontSize:isT?14:13,fontWeight:isT?700:500,color:isT?T.accent:T.sub,width:26,height:26,display:'inline-flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?(dark?'rgba(93,216,224,0.12)':'rgba(8,145,178,0.1)'):'transparent'}}>{day}</span>
+                  {allEv.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:500}}>{allEv.length}</span>}
+                </div>
+
+                {/* Events */}
+                <div style={{display:'flex',flexDirection:'column',gap:3,flex:1}}>
+                  {vis.map((ev,vi)=>{
+                    if(ev.t==='j'){
+                      const j=ev.j,c=getJobColor(j)
+                      return <div key={j.id} onClick={e=>openCalJob(j,e)} style={{padding:'3px 7px',borderRadius:5,background:`${c}15`,borderLeft:`3px solid ${c}`,cursor:'pointer',display:'flex',alignItems:'center',gap:4,minWidth:0,transition:'background .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}25`}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}15`}}>
+                        <span style={{fontSize:10,fontWeight:600,color:c,opacity:0.8,flexShrink:0}}>{fmtTime(j.checkoutTime)}</span>
+                        <span style={{fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{getDisplayName(j)}</span>
+                      </div>
+                    }
+                    if(ev.t==='q'){
+                      const q=ev.q
+                      return <div key={q.id} onClick={e=>{e.stopPropagation();openQuote(q)}} style={{padding:'3px 7px',borderRadius:5,background:T.greenBg,borderLeft:`3px solid ${T.green}`,cursor:'pointer',display:'flex',alignItems:'center',gap:4,minWidth:0}}>
+                        <span style={{fontSize:11,fontWeight:600,color:T.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{q.client.firstName} {q.client.lastName.charAt(0)}.</span>
+                      </div>
+                    }
+                    return null
+                  })}
+
+                  {!isExp&&overflow>0&&(
+                    <button onClick={e=>{e.stopPropagation();setExpandedDay(day)}} style={{fontSize:10,color:T.accent,fontWeight:600,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px',fontFamily:'"DM Sans",sans-serif'}}>+{overflow} more</button>
+                  )}
+                  {isExp&&allEv.length>MAX_VIS&&(
+                    <button onClick={e=>{e.stopPropagation();setExpandedDay(null)}} style={{fontSize:10,color:T.dim,fontWeight:500,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px',fontFamily:'"DM Sans",sans-serif'}}>less</button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Job Detail Popup */}
       {calJob&&(()=>{
-        const j=calJob;const c=getJobColor(j)
-        let duties:{title?:string;description?:string}[]=[]
-        try{duties=JSON.parse(j.duties||'[]')}catch{}
-        const jInp=editingJob?{...inp,padding:'7px 10px',fontSize:12,background:dark?'rgba(255,255,255,0.04)':'#f5f9fd',border:`1px solid ${T.borderB}`} as React.CSSProperties:{} as React.CSSProperties
+        const j=calJob,c=getJobColor(j)
+        let duties:{title?:string;description?:string}[]=[];try{duties=JSON.parse(j.duties||'[]')}catch{}
+        const jInp=editingCJ?{...inp,padding:'8px 11px',fontSize:12,background:dark?'rgba(255,255,255,0.04)':'#f5f9fd',border:`1px solid ${T.borderB}`} as React.CSSProperties:{} as React.CSSProperties
         return(
-          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(8px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setCalJob(null)}>
-            <div style={{background:dark?'rgba(3,13,28,0.98)':'#ffffff',border:`1px solid ${T.borderB}`,borderRadius:20,width:'100%',maxWidth:520,boxShadow:'0 32px 80px rgba(0,0,0,0.5)',padding:'28px',maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-              {/* Header */}
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
-                <div style={{display:'flex',alignItems:'center',gap:12}}>
-                  <div style={{width:5,height:40,borderRadius:3,background:c,flexShrink:0}}/>
-                  <div>
-                    <div style={{fontSize:18,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{getDisplayName(j)}</div>
-                    <div style={{fontSize:12,color:T.muted,marginTop:3}}>{j.propertyLabel}</div>
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',backdropFilter:'blur(10px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setCalJob(null)}>
+            <div style={{background:dark?'rgba(4,14,32,0.98)':'#ffffff',border:`1px solid ${dark?'rgba(148,210,225,0.15)':'rgba(14,100,150,0.15)'}`,borderRadius:20,width:'100%',maxWidth:540,boxShadow:dark?'0 40px 100px rgba(0,0,0,0.6)':'0 30px 80px rgba(0,0,0,0.12)',maxHeight:'88vh',overflowY:'auto',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
+              {/* Color bar */}
+              <div style={{height:4,background:c,borderRadius:'20px 20px 0 0',flexShrink:0}}/>
+              <div style={{padding:'24px 28px'}}>
+                {/* Header */}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:20,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{getDisplayName(j)}</div>
+                    <div style={{fontSize:13,color:T.muted,marginTop:4}}>{j.propertyLabel}</div>
+                    <div style={{display:'flex',gap:6,marginTop:10}}>
+                      {badge(j.platform,c,`${c}15`)}
+                      {sameDay(new Date(j.checkoutTime),today)&&badge('Today',T.accent,T.accentBg)}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    <button onClick={()=>{if(editingCJ){saveCalJob()}else{setEditingCJ(true)}}} style={{padding:'7px 16px',borderRadius:8,border:`1px solid ${editingCJ?T.accentBorder:T.border}`,background:editingCJ?T.accentBg:'transparent',color:editingCJ?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>{savingCJ?'Saving…':editingCJ?'Save':'Edit'}</button>
+                    <button onClick={()=>setCalJob(null)} style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
                   </div>
                 </div>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={()=>{if(editingJob){saveCalJob()}else{setEditingJob(true)}}} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${editingJob?T.accentBorder:T.border}`,background:editingJob?T.accentBg:'transparent',color:editingJob?T.accent:T.muted,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>{savingJob?'Saving…':editingJob?'Save':'Edit'}</button>
-                  <button onClick={()=>setCalJob(null)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+
+                {/* Schedule */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20,padding:'16px',background:T.surf,borderRadius:12,border:`1px solid ${T.border}`}}>
+                  <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Checkout</div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{fmtDate(j.checkoutTime)}</div><div style={{fontSize:12,color:T.muted,marginTop:1}}>{fmtTime(j.checkoutTime)}</div></div>
+                  <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Check-in</div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{j.checkinTime?fmtDate(j.checkinTime):'—'}</div>{j.checkinTime&&<div style={{fontSize:12,color:T.muted,marginTop:1}}>{fmtTime(j.checkinTime)}</div>}</div>
                 </div>
-              </div>
 
-              {/* Platform + Status */}
-              <div style={{display:'flex',gap:6,marginBottom:18}}>
-                {badge(j.platform,c,`${c}15`)}
-                {sameDay(new Date(j.checkoutTime),today)&&badge('Today',T.accent,T.accentBg)}
-              </div>
-
-              {/* Schedule */}
-              {[{l:'Checkout',v:`${fmtDate(j.checkoutTime)} · ${fmtTime(j.checkoutTime)}`,i:'📅'},{l:'Check-in',v:j.checkinTime?`${fmtDate(j.checkinTime)} · ${fmtTime(j.checkinTime)}`:'—',i:'🏠'}].map(f=>(
-                <div key={f.l} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
-                  <span style={{fontSize:13}}>{f.i}</span>
-                  <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1}}>{f.l}</div><div style={{fontSize:13,fontWeight:500,color:T.text,marginTop:2}}>{f.v}</div></div>
+                {/* Property Details */}
+                <div style={{fontSize:11,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.muted,marginBottom:12}}>Property Details</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:20}}>
+                  {[{l:'Address',k:'address',span:true},{l:'Guest',k:'customerName'},{l:'Worth',k:'worth'},{l:'Sq Ft',k:'sqft'},{l:'Beds',k:'beds'},{l:'Baths',k:'baths'}].map(f=>(
+                    <div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}>
+                      <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.l}</div>
+                      {editingCJ?<input value={(eCJ as any)[f.k]||''} onChange={e=>setECJ({...eCJ,[f.k]:e.target.value})} style={jInp}/>:<div style={{fontSize:13,fontWeight:500,color:T.text}}>{f.k==='worth'&&j.worth?fmtMoney(j.worth):(j as any)[f.k]||'—'}</div>}
+                    </div>
+                  ))}
                 </div>
-              ))}
 
-              {/* Editable Property Details */}
-              {hdr('Property Details','🏠')}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-                {[{l:'Address',k:'address',span:true},{l:'Guest',k:'customerName'},{l:'Worth',k:'worth'},{l:'Sq Ft',k:'sqft'},{l:'Beds',k:'beds'},{l:'Baths',k:'baths'}].map(f=>(
-                  <div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}>
-                    <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:3}}>{f.l}</div>
-                    {editingJob?<input value={(ej as any)[f.k]||''} onChange={e=>setEj({...ej,[f.k]:e.target.value})} style={jInp}/>:<div style={{fontSize:12,fontWeight:500,color:T.text}}>{(j as any)[f.k]||(f.k==='worth'&&j.worth?fmtMoney(j.worth):'—')}</div>}
-                  </div>
-                ))}
-              </div>
-
-              {/* Duties / Line Items (from Jobber) */}
-              {duties.length>0&&(
-                <div style={{marginBottom:16}}>
-                  {hdr('Job Duties','📋')}
-                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {/* Duties */}
+                {duties.length>0&&<div style={{marginBottom:20}}>
+                  <div style={{fontSize:11,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.muted,marginBottom:10}}>Job Duties</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
                     {duties.map((d,i)=>(
-                      <div key={i} style={{padding:'8px 12px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`}}>
-                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>
-                        {d.description&&<div style={{fontSize:11,color:T.muted,marginTop:2,lineHeight:1.5}}>{d.description}</div>}
+                      <div key={i} style={{padding:'10px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>
+                        {d.description&&<div style={{fontSize:12,color:T.muted,marginTop:3,lineHeight:1.5}}>{d.description}</div>}
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                </div>}
 
-              {/* Notes */}
-              {editingJob?(
-                <div style={{marginBottom:16}}>
-                  <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:3}}>Notes</div>
-                  <textarea value={ej.notes} onChange={e=>setEj({...ej,notes:e.target.value})} rows={3} style={{...jInp,width:'100%',resize:'vertical'}}/>
-                </div>
-              ):j.notes&&<div style={{padding:'10px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.6,marginBottom:16}}>{j.notes}</div>}
+                {/* Notes */}
+                {editingCJ?(
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div>
+                    <textarea value={eCJ.notes} onChange={e=>setECJ({...eCJ,notes:e.target.value})} rows={3} style={{...jInp,width:'100%',resize:'vertical'}}/>
+                  </div>
+                ):j.notes&&<div style={{padding:'12px 16px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:13,color:T.muted,lineHeight:1.6,marginBottom:16}}>{j.notes}</div>}
 
-              {editingJob&&<div style={{display:'flex',gap:8}}>
-                <button onClick={()=>setEditingJob(false)} style={{...btnS,flex:1}}>Cancel</button>
-                <button onClick={saveCalJob} disabled={savingJob} style={{...btnP,flex:1,textAlign:'center',opacity:savingJob?.6:1}}>{savingJob?'Saving…':'Save Changes'}</button>
-              </div>}
+                {editingCJ&&<div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>setEditingCJ(false)} style={{...btnS,flex:1}}>Cancel</button>
+                  <button onClick={saveCalJob} disabled={savingCJ} style={{...btnP,flex:1,textAlign:'center',opacity:savingCJ?.6:1}}>{savingCJ?'Saving…':'Save Changes'}</button>
+                </div>}
+              </div>
             </div>
           </div>
         )
