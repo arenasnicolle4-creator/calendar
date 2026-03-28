@@ -713,7 +713,7 @@ export default function CleanerDashboard() {
     const q=quote,cn=`${q.client.firstName} ${q.client.lastName}`.trim()
 
     // Form state
-    const defaultDate=q.preferredDate1?new Date(q.preferredDate1).toISOString().split('T')[0]:q.instantBookDate?new Date(q.instantBookDate).toISOString().split('T')[0]:''
+    const defaultDate=q.preferredDate1?new Date(q.preferredDate1).toISOString().split('T')[0]:''
     const [jDate,setJDate]=useState(defaultDate)
     const [jTime,setJTime]=useState('10:00')
     const [jName,setJName]=useState(`${q.serviceType} — ${cn}`)
