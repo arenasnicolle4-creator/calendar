@@ -26,10 +26,10 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
-    const { toClientId, amount, tax, lineItems, dueDate, notes } = body
+    const { toClientId, amount, tax, lineItems, dueDate, notes, discount, discountType } = body
 
-    if (!amount) {
-      return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
+    if (amount == null && !lineItems) {
+      return NextResponse.json({ error: 'Amount or line items required' }, { status: 400 })
     }
 
     // If toClientId is provided, we need to find or create a User for the invoice recipient
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       data: {
         fromId: user.id,
         toId: user.id, // TODO: map QuoteClient to User or create a lightweight recipient
-        amount: parseFloat(String(amount)),
+        amount: parseFloat(String(amount || 0)),
         tax: parseFloat(String(tax || 0)),
         lineItems: lineItems || '[]',
         dueDate: dueDate ? new Date(dueDate) : null,
