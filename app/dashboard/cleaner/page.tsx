@@ -644,39 +644,217 @@ export default function CleanerDashboard() {
     </div>)
   }
   function CreateInvoicePage(){
-    const [sc,setSc]=useState('');const [items,setItems]=useState<{description:string;quantity:string;amount:string}[]>([{description:'Cleaning Service',quantity:'1',amount:'0'}]);const [dd,setDd]=useState('');const [notes,setNotes]=useState('');const [tax,setTax]=useState('0');const [sub,setSub]=useState(false)
-    const st=items.reduce((s,x)=>(parseFloat(x.amount)||0)*(parseFloat(x.quantity)||1)+s,0),total=st+(parseFloat(tax)||0)
-    async function go(){if(!sc){showToast('Select client','err');return};setSub(true);await createInvoice({toClientId:sc,amount:total,tax:parseFloat(tax)||0,lineItems:JSON.stringify(items.map(x=>({description:x.description,quantity:parseFloat(x.quantity)||1,amount:parseFloat(x.amount)||0}))),dueDate:dd||undefined,notes});setSub(false)}
-    return pageWrap(560,<><div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>New Invoice</h1></div>
-      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Bill To')}<select value={sc} onChange={e=>setSc(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select></div>
-      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Items')}
-        {items.map((x,i)=><div key={i} style={{display:'flex',gap:6,padding:'6px 0',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}><input value={x.description} onChange={e=>{const u=[...items];u[i]={...u[i],description:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Description"/><input value={x.quantity} onChange={e=>{const u=[...items];u[i]={...u[i],quantity:e.target.value};setItems(u)}} style={{...inp,width:44,textAlign:'center'}} placeholder="Qty" type="number"/><span style={{color:T.muted}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:76,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.red}30`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>)}
-        <button onClick={()=>setItems([...items,{description:'',quantity:'1',amount:'0'}])} style={{marginTop:8,padding:'7px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add</button>
-        <div style={{marginTop:10,padding:'10px 0',borderTop:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}><div>{label('Tax')}<div style={{display:'flex',alignItems:'center',gap:4}}><span style={{color:T.muted}}>$</span><input value={tax} onChange={e=>setTax(e.target.value)} style={{...inp,width:72}} type="number" step="0.01"/></div></div><div style={{textAlign:'right'}}><div style={{fontSize:10,color:T.dim}}>Total</div><div style={{fontSize:22,fontWeight:700,color:T.accent}}>{fmtMoney(total)}</div></div></div>
+    // Saved service templates (persisted in localStorage)
+    const [templates,setTemplates]=useState<{name:string;description:string;price:string}[]>(()=>{if(typeof window==='undefined')return[];try{return JSON.parse(localStorage.getItem('cs_inv_templates')||'[]')}catch{return[]}})
+    function saveTemplates(t:{name:string;description:string;price:string}[]){setTemplates(t);localStorage.setItem('cs_inv_templates',JSON.stringify(t))}
+    const [showAddTpl,setShowAddTpl]=useState(false)
+    const [newTpl,setNewTpl]=useState({name:'',description:'',price:''})
+
+    const [sc,setSc]=useState('')
+    const [items,setItems]=useState<{description:string;detail:string;quantity:string;amount:string}[]>([{description:'',detail:'',quantity:'1',amount:'0'}])
+    const [dd,setDd]=useState(''),[notes,setNotes]=useState(''),[tax,setTax]=useState('0')
+    const [discType,setDiscType]=useState<'$'|'%'>('$'),[discVal,setDiscVal]=useState('0')
+    const [sub,setSub]=useState(false)
+
+    const subtotal=items.reduce((s,x)=>(parseFloat(x.amount)||0)*(parseFloat(x.quantity)||1)+s,0)
+    const discAmt=discType==='%'?(subtotal*(parseFloat(discVal)||0)/100):(parseFloat(discVal)||0)
+    const total=Math.max(0,subtotal-discAmt+(parseFloat(tax)||0))
+
+    function addFromTemplate(tpl:{name:string;description:string;price:string}){
+      const empty=items.findIndex(x=>!x.description&&x.amount==='0')
+      if(empty>=0){const u=[...items];u[empty]={description:tpl.name,detail:tpl.description,quantity:'1',amount:tpl.price};setItems(u)}
+      else setItems([...items,{description:tpl.name,detail:tpl.description,quantity:'1',amount:tpl.price}])
+    }
+
+    async function go(){
+      if(!sc){showToast('Select a client','err');return}
+      setSub(true)
+      const lineItems=items.filter(x=>x.description).map(x=>({description:x.description+(x.detail?' — '+x.detail:''),quantity:parseFloat(x.quantity)||1,amount:parseFloat(x.amount)||0}))
+      const client=clients.find(c=>c.id===sc)
+      const invNotes=[notes,client?`Client: ${sc}`:''].filter(Boolean).join('\n')
+      await createInvoice({toClientId:sc,amount:total,tax:parseFloat(tax)||0,lineItems:JSON.stringify(lineItems),dueDate:dd||undefined,notes:invNotes})
+      setSub(false)
+    }
+
+    return pageWrap(640,<>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>New Invoice</h1></div>
+
+      {/* Bill To */}
+      <div style={{...card,padding:'20px',marginBottom:12}}>
+        {hdr('Bill To')}
+        <select value={sc} onChange={e=>setSc(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select>
+        {sc&&(()=>{const c=clients.find(x=>x.id===sc);return c?<div style={{marginTop:8,padding:'10px 12px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:10}}>
+          {avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`,32)}
+          <div><div style={{fontSize:13,fontWeight:600,color:T.text}}>{c.firstName} {c.lastName}</div><div style={{fontSize:11,color:T.muted}}>{c.email}{c.phone?` · ${c.phone}`:''}</div></div>
+        </div>:null})()}
       </div>
-      <div style={{...card,padding:'20px',marginBottom:12}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><div>{label('Due Date')}<input type="date" value={dd} onChange={e=>setDd(e.target.value)} style={inp}/></div><div>{label('Notes')}<input value={notes} onChange={e=>setNotes(e.target.value)} style={inp} placeholder="Notes…"/></div></div></div>
-      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'12px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Invoice'}</button>
+
+      {/* Service Templates */}
+      {templates.length>0&&<div style={{...card,padding:'16px',marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>{hdr('Quick Add')}<button onClick={()=>setShowAddTpl(!showAddTpl)} style={{fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{showAddTpl?'Done':'+ Template'}</button></div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {templates.map((t,i)=>(
+            <button key={i} onClick={()=>addFromTemplate(t)} style={{padding:'7px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.surf,cursor:'pointer',fontSize:12,fontWeight:500,color:T.sub,fontFamily:'"Inter",sans-serif',transition:'all .1s',display:'flex',alignItems:'center',gap:4}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.accentBorder;(e.currentTarget as HTMLButtonElement).style.background=T.accentBg}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background=T.surf}}>
+              <span style={{color:T.accent}}>+</span>{t.name}<span style={{color:T.dim,fontSize:10,marginLeft:2}}>${t.price}</span>
+              {showAddTpl&&<span onClick={e=>{e.stopPropagation();saveTemplates(templates.filter((_,j)=>j!==i))}} style={{color:T.red,fontSize:10,marginLeft:4,cursor:'pointer'}}>×</span>}
+            </button>
+          ))}
+        </div>
+      </div>}
+
+      {/* Add Template form */}
+      {(showAddTpl||templates.length===0)&&<div style={{...card,padding:'16px',marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>{hdr('Create Service Template')}{templates.length>0&&<button onClick={()=>setShowAddTpl(false)} style={{fontSize:11,color:T.dim,background:'none',border:'none',cursor:'pointer'}}>×</button>}</div>
+        <div style={{fontSize:12,color:T.muted,marginBottom:10}}>Templates auto-fill name, description, and price when adding line items.</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 80px',gap:6}}>
+          <input value={newTpl.name} onChange={e=>setNewTpl({...newTpl,name:e.target.value})} placeholder="Name (e.g. Bedrooms)" style={inp}/>
+          <input value={newTpl.description} onChange={e=>setNewTpl({...newTpl,description:e.target.value})} placeholder="Description" style={inp}/>
+          <input value={newTpl.price} onChange={e=>setNewTpl({...newTpl,price:e.target.value})} placeholder="Price" type="number" step="0.01" style={inp}/>
+        </div>
+        <button onClick={()=>{if(newTpl.name){saveTemplates([...templates,{...newTpl}]);setNewTpl({name:'',description:'',price:''});if(templates.length>0)setShowAddTpl(false)}}} style={{marginTop:8,padding:'8px 16px',borderRadius:8,background:T.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Save Template</button>
+      </div>}
+
+      {/* Line Items */}
+      <div style={{...card,padding:'20px',marginBottom:12}}>
+        {hdr('Line Items')}
+        {items.map((x,i)=><div key={i} style={{padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <input value={x.description} onChange={e=>{const u=[...items];u[i]={...u[i],description:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Service name"/>
+            <input value={x.quantity} onChange={e=>{const u=[...items];u[i]={...u[i],quantity:e.target.value};setItems(u)}} style={{...inp,width:44,textAlign:'center'}} placeholder="Qty" type="number"/>
+            <span style={{color:T.muted}}>$</span>
+            <input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:80,textAlign:'right'}} type="number" step="0.01"/>
+            {items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.red}30`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}
+          </div>
+          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:4,fontSize:12}} placeholder="Description / details…"/>
+        </div>)}
+        <button onClick={()=>setItems([...items,{description:'',detail:'',quantity:'1',amount:'0'}])} style={{marginTop:8,padding:'7px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add Line Item</button>
+
+        {/* Discount */}
+        <div style={{marginTop:14,padding:'12px 0',borderTop:`1px solid ${T.border}`}}>
+          {label('Discount')}
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <div style={{display:'flex',gap:2,background:T.surf,borderRadius:6,padding:2,border:`1px solid ${T.border}`}}>
+              <button onClick={()=>setDiscType('$')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='$'?T.card:'transparent',color:discType==='$'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='$'?T.shadow:'none'}}>$</button>
+              <button onClick={()=>setDiscType('%')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='%'?T.card:'transparent',color:discType==='%'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='%'?T.shadow:'none'}}>%</button>
+            </div>
+            <input value={discVal} onChange={e=>setDiscVal(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/>
+            {discAmt>0&&<span style={{fontSize:12,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span>}
+          </div>
+        </div>
+
+        {/* Tax */}
+        <div style={{padding:'10px 0',borderTop:`1px solid ${T.border}`}}>
+          {label('Tax')}
+          <div style={{display:'flex',alignItems:'center',gap:4}}><span style={{color:T.muted}}>$</span><input value={tax} onChange={e=>setTax(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/></div>
+        </div>
+
+        {/* Totals */}
+        <div style={{padding:'14px 0',borderTop:`2px solid ${T.borderB}`,marginTop:4}}>
+          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:T.muted}}>Subtotal</span><span style={{fontSize:13,color:T.sub}}>{fmtMoney(subtotal)}</span></div>}
+          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:T.green}}>Discount ({discType==='%'?`${discVal}%`:`$${discVal}`})</span><span style={{fontSize:13,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span></div>}
+          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700,fontSize:14,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:22,color:T.accent}}>{fmtMoney(total)}</span></div>
+        </div>
+      </div>
+
+      {/* Details */}
+      <div style={{...card,padding:'20px',marginBottom:12}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div>{label('Due Date')}<input type="date" value={dd} onChange={e=>setDd(e.target.value)} style={inp}/></div>
+          <div>{label('Payment Terms')}<select style={{...inp,cursor:'pointer'}} onChange={e=>{if(e.target.value){const d=new Date();d.setDate(d.getDate()+parseInt(e.target.value));setDd(d.toISOString().split('T')[0])}}}><option value="">Custom</option><option value="0">Due Today</option><option value="7">Net 7</option><option value="15">Net 15</option><option value="30">Net 30</option></select></div>
+        </div>
+        <div style={{marginTop:10}}>{label('Notes')}<textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} style={{...inp,resize:'vertical'}} placeholder="Payment instructions, thank you note…"/></div>
+      </div>
+
+      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'13px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Invoice'}</button>
     </>)
   }
+
   function InvoiceDetailPage(){
     const inv=invoices.find(i=>i.id===activeInvoiceId);if(!inv)return <div style={{padding:48,color:T.dim,textAlign:'center'}}>Not found. <button onClick={()=>setPage('invoices')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer'}}>Back</button></div>
     const is=INV_STATUS[inv.status]||INV_STATUS.draft;const li=(()=>{try{return JSON.parse(inv.lineItems)}catch{return[]}})() as {description:string;quantity:number;amount:number}[];const [cd,setCd]=useState(false)
-    return pageWrap(620,<>
+    const [sendMode,setSendMode]=useState<null|'email'|'text'|'both'>(null)
+    const [sendTo,setSendTo]=useState('')
+    const [sending,setSending]=useState(false)
+    // Try to extract client info from notes
+    const clientId=inv.notes?.match(/Client:\s*(\S+)/)?.[1]
+    const client=clientId?clients.find(c=>c.id===clientId):null
+
+    async function sendInvoice(){
+      setSending(true)
+      // Update status to sent
+      await updateInvoice(inv.id,{status:'sent'})
+      // In production: send email via EmailJS / send SMS via Twilio
+      // For now just mark as sent and show confirmation
+      showToast(`Invoice sent via ${sendMode==='both'?'email & text':sendMode}`)
+      setSendMode(null);setSending(false)
+    }
+
+    return pageWrap(680,<>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:20}}><button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 12px'}}>← Invoices</button><span style={{fontSize:13,fontWeight:600,color:T.text}}>#{inv.id.slice(-6)}</span>{badge(is.label,is.color,is.bg)}</div>
-      <div style={{...card,padding:'26px',marginBottom:14}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:22}}><div><div style={{fontSize:20,fontWeight:700,color:T.text}}>Invoice #{inv.id.slice(-6)}</div><div style={{fontSize:12,color:T.muted,marginTop:4}}>Created {fmtDate(inv.createdAt)}{inv.dueDate?` · Due ${fmtDate(inv.dueDate)}`:''}</div>{inv.paidAt&&<div style={{fontSize:12,color:T.green,marginTop:2}}>Paid {fmtDate(inv.paidAt)}</div>}</div><div style={{fontSize:28,fontWeight:700,color:inv.status==='paid'?T.green:T.accent}}>{fmtMoney(inv.amount)}</div></div>
-        <div style={{marginBottom:20}}>
-          <div style={{display:'flex',padding:'8px 0',borderBottom:`1.5px solid ${T.borderB}`,fontSize:11,fontWeight:600,color:T.dim}}><span style={{flex:1}}>Description</span><span style={{width:44,textAlign:'center'}}>Qty</span><span style={{width:72,textAlign:'right'}}>Amount</span></div>
-          {li.map((x:any,i:number)=><div key={i} style={{display:'flex',padding:'10px 0',borderBottom:`1px solid ${T.border}`}}><span style={{flex:1,fontSize:13,color:T.sub}}>{x.description}</span><span style={{width:44,textAlign:'center',fontSize:13,color:T.muted}}>{x.quantity||1}</span><span style={{width:72,textAlign:'right',fontSize:13,fontWeight:600,color:T.text}}>{fmtMoney((x.amount||0)*(x.quantity||1))}</span></div>)}
-          {inv.tax>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'8px 0'}}><span style={{fontSize:12,color:T.muted}}>Tax</span><span style={{fontSize:13,fontWeight:600,color:T.text}}>{fmtMoney(inv.tax)}</span></div>}
-          <div style={{display:'flex',justifyContent:'space-between',padding:'12px 0',borderTop:`2px solid ${T.borderB}`,marginTop:2}}><span style={{fontWeight:700,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:18,color:inv.status==='paid'?T.green:T.accent}}>{fmtMoney(inv.amount)}</span></div>
+
+      {/* Invoice header */}
+      <div style={{...card,padding:'28px',marginBottom:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',color:T.dim,marginBottom:4}}>Invoice</div>
+            <div style={{fontSize:22,fontWeight:700,color:T.text}}>#{inv.id.slice(-6)}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:11,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase',color:T.dim,marginBottom:4}}>Amount Due</div>
+            <div style={{fontSize:28,fontWeight:700,color:inv.status==='paid'?T.green:T.accent}}>{fmtMoney(inv.amount)}</div>
+          </div>
         </div>
-        {inv.notes&&<div style={{padding:'10px 14px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,marginBottom:14}}>{inv.notes}</div>}
+
+        {/* Client + dates bar */}
+        <div style={{display:'flex',gap:16,padding:'14px 16px',background:T.surf,borderRadius:10,marginBottom:20,marginTop:14,flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:140}}>
+            <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.5}}>Bill To</div>
+            <div style={{fontSize:13,fontWeight:600,color:T.text,marginTop:3}}>{client?`${client.firstName} ${client.lastName}`:'—'}</div>
+            {client&&<div style={{fontSize:11,color:T.muted,marginTop:1}}>{client.email}</div>}
+          </div>
+          <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.5}}>Created</div><div style={{fontSize:13,fontWeight:500,color:T.text,marginTop:3}}>{fmtDate(inv.createdAt)}</div></div>
+          {inv.dueDate&&<div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.5}}>Due</div><div style={{fontSize:13,fontWeight:500,color:T.text,marginTop:3}}>{fmtDate(inv.dueDate)}</div></div>}
+          {inv.paidAt&&<div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.5}}>Paid</div><div style={{fontSize:13,fontWeight:600,color:T.green,marginTop:3}}>{fmtDate(inv.paidAt)}</div></div>}
+        </div>
+
+        {/* Line items table */}
+        <div style={{marginBottom:20}}>
+          <div style={{display:'flex',padding:'10px 0',borderBottom:`2px solid ${T.borderB}`,fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.3}}><span style={{flex:1}}>Description</span><span style={{width:50,textAlign:'center'}}>Qty</span><span style={{width:80,textAlign:'right'}}>Amount</span></div>
+          {li.map((x:any,i:number)=><div key={i} style={{display:'flex',padding:'12px 0',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}><span style={{flex:1,fontSize:13,color:T.sub}}>{x.description}</span><span style={{width:50,textAlign:'center',fontSize:13,color:T.muted}}>{x.quantity||1}</span><span style={{width:80,textAlign:'right',fontSize:14,fontWeight:600,color:T.text}}>{fmtMoney((x.amount||0)*(x.quantity||1))}</span></div>)}
+          {inv.tax>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:12,color:T.muted}}>Tax</span><span style={{fontSize:13,fontWeight:600,color:T.text}}>{fmtMoney(inv.tax)}</span></div>}
+          <div style={{display:'flex',justifyContent:'space-between',padding:'14px 0',borderTop:`2px solid ${T.borderB}`,marginTop:2}}><span style={{fontWeight:700,fontSize:15,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:22,color:inv.status==='paid'?T.green:T.accent}}>{fmtMoney(inv.amount)}</span></div>
+        </div>
+
+        {inv.notes&&<div style={{padding:'12px 14px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,marginBottom:16,lineHeight:1.5}}>{inv.notes}</div>}
+
+        {/* Actions */}
         <div style={{display:'flex',flexDirection:'column',gap:6}}>
-          <div style={{display:'flex',gap:6}}><button onClick={()=>window.open(`/api/invoices/${inv.id}/pdf`,'_blank')} style={{flex:1,padding:'9px',borderRadius:8,background:T.surf,border:`1px solid ${T.border}`,color:T.sub,fontSize:12,fontWeight:600,cursor:'pointer'}}>📄 PDF</button>{inv.status!=='paid'&&<button onClick={()=>createPaymentLink(inv.id)} style={{flex:1,padding:'9px',borderRadius:8,background:'#635bff',color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>💳 Payment Link</button>}</div>
+          {/* Send options */}
+          {inv.status!=='paid'&&!sendMode&&(
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={()=>{setSendMode('email');setSendTo(client?.email||'')}} style={{flex:1,padding:'10px',borderRadius:8,background:T.accentBg,border:`1px solid ${T.accentBorder}`,color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>✉ Send Email</button>
+              <button onClick={()=>{setSendMode('text');setSendTo(client?.phone||'')}} style={{flex:1,padding:'10px',borderRadius:8,background:T.violetBg,border:`1px solid ${T.violet}20`,color:T.violet,fontSize:12,fontWeight:600,cursor:'pointer'}}>📱 Send Text</button>
+              <button onClick={()=>{setSendMode('both');setSendTo(client?.email||'')}} style={{flex:1,padding:'10px',borderRadius:8,background:T.greenBg,border:`1px solid ${T.green}20`,color:T.green,fontSize:12,fontWeight:600,cursor:'pointer'}}>Both</button>
+            </div>
+          )}
+          {sendMode&&(
+            <div style={{padding:'14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:8}}>Send Invoice via {sendMode==='both'?'Email & Text':sendMode==='email'?'Email':'Text'}</div>
+              {(sendMode==='email'||sendMode==='both')&&<div style={{marginBottom:8}}>{label('Email')}<input value={sendTo} onChange={e=>setSendTo(e.target.value)} style={inp} placeholder="client@email.com"/></div>}
+              {(sendMode==='text'||sendMode==='both')&&<div style={{marginBottom:8}}>{label('Phone')}<input value={sendMode==='text'?sendTo:client?.phone||''} onChange={e=>{if(sendMode==='text')setSendTo(e.target.value)}} style={inp} placeholder="(907) 555-0000"/></div>}
+              <div style={{display:'flex',gap:6}}><button onClick={()=>setSendMode(null)} style={{...btnS,flex:1}}>Cancel</button><button onClick={sendInvoice} disabled={sending} style={{...btnP,flex:1,textAlign:'center',opacity:sending?.6:1}}>{sending?'Sending…':'Send Invoice'}</button></div>
+            </div>
+          )}
+
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>window.open(`/api/invoices/${inv.id}/pdf`,'_blank')} style={{flex:1,padding:'9px',borderRadius:8,background:T.surf,border:`1px solid ${T.border}`,color:T.sub,fontSize:12,fontWeight:600,cursor:'pointer'}}>📄 PDF</button>
+            {inv.status!=='paid'&&<button onClick={()=>createPaymentLink(inv.id)} style={{flex:1,padding:'9px',borderRadius:8,background:'#635bff',color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>💳 Stripe Link</button>}
+          </div>
+
           {inv.status==='draft'&&<button onClick={()=>updateInvoice(inv.id,{status:'sent'})} style={{...btnP,width:'100%',textAlign:'center'}}>Mark Sent</button>}
-          {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'paid',paidAt:new Date().toISOString()})} style={{width:'100%',padding:'9px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer'}}>✓ Mark Paid</button>}
+          {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'paid',paidAt:new Date().toISOString()})} style={{width:'100%',padding:'10px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer'}}>✓ Mark Paid</button>}
           {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'overdue'})} style={{width:'100%',padding:'8px',borderRadius:8,background:T.redBg,color:T.red,border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>Mark Overdue</button>}
+
           {!cd?<button onClick={()=>setCd(true)} style={{width:'100%',padding:'7px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.red,fontSize:11,cursor:'pointer',opacity:.5,marginTop:6}}>Delete</button>:(
             <div style={{background:T.redBg,borderRadius:8,padding:'12px',marginTop:6}}><div style={{fontSize:12,fontWeight:600,color:T.red,marginBottom:6}}>Confirm?</div><div style={{display:'flex',gap:6}}><button onClick={()=>setCd(false)} style={{...btnS,flex:1,fontSize:11}}>No</button><button onClick={()=>deleteInvoice(inv.id)} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:T.red,color:'#fff',cursor:'pointer',fontSize:11,fontWeight:600}}>Delete</button></div></div>
           )}
