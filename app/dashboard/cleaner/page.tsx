@@ -170,79 +170,108 @@ export default function CleanerDashboard() {
   // ══════════════════════════════════════════════════════════════════════
   function DashboardPage(){
     const PLAT:Record<string,string>={hostaway:'#f59e0b',jobber:'#3b82f6',manual:'#6366f1',airbnb:'#ef4444'}
-    return(<div style={{maxWidth:1060,margin:'0 auto'}}>
+    const todayJobs=jobs.filter(j=>{const d=new Date(j.checkoutTime),t=new Date();return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth()&&d.getDate()===t.getDate()})
+    const instantBooks=pending.filter(q=>q.submissionType==='instant_book')
+    const needsScheduling=booked.filter(q=>!jobs.some(j=>j.notes?.includes(q.id.slice(-6))))
+    const outstandingInv=invoices.filter(i=>['sent','overdue'].includes(i.status))
+    return(<div style={{maxWidth:1080,margin:'0 auto'}}>
       {/* Welcome */}
-      <div style={{...card,padding:'24px 28px',marginBottom:24,background:dark?'linear-gradient(135deg,#161a24,#1a1e28)':'linear-gradient(135deg,#e8f4fd,#dbeafe)',borderColor:dark?T.border:'rgba(2,132,199,0.15)'}}>
+      <div style={{...card,padding:'24px 28px',marginBottom:20,background:dark?'linear-gradient(135deg,#161a24,#1a1e28)':'linear-gradient(135deg,#e8f4fd,#dbeafe)',borderColor:dark?T.border:'rgba(2,132,199,0.15)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
           <div>
             <div style={{fontSize:22,fontWeight:700,color:dark?T.text:'#0c4a6e'}}>Welcome back, {user!.name.split(' ')[0]}</div>
-            <div style={{fontSize:13,color:T.muted,marginTop:4}}>{pending.length>0?`${pending.length} pending quote${pending.length>1?'s':''} · `:''}Today is {new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+            <div style={{fontSize:13,color:T.muted,marginTop:4}}>Today is {new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})} · {todayJobs.length>0?`${todayJobs.length} job${todayJobs.length>1?'s':''} today`:'No jobs today'}</div>
           </div>
-          <div style={{display:'flex',gap:8}}><button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button><button onClick={()=>setPage('create-invoice')} style={{...btnP,background:T.green}}>New Invoice</button></div>
+          <div style={{display:'flex',gap:8}}><button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button><button onClick={()=>setPage('calendar')} style={btnS}>Calendar</button></div>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:24}}>
-        {[{l:'Pending',v:String(pending.length),c:T.amber,p:'quotes' as Page},{l:'Booked',v:String(booked.length),c:T.green,p:'quotes' as Page},{l:'Clients',v:String(clients.length),c:T.accent,p:'clients' as Page},{l:'Jobs',v:String(upcoming.length),c:T.violet,p:'jobs' as Page},{l:'Revenue',v:fmtMoney(totalRevenue),c:T.rose,p:'reports' as Page}].map(s=>(
-          <div key={s.l} onClick={()=>setPage(s.p)} style={{...card,padding:'16px',cursor:'pointer'}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
-            <div style={{fontSize:11,fontWeight:500,color:T.muted,marginBottom:6}}>{s.l}</div>
-            <div style={{fontSize:s.l==='Revenue'?18:24,fontWeight:700,color:s.c,letterSpacing:-0.5}}>{s.v}</div>
+      {/* Pipeline — what needs attention */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:20}}>
+        {[
+          {l:'Review',v:pending.length,s:`${instantBooks.length} instant book${instantBooks.length!==1?'s':''}`,c:T.amber,bg:T.amberBg,p:'quotes' as Page,urgent:instantBooks.length>0},
+          {l:'Schedule',v:needsScheduling.length,s:'booked, not yet scheduled',c:T.accent,bg:T.accentBg,p:'quotes' as Page,urgent:false},
+          {l:'Today',v:todayJobs.length,s:`job${todayJobs.length!==1?'s':''} to complete`,c:T.green,bg:T.greenBg,p:'jobs' as Page,urgent:todayJobs.length>0},
+          {l:'Collect',v:outstandingInv.length,s:`${fmtMoney(outstandingInv.reduce((s,i)=>s+i.amount,0))} outstanding`,c:T.rose,bg:T.roseBg,p:'invoices' as Page,urgent:outstandingInv.length>0},
+        ].map(s=>(
+          <div key={s.l} onClick={()=>setPage(s.p)} style={{...card,padding:'18px',cursor:'pointer',borderLeft:`3px solid ${s.v>0?s.c:T.border}`}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div style={{fontSize:11,fontWeight:600,color:T.muted,textTransform:'uppercase',letterSpacing:0.5}}>{s.l}</div>
+              {s.v>0&&s.urgent&&<div style={{width:8,height:8,borderRadius:'50%',background:s.c,animation:'pulse 2s infinite'}}/>}
+            </div>
+            <div style={{fontSize:28,fontWeight:700,color:s.v>0?s.c:T.dim,marginTop:6,letterSpacing:-1}}>{s.v}</div>
+            <div style={{fontSize:11,color:T.dim,marginTop:3}}>{s.s}</div>
           </div>
         ))}
       </div>
 
-      {/* Alert */}
-      {pending.length>0&&<div onClick={()=>setPage('quotes')} style={{...card,padding:'14px 18px',marginBottom:20,cursor:'pointer',borderLeft:`3px solid ${T.amber}`,display:'flex',justifyContent:'space-between',alignItems:'center'}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
-        <div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{pending.length} quote{pending.length>1?'s':''} awaiting review</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{pending.filter(q=>q.submissionType==='instant_book').length>0?`Including ${pending.filter(q=>q.submissionType==='instant_book').length} instant book`:''} Tap to review</div></div>
-        <span style={{color:T.muted,fontSize:16}}>→</span>
+      {/* Instant book alert */}
+      {instantBooks.length>0&&<div onClick={()=>setPage('quotes')} style={{...card,padding:'14px 18px',marginBottom:16,cursor:'pointer',background:dark?'rgba(52,211,153,0.06)':'rgba(5,150,105,0.05)',borderColor:dark?'rgba(52,211,153,0.15)':'rgba(5,150,105,0.15)',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+        <div style={{width:36,height:36,borderRadius:10,background:T.greenBg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>⚡</div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.green}}>{instantBooks.length} instant book{instantBooks.length>1?'s':''} ready</div><div style={{fontSize:12,color:T.muted,marginTop:1}}>Pre-paid and waiting — create jobs to schedule</div></div>
+        <span style={{color:T.green,fontSize:14}}>→</span>
       </div>}
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16}}>
-        {/* Upcoming Jobs */}
-        <div>{hdr('Upcoming Jobs')}
-          {upcoming.length===0?<div style={{color:T.dim,fontSize:13,padding:'28px 0',textAlign:'center'}}>No upcoming jobs.</div>:(
+      <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:16}}>
+        {/* Left: Today + Upcoming */}
+        <div>
+          {/* Today's Jobs */}
+          {todayJobs.length>0&&<div style={{marginBottom:20}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>{hdr("Today's Jobs")}<span style={{fontSize:11,color:T.accent,fontWeight:500}}>{todayJobs.length} job{todayJobs.length>1?'s':''}</span></div>
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {upcoming.slice(0,8).map(j=>{const pc=PLAT[j.platform]||T.accent;return(
-                <div key={j.id} onClick={()=>setSelectedJob(j)} style={{...card,padding:'12px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
-                  <div style={{width:3,height:30,borderRadius:2,background:pc,flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.displayName}</div><div style={{fontSize:11,color:T.muted,marginTop:2}}>{j.propertyLabel}</div></div>
+              {todayJobs.map(j=>{const pc=PLAT[j.platform]||T.accent;return(
+                <div key={j.id} style={{...card,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,borderLeft:`3px solid ${pc}`}}>
+                  <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>setSelectedJob(j)}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{j.displayName}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{j.propertyLabel} · {fmtTime(j.checkoutTime)}{j.worth?` · ${fmtMoney(j.worth)}`:''}</div></div>
+                  <button onClick={async()=>{const items=[{description:j.displayName,quantity:1,amount:j.worth||0}];await createInvoice({amount:j.worth||0,lineItems:JSON.stringify(items),notes:`Job: ${j.displayName}`});showToast('Completed & invoiced')}} style={{padding:'7px 14px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,fontFamily:'"Inter",sans-serif'}}>Complete</button>
+                </div>
+              )})}
+            </div>
+          </div>}
+
+          {/* Upcoming */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>{hdr('Upcoming')}<button onClick={()=>setPage('jobs')} style={{fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>View All →</button></div>
+          {upcoming.filter(j=>!todayJobs.includes(j)).length===0?<div style={{color:T.dim,fontSize:13,padding:'24px 0',textAlign:'center'}}>No upcoming jobs.</div>:(
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {upcoming.filter(j=>!todayJobs.includes(j)).slice(0,6).map(j=>{const pc=PLAT[j.platform]||T.accent;return(
+                <div key={j.id} onClick={()=>setSelectedJob(j)} style={{...card,padding:'11px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:10}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+                  <div style={{width:3,height:26,borderRadius:2,background:pc,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.displayName}</div><div style={{fontSize:11,color:T.muted,marginTop:1}}>{j.propertyLabel}</div></div>
                   <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:600,color:T.accent}}>{fmtDate(j.checkoutTime)}</div><div style={{fontSize:10,color:T.dim}}>{fmtTime(j.checkoutTime)}</div></div>
                 </div>
               )})}
-              {upcoming.length>8&&<button onClick={()=>setPage('jobs')} style={{fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,textAlign:'center',padding:'8px'}}>View all {upcoming.length} jobs →</button>}
             </div>
           )}
         </div>
 
-        {/* Sidebar */}
+        {/* Right sidebar */}
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {/* KPIs */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {[{l:'Revenue',v:fmtMoney(totalRevenue),c:T.green},{l:'Conversion',v:`${conversionRate}%`,c:T.accent},{l:'Avg Quote',v:fmtMoney(avgQuote),c:T.violet},{l:'Clients',v:String(clients.length),c:T.amber}].map(s=>(
+              <div key={s.l} style={{...card,padding:'12px'}}><div style={{fontSize:10,fontWeight:500,color:T.dim}}>{s.l}</div><div style={{fontSize:16,fontWeight:700,color:s.c,marginTop:2}}>{s.v}</div></div>
+            ))}
+          </div>
+          {/* Pending quotes */}
           <div style={{...card,padding:'16px'}}>{hdr('Pending Quotes')}
-            {pending.length===0?<div style={{color:T.dim,fontSize:12}}>No pending.</div>:(
+            {pending.length===0?<div style={{color:T.dim,fontSize:12}}>All clear.</div>:(
               <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                {pending.slice(0,5).map(q=>(
+                {pending.slice(0,5).map(q=>{const isIB=q.submissionType==='instant_book';return(
                   <div key={q.id} onClick={()=>openQuote(q)} style={{padding:'9px 10px',borderRadius:8,background:T.surf,border:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer',transition:'all .12s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=T.surfHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=T.surf}}>
                     {avatar(q.client.firstName.charAt(0),30)}
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{q.client.firstName} {q.client.lastName}</div><div style={{fontSize:10,color:T.dim}}>{q.serviceType}</div></div>
-                    <span style={{fontSize:13,fontWeight:700,color:T.accent,flexShrink:0}}>{fmtMoney(q.totalPrice)}</span>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{q.client.firstName} {q.client.lastName}{isIB?<span style={{color:T.green,fontSize:10,marginLeft:4}}>⚡</span>:''}</div><div style={{fontSize:10,color:T.dim}}>{q.serviceType} · {fmtRel(q.createdAt)}</div></div>
+                    <span style={{fontSize:13,fontWeight:700,color:isIB?T.green:T.accent,flexShrink:0}}>{fmtMoney(q.totalPrice)}</span>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
+          {/* Quick Actions */}
           <div style={{...card,padding:'16px'}}>{hdr('Quick Actions')}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
               {[{l:'New Quote',p:'create-quote' as Page},{l:'Add Client',p:'create-client' as Page},{l:'Invoice',p:'create-invoice' as Page},{l:'Add Job',p:'create-job' as Page}].map(a=>(
                 <button key={a.l} onClick={()=>setPage(a.p)} style={{padding:'10px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',fontSize:12,fontWeight:500,color:T.sub,fontFamily:'"Inter",sans-serif',transition:'all .1s',textAlign:'center'}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=T.surf;(e.currentTarget as HTMLButtonElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent';(e.currentTarget as HTMLButtonElement).style.borderColor=T.border}}>
                   {a.l}
                 </button>
-              ))}
-            </div>
-          </div>
-          <div style={{...card,padding:'16px'}}>{hdr('Snapshot')}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              {[{l:'Conversion',v:`${conversionRate}%`,c:T.green},{l:'Avg Quote',v:fmtMoney(avgQuote),c:T.accent},{l:'Due',v:String(invoices.filter(i=>i.status==='sent').length),c:T.amber},{l:'This Mo.',v:fmtMoney(quotes.filter(q=>new Date(q.createdAt).getMonth()===new Date().getMonth()&&q.status==='completed').reduce((s,q)=>s+q.totalPrice,0)),c:T.rose}].map(s=>(
-                <div key={s.l} style={{background:T.surf,borderRadius:8,padding:'10px'}}><div style={{fontSize:10,fontWeight:500,color:T.dim}}>{s.l}</div><div style={{fontSize:15,fontWeight:700,color:s.c,marginTop:2}}>{s.v}</div></div>
               ))}
             </div>
           </div>
@@ -483,6 +512,7 @@ export default function CleanerDashboard() {
               {duties.length>0&&<div style={{marginTop:14}}>{hdr('Duties')}{duties.map((d,i)=><div key={i} style={{padding:'8px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:4}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>{d.description&&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{d.description}</div>}</div>)}</div>}
               {eJ?<div style={{marginTop:12}}>{label('Notes')}<textarea value={em.notes} onChange={e=>setEm({...em,notes:e.target.value})} rows={3} style={{...jI,width:'100%',resize:'vertical'}}/></div>:selJob.notes&&<div style={{marginTop:12,padding:'10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.5}}>{selJob.notes}</div>}
               {eJ&&<div style={{display:'flex',gap:6,marginTop:12}}><button onClick={()=>setEJ(false)} style={{...btnS,flex:1}}>Cancel</button><button onClick={del} style={{padding:'8px 12px',borderRadius:8,background:T.redBg,color:T.red,border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Delete</button></div>}
+              {!eJ&&<div style={{marginTop:14,borderTop:`1px solid ${T.border}`,paddingTop:12}}><button onClick={async()=>{const items=[{description:selJob.displayName,quantity:1,amount:selJob.worth||0}];await createInvoice({amount:selJob.worth||0,lineItems:JSON.stringify(items),notes:`Job: ${selJob.displayName}`});showToast('Completed & invoiced')}} style={{width:'100%',padding:'9px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"Inter",sans-serif'}}>✓ Complete & Invoice</button></div>}
             </div>)
           })()}
         </div>
@@ -662,12 +692,16 @@ export default function CleanerDashboard() {
     const [calDate,setCalDate]=useState(new Date())
     const yr=calDate.getFullYear(),mo=calDate.getMonth(),today=new Date()
     const first=new Date(yr,mo,1),dow=first.getDay(),last=new Date(yr,mo+1,0)
-    // Build cells INCLUDING actual dates for pad days
+    // Build cells — always show at least 1 full week of prev/next month
     type Cell={day:number;date:Date;isPad:boolean}
     const cells:Cell[]=[]
-    for(let i=0;i<dow;i++){const d=new Date(yr,mo,-dow+i+1);cells.push({day:d.getDate(),date:d,isPad:true})}
+    const prePad=dow===0?7:dow // if 1st is Sunday, still show full prev week
+    for(let i=0;i<prePad;i++){const d=new Date(yr,mo,-prePad+i+1);cells.push({day:d.getDate(),date:d,isPad:true})}
     for(let d=1;d<=last.getDate();d++) cells.push({day:d,date:new Date(yr,mo,d),isPad:false})
-    const trail=(dow+last.getDate())%7;if(trail) for(let i=1;i<=7-trail;i++){const d=new Date(yr,mo+1,i);cells.push({day:d.getDate(),date:d,isPad:true})}
+    const totalSoFar=prePad+last.getDate()
+    const trailInRow=totalSoFar%7
+    const fillRow=trailInRow===0?0:7-trailInRow
+    for(let i=1;i<=fillRow+7;i++){const d=new Date(yr,mo+1,i);cells.push({day:d.getDate(),date:d,isPad:true})}
     const rows=cells.length/7
     const allJobs=jobs.sort((a,b)=>new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
     function jobsOn(d:Date){return allJobs.filter(j=>sameDay(new Date(j.checkoutTime),d))}
@@ -809,6 +843,7 @@ export default function CleanerDashboard() {
               {duties.length>0&&<div style={{marginBottom:16}}><div style={{fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Duties</div>{duties.map((d,i)=><div key={i} style={{padding:'8px 12px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:4}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>{d.description&&<div style={{fontSize:11,color:T.muted,marginTop:2,lineHeight:1.5}}>{d.description}</div>}</div>)}</div>}
               {ejMode?<div style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:500,color:T.dim,marginBottom:3}}>Notes</div><textarea value={ej.notes} onChange={e=>setEj({...ej,notes:e.target.value})} rows={3} style={{...jI,width:'100%',resize:'vertical'}}/></div>:j.notes&&<div style={{padding:'10px 14px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.5,marginBottom:14}}>{j.notes}</div>}
               {ejMode&&<div style={{display:'flex',gap:6}}><button onClick={()=>setEjMode(false)} style={{...btnS,flex:1}}>Cancel</button><button onClick={saveCJ} disabled={sjSav} style={{...btnP,flex:1,textAlign:'center'}}>{sjSav?'…':'Save'}</button></div>}
+              {!ejMode&&<div style={{borderTop:`1px solid ${T.border}`,paddingTop:14,marginTop:4}}><button onClick={async()=>{const items=[{description:j.displayName,quantity:1,amount:j.worth||0}];await createInvoice({amount:j.worth||0,lineItems:JSON.stringify(items),notes:`Job: ${j.displayName}`});setCj(null)}} style={{width:'100%',padding:'10px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"Inter",sans-serif'}}>✓ Complete & Invoice</button></div>}
             </div>
           </div>
         </div>
@@ -973,6 +1008,7 @@ export default function CleanerDashboard() {
         ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
         input:focus,textarea:focus,select:focus{border-color:rgba(56,189,248,0.3)!important;outline:none}
         button:active{transform:scale(0.98)}
       `}</style>
