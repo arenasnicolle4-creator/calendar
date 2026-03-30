@@ -424,38 +424,162 @@ export default function CleanerDashboard() {
   // CREATE QUOTE
   // ══════════════════════════════════════════════════════════════════════
   function CreateQuotePage(){
-    const [selC,setSelC]=useState(''),[newC,setNewC]=useState(false)
+    // Client selection
+    const [clientMode,setClientMode]=useState<'search'|'new'>('search')
+    const [clientSearch,setClientSearch]=useState('')
+    const [selC,setSelC]=useState<string|null>(null)
     const [nc,setNc]=useState({firstName:'',lastName:'',email:'',phone:'',address:'',city:'',state:'AK',zip:''})
-    const [qf,setQf]=useState({serviceType:'Standard Clean',frequency:'One-Time',address:'',sqftRange:'',bedrooms:'',bathrooms:'',addonsList:'',keyAreas:'',additionalNotes:'',preferredDate1:'',preferredDate2:'',preferredTimes:''})
-    const [items,setItems]=useState<{label:string;detail:string;amount:string}[]>([{label:'Base Service',detail:'',amount:'0'}])
-    const [sub,setSub]=useState(false);const total=items.reduce((s,x)=>s+(parseFloat(x.amount)||0),0)
-    async function go(){if(!selC&&!nc.email){showToast('Select a client','err');return};setSub(true);const bd=items.map(x=>`${x.label}${x.detail?'||'+x.detail:''}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');const d:any={service_type:qf.serviceType,frequency:qf.frequency,address:qf.address,sqft_range:qf.sqftRange,bedrooms:qf.bedrooms,house_bathrooms:qf.bathrooms,addons_list:qf.addonsList,key_areas:qf.keyAreas,additional_notes:qf.additionalNotes,preferred_date_1:qf.preferredDate1||undefined,preferred_times:qf.preferredTimes,price_breakdown:bd,subtotal:`$${total.toFixed(2)}`,total_price:`$${total.toFixed(2)}`,discount:'$0',discount_label:'',submission_type:'quote'};if(selC){const c=clients.find(x=>x.id===selC);if(c){d.email=c.email;d.first_name=c.firstName;d.last_name=c.lastName;d.phone=c.phone}}else{d.email=nc.email;d.first_name=nc.firstName;d.last_name=nc.lastName;d.phone=nc.phone;d.city=nc.city;d.state=nc.state;d.zip=nc.zip};await createQuote(d);setSub(false)}
-    return pageWrap(600,<>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('quotes')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>New Quote</h1></div>
-      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Client')}
-        {!newC?<div><select value={selC} onChange={e=>setSelC(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select><button onClick={()=>setNewC(true)} style={{marginTop:8,fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>+ New Client</button></div>:(
-          <div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>{[{l:'First Name',k:'firstName'},{l:'Last Name',k:'lastName'},{l:'Email *',k:'email'},{l:'Phone',k:'phone'}].map(f=><div key={f.k}>{label(f.l)}<input value={(nc as any)[f.k]} onChange={e=>setNc({...nc,[f.k]:e.target.value})} style={inp}/></div>)}</div><button onClick={()=>setNewC(false)} style={{marginTop:8,fontSize:12,color:T.muted,background:'none',border:'none',cursor:'pointer'}}>← Existing Client</button></div>
-        )}
-      </div>
-      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Service')}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div>{label('Type')}<select value={qf.serviceType} onChange={e=>setQf({...qf,serviceType:e.target.value})} style={{...inp,cursor:'pointer'}}>{SERVICE_TYPES.map(s=><option key={s}>{s}</option>)}</select></div>
-          <div>{label('Frequency')}<select value={qf.frequency} onChange={e=>setQf({...qf,frequency:e.target.value})} style={{...inp,cursor:'pointer'}}>{FREQUENCIES.map(f=><option key={f}>{f}</option>)}</select></div>
-          {[{l:'Address',k:'address'},{l:'Sq Ft',k:'sqftRange'},{l:'Beds',k:'bedrooms'},{l:'Baths',k:'bathrooms'}].map(f=><div key={f.k}>{label(f.l)}<input value={(qf as any)[f.k]} onChange={e=>setQf({...qf,[f.k]:e.target.value})} style={inp}/></div>)}
+    const filteredClients=clients.filter(c=>!clientSearch||`${c.firstName} ${c.lastName} ${c.email} ${c.phone}`.toLowerCase().includes(clientSearch.toLowerCase()))
+    const selectedClient=selC?clients.find(c=>c.id===selC):null
+
+    // Service
+    const [qf,setQf]=useState({serviceType:'Standard Clean',frequency:'One-Time',address:'',sqftRange:'',bedrooms:'',bathrooms:'',preferredDate1:'',preferredDate2:'',preferredTimes:'',additionalNotes:'',keyAreas:'',addonsList:''})
+    const [items,setItems]=useState<{label:string;detail:string;amount:string}[]>([{label:'',detail:'',amount:''}])
+    const [discType,setDiscType]=useState<'$'|'%'>('$')
+    const [discVal,setDiscVal]=useState('0')
+    const [sub,setSub]=useState(false)
+    const subtotal=items.reduce((s,x)=>s+(parseFloat(x.amount)||0),0)
+    const discAmt=discType==='%'?(subtotal*(parseFloat(discVal)||0)/100):(parseFloat(discVal)||0)
+    const total=Math.max(0,subtotal-discAmt)
+
+    async function go(){
+      if(!selC&&!nc.email){showToast('Select or create a client','err');return}
+      setSub(true)
+      const bd=items.filter(x=>x.label).map(x=>`${x.label}${x.detail?'||'+x.detail:''}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n')
+      const d:any={service_type:qf.serviceType,frequency:qf.frequency,address:qf.address,sqft_range:qf.sqftRange,bedrooms:qf.bedrooms,house_bathrooms:qf.bathrooms,addons_list:qf.addonsList,key_areas:qf.keyAreas,additional_notes:qf.additionalNotes,preferred_date_1:qf.preferredDate1||undefined,preferred_date_2:qf.preferredDate2||undefined,preferred_times:qf.preferredTimes,price_breakdown:bd,subtotal:`$${subtotal.toFixed(2)}`,total_price:`$${total.toFixed(2)}`,discount:`$${discAmt.toFixed(2)}`,discount_label:discAmt>0?`${discType==='%'?discVal+'%':'$'+discVal} off`:'',submission_type:'quote'}
+      if(selC){const c=clients.find(x=>x.id===selC);if(c){d.email=c.email;d.first_name=c.firstName;d.last_name=c.lastName;d.phone=c.phone}}
+      else{d.email=nc.email;d.first_name=nc.firstName;d.last_name=nc.lastName;d.phone=nc.phone;d.address=nc.address||qf.address;d.city=nc.city;d.state=nc.state;d.zip=nc.zip}
+      await createQuote(d);setSub(false)
+    }
+
+    const secCard=(ch:React.ReactNode)=>(<div style={{...card,padding:'24px',marginBottom:16}}>{ch}</div>)
+    const secTitle=(t:string,sub?:string)=>(<div style={{marginBottom:18}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{t}</div>{sub&&<div style={{fontSize:12,color:T.muted,marginTop:3}}>{sub}</div>}</div>)
+    const field=(l:string,ch:React.ReactNode,full?:boolean)=>(<div style={full?{gridColumn:'1/-1'}:{}}><div style={{fontSize:12,fontWeight:500,color:T.muted,marginBottom:6}}>{l}</div>{ch}</div>)
+
+    return(<div style={{maxWidth:860,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <button onClick={()=>setPage('quotes')} style={{...btnS,padding:'8px 14px'}}>← Quotes</button>
+          <div><h1 style={{fontSize:22,fontWeight:700,color:T.text}}>New Quote</h1><div style={{fontSize:12,color:T.muted,marginTop:2}}>Create a quote for a cleaning service</div></div>
         </div>
-        <div style={{marginTop:8}}>{label('Preferred Date')}<input type="date" value={qf.preferredDate1} onChange={e=>setQf({...qf,preferredDate1:e.target.value})} style={inp}/></div>
+        <div style={{background:T.surf,borderRadius:10,padding:'12px 18px',border:`1px solid ${T.border}`}}>
+          <div style={{fontSize:11,color:T.dim}}>Estimate</div>
+          <div style={{fontSize:22,fontWeight:700,color:T.accent,marginTop:2}}>{fmtMoney(total)}</div>
+        </div>
       </div>
-      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Line Items')}
-        {items.map((x,i)=><div key={i} style={{padding:'6px 0',borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}><input value={x.label} onChange={e=>{const u=[...items];u[i]={...u[i],label:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Item"/><span style={{color:T.muted}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:80,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.red}30`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>
-          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:4,fontSize:12}} placeholder="Description…"/>
+
+      {/* Step 1: Client */}
+      {secCard(<>
+        {secTitle('Client','Who is this quote for?')}
+        {!selectedClient?(
+          <div>
+            <div style={{display:'flex',gap:6,marginBottom:14}}>
+              <button onClick={()=>setClientMode('search')} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${clientMode==='search'?T.accentBorder:T.border}`,background:clientMode==='search'?T.accentBg:'transparent',color:clientMode==='search'?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Existing Client</button>
+              <button onClick={()=>setClientMode('new')} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${clientMode==='new'?T.accentBorder:T.border}`,background:clientMode==='new'?T.accentBg:'transparent',color:clientMode==='new'?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ New Client</button>
+            </div>
+            {clientMode==='search'?(
+              <div>
+                <input value={clientSearch} onChange={e=>setClientSearch(e.target.value)} placeholder="Search by name, email, or phone…" style={{...inp,marginBottom:10,fontSize:14,padding:'12px 16px'}}/>
+                <div style={{maxHeight:220,overflowY:'auto',display:'flex',flexDirection:'column',gap:4}}>
+                  {filteredClients.length===0?<div style={{padding:'20px',textAlign:'center',color:T.dim,fontSize:13}}>No clients found. <button onClick={()=>setClientMode('new')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Create one</button></div>:(
+                    filteredClients.map(c=>(
+                      <div key={c.id} onClick={()=>setSelC(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:10,background:T.surf,border:`1px solid ${T.border}`,cursor:'pointer',transition:'all .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.accentBorder;(e.currentTarget as HTMLDivElement).style.background=T.accentBg}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border;(e.currentTarget as HTMLDivElement).style.background=T.surf}}>
+                        {avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`,38)}
+                        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{c.firstName} {c.lastName}</div><div style={{fontSize:12,color:T.muted,marginTop:1}}>{c.email}{c.phone?` · ${c.phone}`:''}</div></div>
+                        <span style={{fontSize:10,color:T.dim}}>{quotes.filter(q=>q.clientId===c.id).length} quotes</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ):(
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                {[{l:'First Name *',k:'firstName'},{l:'Last Name',k:'lastName'},{l:'Email *',k:'email'},{l:'Phone',k:'phone'},{l:'Address',k:'address'},{l:'City',k:'city'},{l:'State',k:'state'},{l:'Zip',k:'zip'}].map(f=>field(f.l,<input value={(nc as any)[f.k]} onChange={e=>setNc({...nc,[f.k]:e.target.value})} style={inp}/>))}
+              </div>
+            )}
+          </div>
+        ):(
+          <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:T.accentBg,borderRadius:10,border:`1px solid ${T.accentBorder}`}}>
+            {avatar(`${selectedClient.firstName.charAt(0)}${selectedClient.lastName.charAt(0)}`,42)}
+            <div style={{flex:1}}><div style={{fontSize:15,fontWeight:600,color:T.text}}>{selectedClient.firstName} {selectedClient.lastName}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{selectedClient.email}{selectedClient.phone?` · ${selectedClient.phone}`:''}</div></div>
+            <button onClick={()=>setSelC(null)} style={{padding:'6px 12px',borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontWeight:500}}>Change</button>
+          </div>
+        )}
+      </>)}
+
+      {/* Step 2: Service Details */}
+      {secCard(<>
+        {secTitle('Service Details','What type of cleaning?')}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          {field('Service Type',<select value={qf.serviceType} onChange={e=>setQf({...qf,serviceType:e.target.value})} style={{...inp,cursor:'pointer',fontSize:14,padding:'12px 14px'}}>{SERVICE_TYPES.map(s=><option key={s}>{s}</option>)}</select>)}
+          {field('Frequency',<select value={qf.frequency} onChange={e=>setQf({...qf,frequency:e.target.value})} style={{...inp,cursor:'pointer',fontSize:14,padding:'12px 14px'}}>{FREQUENCIES.map(f=><option key={f}>{f}</option>)}</select>)}
+          {field('Service Address',<input value={qf.address} onChange={e=>setQf({...qf,address:e.target.value})} style={{...inp,fontSize:14,padding:'12px 14px'}} placeholder="123 Main St, Anchorage, AK"/>,true)}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginTop:14}}>
+          {field('Square Footage',<input value={qf.sqftRange} onChange={e=>setQf({...qf,sqftRange:e.target.value})} style={inp} placeholder="e.g. 1,800"/>)}
+          {field('Bedrooms',<input value={qf.bedrooms} onChange={e=>setQf({...qf,bedrooms:e.target.value})} style={inp} type="number"/>)}
+          {field('Bathrooms',<input value={qf.bathrooms} onChange={e=>setQf({...qf,bathrooms:e.target.value})} style={inp} type="number" step="0.5"/>)}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
+          {field('Preferred Date',<input type="date" value={qf.preferredDate1} onChange={e=>setQf({...qf,preferredDate1:e.target.value})} style={inp}/>)}
+          {field('Preferred Time',<input value={qf.preferredTimes} onChange={e=>setQf({...qf,preferredTimes:e.target.value})} style={inp} placeholder="e.g. Morning, 9am-12pm"/>)}
+        </div>
+      </>)}
+
+      {/* Step 3: Line Items */}
+      {secCard(<>
+        {secTitle('Pricing','Add line items for this quote')}
+        {/* Header */}
+        <div style={{display:'flex',padding:'8px 0',borderBottom:`2px solid ${T.borderB}`,marginBottom:4}}>
+          <span style={{flex:1,fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.3}}>Item</span>
+          <span style={{width:100,fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.3,textAlign:'right'}}>Amount</span>
+          <span style={{width:32}}/>
+        </div>
+        {items.map((x,i)=><div key={i} style={{padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input value={x.label} onChange={e=>{const u=[...items];u[i]={...u[i],label:e.target.value};setItems(u)}} style={{...inp,flex:1,fontSize:14,padding:'11px 14px'}} placeholder="Service name"/>
+            <div style={{display:'flex',alignItems:'center',gap:2,width:100}}><span style={{color:T.muted,fontSize:14}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,textAlign:'right',fontSize:14,padding:'11px 10px'}} type="number" step="0.01" placeholder="0.00"/></div>
+            {items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>}
+          </div>
+          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:6,fontSize:12}} placeholder="Description — what does this include?"/>
         </div>)}
-        <button onClick={()=>setItems([...items,{label:'',detail:'',amount:'0'}])} style={{marginTop:8,padding:'7px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add</button>
-        <div style={{display:'flex',justifyContent:'space-between',padding:'12px 0',borderTop:`2px solid ${T.borderB}`,marginTop:10}}><span style={{fontWeight:700,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:18,color:T.accent}}>{fmtMoney(total)}</span></div>
+        <button onClick={()=>setItems([...items,{label:'',detail:'',amount:''}])} style={{marginTop:10,padding:'10px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:13,fontWeight:500,width:'100%',transition:'all .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=T.accentBg}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>+ Add Line Item</button>
+
+        {/* Discount */}
+        <div style={{marginTop:16,padding:'14px 0',borderTop:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:13,fontWeight:500,color:T.muted}}>Discount</span>
+          <div style={{display:'flex',gap:2,background:T.surf,borderRadius:6,padding:2,border:`1px solid ${T.border}`}}>
+            <button onClick={()=>setDiscType('$')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='$'?T.card:'transparent',color:discType==='$'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='$'?T.shadow:'none'}}>$</button>
+            <button onClick={()=>setDiscType('%')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='%'?T.card:'transparent',color:discType==='%'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='%'?T.shadow:'none'}}>%</button>
+          </div>
+          <input value={discVal} onChange={e=>setDiscVal(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/>
+          {discAmt>0&&<span style={{fontSize:13,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span>}
+        </div>
+
+        {/* Totals */}
+        <div style={{padding:'16px 0',borderTop:`2px solid ${T.borderB}`,marginTop:8}}>
+          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.muted}}>Subtotal</span><span style={{fontSize:14,color:T.sub}}>{fmtMoney(subtotal)}</span></div>}
+          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:13,color:T.green}}>Discount</span><span style={{fontSize:14,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span></div>}
+          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:16,fontWeight:700,color:T.text}}>Total</span><span style={{fontSize:24,fontWeight:700,color:T.accent}}>{fmtMoney(total)}</span></div>
+        </div>
+      </>)}
+
+      {/* Step 4: Notes */}
+      {secCard(<>
+        {secTitle('Additional Notes','Special instructions or key areas')}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          {field('Key Areas',<textarea value={qf.keyAreas} onChange={e=>setQf({...qf,keyAreas:e.target.value})} rows={2} style={{...inp,resize:'vertical'}} placeholder="e.g. Kitchen, master bath, floors…"/>)}
+          {field('Add-ons',<textarea value={qf.addonsList} onChange={e=>setQf({...qf,addonsList:e.target.value})} rows={2} style={{...inp,resize:'vertical'}} placeholder="e.g. Inside fridge, oven, windows…"/>)}
+        </div>
+        <div style={{marginTop:14}}>{field('Notes',<textarea value={qf.additionalNotes} onChange={e=>setQf({...qf,additionalNotes:e.target.value})} rows={3} style={{...inp,resize:'vertical'}} placeholder="Anything else the client should know…"/>,true)}</div>
+      </>)}
+
+      {/* Submit */}
+      <div style={{display:'flex',gap:10,marginBottom:40}}>
+        <button onClick={()=>setPage('quotes')} style={{...btnS,padding:'14px 24px',fontSize:14}}>Cancel</button>
+        <button onClick={go} disabled={sub} style={{...btnP,flex:1,padding:'14px',fontSize:15,opacity:sub?.6:1}}>{sub?'Creating…':'Create Quote'}</button>
       </div>
-      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Notes')}<textarea value={qf.additionalNotes} onChange={e=>setQf({...qf,additionalNotes:e.target.value})} rows={3} placeholder="Notes…" style={{...inp,resize:'vertical'}}/></div>
-      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'12px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Quote'}</button>
-    </>)
+    </div>)
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -522,15 +646,65 @@ export default function CleanerDashboard() {
 
   // CREATE JOB
   function CreateJobPage(){
-    const [jf,setJf]=useState({displayName:'',propertyLabel:'',address:'',checkoutDate:'',checkoutTimeVal:'10:00',checkinDate:'',checkinTimeVal:'',notes:''});const [sub,setSub]=useState(false)
-    async function go(){if(!jf.displayName||!jf.checkoutDate){showToast('Name and date required','err');return};setSub(true);const co=new Date(`${jf.checkoutDate}T${jf.checkoutTimeVal||'10:00'}`);const b:any={displayName:jf.displayName,propertyLabel:jf.propertyLabel||jf.displayName,address:jf.address,checkoutTime:co.toISOString(),platform:'manual',notes:jf.notes};if(jf.checkinDate)b.checkinTime=new Date(`${jf.checkinDate}T${jf.checkinTimeVal||'14:00'}`).toISOString();await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});await load();showToast('Job created');setPage('jobs');setSub(false)}
-    return pageWrap(560,<>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('jobs')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>Add Job</h1></div>
-      <div style={{...card,padding:'20px'}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-        {[{l:'Job Name *',k:'displayName',span:true},{l:'Property',k:'propertyLabel'},{l:'Address',k:'address'},{l:'Checkout Date *',k:'checkoutDate',t:'date'},{l:'Time',k:'checkoutTimeVal',t:'time'},{l:'Check-in Date',k:'checkinDate',t:'date'},{l:'Check-in Time',k:'checkinTimeVal',t:'time'}].map(f=><div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}>{label(f.l)}<input value={(jf as any)[f.k]} onChange={e=>setJf({...jf,[f.k]:e.target.value})} type={(f as any).t||'text'} style={inp}/></div>)}
-      </div><div style={{marginTop:10}}>{label('Notes')}<textarea value={jf.notes} onChange={e=>setJf({...jf,notes:e.target.value})} rows={3} style={{...inp,resize:'vertical'}}/></div>
-      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',marginTop:14,padding:'11px',opacity:sub?.6:1}}>{sub?'Creating…':'Create Job'}</button></div>
-    </>)
+    const [jf,setJf]=useState({displayName:'',propertyLabel:'',address:'',checkoutDate:'',checkoutTimeVal:'10:00',checkinDate:'',checkinTimeVal:'14:00',sqft:'',beds:'',baths:'',customerName:'',worth:'',notes:''})
+    const [sub,setSub]=useState(false)
+    async function go(){
+      if(!jf.displayName||!jf.checkoutDate){showToast('Name and date required','err');return}
+      setSub(true);const co=new Date(`${jf.checkoutDate}T${jf.checkoutTimeVal||'10:00'}`)
+      const b:any={displayName:jf.displayName,propertyLabel:jf.propertyLabel||jf.displayName,address:jf.address,checkoutTime:co.toISOString(),platform:'manual',notes:jf.notes,customerName:jf.customerName||null,worth:jf.worth?parseFloat(jf.worth):null,sqft:jf.sqft?parseInt(jf.sqft):null,beds:jf.beds?parseInt(jf.beds):null,baths:jf.baths?parseFloat(jf.baths):null}
+      if(jf.checkinDate)b.checkinTime=new Date(`${jf.checkinDate}T${jf.checkinTimeVal||'14:00'}`).toISOString()
+      await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});await load();showToast('Job created');setPage('jobs');setSub(false)
+    }
+    const secCard=(ch:React.ReactNode)=>(<div style={{...card,padding:'24px',marginBottom:16}}>{ch}</div>)
+    const secTitle=(t:string,s?:string)=>(<div style={{marginBottom:18}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{t}</div>{s&&<div style={{fontSize:12,color:T.muted,marginTop:3}}>{s}</div>}</div>)
+    const field=(l:string,ch:React.ReactNode,full?:boolean)=>(<div style={full?{gridColumn:'1/-1'}:{}}><div style={{fontSize:12,fontWeight:500,color:T.muted,marginBottom:6}}>{l}</div>{ch}</div>)
+
+    return(<div style={{maxWidth:720,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24}}>
+        <button onClick={()=>setPage('jobs')} style={{...btnS,padding:'8px 14px'}}>← Jobs</button>
+        <div><h1 style={{fontSize:22,fontWeight:700,color:T.text}}>Add Job</h1><div style={{fontSize:12,color:T.muted,marginTop:2}}>Manually schedule a cleaning job</div></div>
+      </div>
+
+      {secCard(<>
+        {secTitle('Job Information','Name and property details')}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          {field('Job Name *',<input value={jf.displayName} onChange={e=>setJf({...jf,displayName:e.target.value})} style={{...inp,fontSize:14,padding:'12px 14px'}} placeholder="e.g. Deep Clean — Smith Residence"/>,true)}
+          {field('Property Name',<input value={jf.propertyLabel} onChange={e=>setJf({...jf,propertyLabel:e.target.value})} style={inp} placeholder="e.g. Smith Home"/>)}
+          {field('Client / Guest Name',<input value={jf.customerName} onChange={e=>setJf({...jf,customerName:e.target.value})} style={inp} placeholder="Guest name"/>)}
+          {field('Address',<input value={jf.address} onChange={e=>setJf({...jf,address:e.target.value})} style={{...inp,fontSize:14,padding:'12px 14px'}} placeholder="Full address"/>,true)}
+        </div>
+      </>)}
+
+      {secCard(<>
+        {secTitle('Schedule','When does this job happen?')}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          {field('Checkout Date *',<input type="date" value={jf.checkoutDate} onChange={e=>setJf({...jf,checkoutDate:e.target.value})} style={{...inp,fontSize:14,padding:'12px 14px'}}/>)}
+          {field('Checkout Time',<input type="time" value={jf.checkoutTimeVal} onChange={e=>setJf({...jf,checkoutTimeVal:e.target.value})} style={{...inp,fontSize:14,padding:'12px 14px'}}/>)}
+          {field('Check-in Date',<input type="date" value={jf.checkinDate} onChange={e=>setJf({...jf,checkinDate:e.target.value})} style={inp}/>)}
+          {field('Check-in Time',<input type="time" value={jf.checkinTimeVal} onChange={e=>setJf({...jf,checkinTimeVal:e.target.value})} style={inp}/>)}
+        </div>
+      </>)}
+
+      {secCard(<>
+        {secTitle('Property Details','Size and specifications')}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:14}}>
+          {field('Sq Ft',<input value={jf.sqft} onChange={e=>setJf({...jf,sqft:e.target.value})} style={inp} placeholder="1,800" type="number"/>)}
+          {field('Beds',<input value={jf.beds} onChange={e=>setJf({...jf,beds:e.target.value})} style={inp} type="number"/>)}
+          {field('Baths',<input value={jf.baths} onChange={e=>setJf({...jf,baths:e.target.value})} style={inp} type="number" step="0.5"/>)}
+          {field('Worth ($)',<input value={jf.worth} onChange={e=>setJf({...jf,worth:e.target.value})} style={inp} type="number" step="0.01" placeholder="0.00"/>)}
+        </div>
+      </>)}
+
+      {secCard(<>
+        {secTitle('Notes')}
+        <textarea value={jf.notes} onChange={e=>setJf({...jf,notes:e.target.value})} rows={4} style={{...inp,resize:'vertical',fontSize:14,padding:'12px 14px'}} placeholder="Special instructions, access codes, things to note…"/>
+      </>)}
+
+      <div style={{display:'flex',gap:10,marginBottom:40}}>
+        <button onClick={()=>setPage('jobs')} style={{...btnS,padding:'14px 24px',fontSize:14}}>Cancel</button>
+        <button onClick={go} disabled={sub} style={{...btnP,flex:1,padding:'14px',fontSize:15,opacity:sub?.6:1}}>{sub?'Creating…':'Create Job'}</button>
+      </div>
+    </div>)
   }
 
   // CONVERT QUOTE → JOB (with calendar preview)
@@ -644,14 +818,21 @@ export default function CleanerDashboard() {
     </div>)
   }
   function CreateInvoicePage(){
-    // Saved service templates (persisted in localStorage)
+    // Templates
     const [templates,setTemplates]=useState<{name:string;description:string;price:string}[]>(()=>{if(typeof window==='undefined')return[];try{return JSON.parse(localStorage.getItem('cs_inv_templates')||'[]')}catch{return[]}})
     function saveTemplates(t:{name:string;description:string;price:string}[]){setTemplates(t);localStorage.setItem('cs_inv_templates',JSON.stringify(t))}
-    const [showAddTpl,setShowAddTpl]=useState(false)
+    const [showTplForm,setShowTplForm]=useState(false)
     const [newTpl,setNewTpl]=useState({name:'',description:'',price:''})
 
-    const [sc,setSc]=useState('')
-    const [items,setItems]=useState<{description:string;detail:string;quantity:string;amount:string}[]>([{description:'',detail:'',quantity:'1',amount:'0'}])
+    // Client
+    const [clientMode,setClientMode]=useState<'search'|'new'>('search')
+    const [clientSearch,setClientSearch]=useState('')
+    const [sc,setSc]=useState<string|null>(null)
+    const filteredC=clients.filter(c=>!clientSearch||`${c.firstName} ${c.lastName} ${c.email}`.toLowerCase().includes(clientSearch.toLowerCase()))
+    const selectedC=sc?clients.find(c=>c.id===sc):null
+
+    // Items
+    const [items,setItems]=useState<{description:string;detail:string;quantity:string;amount:string}[]>([{description:'',detail:'',quantity:'1',amount:''}])
     const [dd,setDd]=useState(''),[notes,setNotes]=useState(''),[tax,setTax]=useState('0')
     const [discType,setDiscType]=useState<'$'|'%'>('$'),[discVal,setDiscVal]=useState('0')
     const [sub,setSub]=useState(false)
@@ -660,8 +841,8 @@ export default function CleanerDashboard() {
     const discAmt=discType==='%'?(subtotal*(parseFloat(discVal)||0)/100):(parseFloat(discVal)||0)
     const total=Math.max(0,subtotal-discAmt+(parseFloat(tax)||0))
 
-    function addFromTemplate(tpl:{name:string;description:string;price:string}){
-      const empty=items.findIndex(x=>!x.description&&x.amount==='0')
+    function addTpl(tpl:{name:string;description:string;price:string}){
+      const empty=items.findIndex(x=>!x.description&&!x.amount)
       if(empty>=0){const u=[...items];u[empty]={description:tpl.name,detail:tpl.description,quantity:'1',amount:tpl.price};setItems(u)}
       else setItems([...items,{description:tpl.name,detail:tpl.description,quantity:'1',amount:tpl.price}])
     }
@@ -670,103 +851,147 @@ export default function CleanerDashboard() {
       if(!sc){showToast('Select a client','err');return}
       setSub(true)
       const lineItems=items.filter(x=>x.description).map(x=>({description:x.description+(x.detail?' — '+x.detail:''),quantity:parseFloat(x.quantity)||1,amount:parseFloat(x.amount)||0}))
-      const client=clients.find(c=>c.id===sc)
-      const invNotes=[notes,client?`Client: ${sc}`:''].filter(Boolean).join('\n')
-      await createInvoice({toClientId:sc,amount:total,tax:parseFloat(tax)||0,lineItems:JSON.stringify(lineItems),dueDate:dd||undefined,notes:invNotes})
+      await createInvoice({toClientId:sc,amount:total,tax:parseFloat(tax)||0,lineItems:JSON.stringify(lineItems),dueDate:dd||undefined,notes:[notes,sc?`Client: ${sc}`:''].filter(Boolean).join('\n')})
       setSub(false)
     }
 
-    return pageWrap(640,<>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>New Invoice</h1></div>
+    const secCard=(ch:React.ReactNode)=>(<div style={{...card,padding:'24px',marginBottom:16}}>{ch}</div>)
+    const secTitle=(t:string,s?:string)=>(<div style={{marginBottom:18}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{t}</div>{s&&<div style={{fontSize:12,color:T.muted,marginTop:3}}>{s}</div>}</div>)
+    const field=(l:string,ch:React.ReactNode,full?:boolean)=>(<div style={full?{gridColumn:'1/-1'}:{}}><div style={{fontSize:12,fontWeight:500,color:T.muted,marginBottom:6}}>{l}</div>{ch}</div>)
 
-      {/* Bill To */}
-      <div style={{...card,padding:'20px',marginBottom:12}}>
-        {hdr('Bill To')}
-        <select value={sc} onChange={e=>setSc(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select>
-        {sc&&(()=>{const c=clients.find(x=>x.id===sc);return c?<div style={{marginTop:8,padding:'10px 12px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:10}}>
-          {avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`,32)}
-          <div><div style={{fontSize:13,fontWeight:600,color:T.text}}>{c.firstName} {c.lastName}</div><div style={{fontSize:11,color:T.muted}}>{c.email}{c.phone?` · ${c.phone}`:''}</div></div>
-        </div>:null})()}
+    return(<div style={{maxWidth:860,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <button onClick={()=>setPage('invoices')} style={{...btnS,padding:'8px 14px'}}>← Invoices</button>
+          <div><h1 style={{fontSize:22,fontWeight:700,color:T.text}}>New Invoice</h1><div style={{fontSize:12,color:T.muted,marginTop:2}}>Bill a client for services</div></div>
+        </div>
+        <div style={{background:T.surf,borderRadius:10,padding:'12px 18px',border:`1px solid ${T.border}`}}>
+          <div style={{fontSize:11,color:T.dim}}>Total</div>
+          <div style={{fontSize:22,fontWeight:700,color:T.accent,marginTop:2}}>{fmtMoney(total)}</div>
+        </div>
       </div>
 
-      {/* Service Templates */}
-      {templates.length>0&&<div style={{...card,padding:'16px',marginBottom:12}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>{hdr('Quick Add')}<button onClick={()=>setShowAddTpl(!showAddTpl)} style={{fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>{showAddTpl?'Done':'+ Template'}</button></div>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      {/* Client */}
+      {secCard(<>
+        {secTitle('Bill To','Select the client to invoice')}
+        {!selectedC?(
+          <div>
+            <div style={{display:'flex',gap:6,marginBottom:14}}>
+              <button onClick={()=>setClientMode('search')} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${clientMode==='search'?T.accentBorder:T.border}`,background:clientMode==='search'?T.accentBg:'transparent',color:clientMode==='search'?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Existing Client</button>
+              <button onClick={()=>setClientMode('new')} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${clientMode==='new'?T.accentBorder:T.border}`,background:clientMode==='new'?T.accentBg:'transparent',color:clientMode==='new'?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>+ New Client</button>
+            </div>
+            {clientMode==='search'?(
+              <div>
+                <input value={clientSearch} onChange={e=>setClientSearch(e.target.value)} placeholder="Search by name, email, or phone…" style={{...inp,marginBottom:10,fontSize:14,padding:'12px 16px'}}/>
+                <div style={{maxHeight:200,overflowY:'auto',display:'flex',flexDirection:'column',gap:4}}>
+                  {filteredC.length===0?<div style={{padding:'16px',textAlign:'center',color:T.dim,fontSize:13}}>No clients found.</div>:(
+                    filteredC.map(c=>(
+                      <div key={c.id} onClick={()=>setSc(c.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:10,background:T.surf,border:`1px solid ${T.border}`,cursor:'pointer',transition:'all .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.accentBorder;(e.currentTarget as HTMLDivElement).style.background=T.accentBg}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border;(e.currentTarget as HTMLDivElement).style.background=T.surf}}>
+                        {avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`,38)}
+                        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{c.firstName} {c.lastName}</div><div style={{fontSize:12,color:T.muted,marginTop:1}}>{c.email}{c.phone?` · ${c.phone}`:''}</div></div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ):(
+              <div style={{padding:'14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:12,color:T.muted,marginBottom:10}}>Create the client first from the Clients tab, then return here to create the invoice.</div>
+                <button onClick={()=>setPage('create-client')} style={btnP}>Go to Create Client</button>
+              </div>
+            )}
+          </div>
+        ):(
+          <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:T.accentBg,borderRadius:10,border:`1px solid ${T.accentBorder}`}}>
+            {avatar(`${selectedC.firstName.charAt(0)}${selectedC.lastName.charAt(0)}`,42)}
+            <div style={{flex:1}}><div style={{fontSize:15,fontWeight:600,color:T.text}}>{selectedC.firstName} {selectedC.lastName}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{selectedC.email}{selectedC.phone?` · ${selectedC.phone}`:''}</div></div>
+            <button onClick={()=>setSc(null)} style={{padding:'6px 12px',borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:11,fontWeight:500}}>Change</button>
+          </div>
+        )}
+      </>)}
+
+      {/* Templates */}
+      {secCard(<>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          {secTitle('Service Templates','Click to add pre-filled line items')}
+          <button onClick={()=>setShowTplForm(!showTplForm)} style={{fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,flexShrink:0}}>{showTplForm?'Done':'+ New Template'}</button>
+        </div>
+        {templates.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:showTplForm?14:0}}>
           {templates.map((t,i)=>(
-            <button key={i} onClick={()=>addFromTemplate(t)} style={{padding:'7px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.surf,cursor:'pointer',fontSize:12,fontWeight:500,color:T.sub,fontFamily:'"Inter",sans-serif',transition:'all .1s',display:'flex',alignItems:'center',gap:4}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.accentBorder;(e.currentTarget as HTMLButtonElement).style.background=T.accentBg}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background=T.surf}}>
-              <span style={{color:T.accent}}>+</span>{t.name}<span style={{color:T.dim,fontSize:10,marginLeft:2}}>${t.price}</span>
-              {showAddTpl&&<span onClick={e=>{e.stopPropagation();saveTemplates(templates.filter((_,j)=>j!==i))}} style={{color:T.red,fontSize:10,marginLeft:4,cursor:'pointer'}}>×</span>}
+            <button key={i} onClick={()=>addTpl(t)} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${T.border}`,background:T.surf,cursor:'pointer',fontSize:13,fontWeight:500,color:T.sub,fontFamily:'"Inter",sans-serif',transition:'all .1s',display:'flex',alignItems:'center',gap:6}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.accentBorder;(e.currentTarget as HTMLButtonElement).style.background=T.accentBg}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background=T.surf}}>
+              <span style={{color:T.accent}}>+</span>{t.name}<span style={{color:T.dim,fontSize:11}}>${t.price}</span>
+              {showTplForm&&<span onClick={e=>{e.stopPropagation();saveTemplates(templates.filter((_,j)=>j!==i))}} style={{color:T.red,fontSize:11,marginLeft:2,cursor:'pointer'}}>×</span>}
             </button>
           ))}
-        </div>
-      </div>}
-
-      {/* Add Template form */}
-      {(showAddTpl||templates.length===0)&&<div style={{...card,padding:'16px',marginBottom:12}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>{hdr('Create Service Template')}{templates.length>0&&<button onClick={()=>setShowAddTpl(false)} style={{fontSize:11,color:T.dim,background:'none',border:'none',cursor:'pointer'}}>×</button>}</div>
-        <div style={{fontSize:12,color:T.muted,marginBottom:10}}>Templates auto-fill name, description, and price when adding line items.</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 80px',gap:6}}>
-          <input value={newTpl.name} onChange={e=>setNewTpl({...newTpl,name:e.target.value})} placeholder="Name (e.g. Bedrooms)" style={inp}/>
-          <input value={newTpl.description} onChange={e=>setNewTpl({...newTpl,description:e.target.value})} placeholder="Description" style={inp}/>
-          <input value={newTpl.price} onChange={e=>setNewTpl({...newTpl,price:e.target.value})} placeholder="Price" type="number" step="0.01" style={inp}/>
-        </div>
-        <button onClick={()=>{if(newTpl.name){saveTemplates([...templates,{...newTpl}]);setNewTpl({name:'',description:'',price:''});if(templates.length>0)setShowAddTpl(false)}}} style={{marginTop:8,padding:'8px 16px',borderRadius:8,background:T.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Save Template</button>
-      </div>}
+        </div>}
+        {(showTplForm||templates.length===0)&&<div style={{padding:'16px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`}}>
+          <div style={{fontSize:12,color:T.muted,marginBottom:10}}>Create reusable services — name, description, and default price. Click them to auto-fill line items.</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 100px',gap:8}}>
+            <input value={newTpl.name} onChange={e=>setNewTpl({...newTpl,name:e.target.value})} placeholder="e.g. Bedrooms" style={{...inp,fontSize:14,padding:'11px 14px'}}/>
+            <input value={newTpl.description} onChange={e=>setNewTpl({...newTpl,description:e.target.value})} placeholder="Description" style={inp}/>
+            <div style={{display:'flex',alignItems:'center',gap:2}}><span style={{color:T.muted}}>$</span><input value={newTpl.price} onChange={e=>setNewTpl({...newTpl,price:e.target.value})} placeholder="0.00" type="number" step="0.01" style={inp}/></div>
+          </div>
+          <button onClick={()=>{if(newTpl.name){saveTemplates([...templates,{...newTpl}]);setNewTpl({name:'',description:'',price:''});if(templates.length>0)setShowTplForm(false)}}} style={{marginTop:10,padding:'9px 20px',borderRadius:8,background:T.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>Save Template</button>
+        </div>}
+      </>)}
 
       {/* Line Items */}
-      <div style={{...card,padding:'20px',marginBottom:12}}>
-        {hdr('Line Items')}
-        {items.map((x,i)=><div key={i} style={{padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <input value={x.description} onChange={e=>{const u=[...items];u[i]={...u[i],description:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Service name"/>
-            <input value={x.quantity} onChange={e=>{const u=[...items];u[i]={...u[i],quantity:e.target.value};setItems(u)}} style={{...inp,width:44,textAlign:'center'}} placeholder="Qty" type="number"/>
-            <span style={{color:T.muted}}>$</span>
-            <input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:80,textAlign:'right'}} type="number" step="0.01"/>
-            {items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.red}30`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}
+      {secCard(<>
+        {secTitle('Line Items','Services included in this invoice')}
+        <div style={{display:'flex',padding:'8px 0',borderBottom:`2px solid ${T.borderB}`,marginBottom:4}}>
+          <span style={{flex:1,fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.3}}>Service</span>
+          <span style={{width:54,fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.3,textAlign:'center'}}>Qty</span>
+          <span style={{width:100,fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.3,textAlign:'right'}}>Amount</span>
+          <span style={{width:32}}/>
+        </div>
+        {items.map((x,i)=><div key={i} style={{padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input value={x.description} onChange={e=>{const u=[...items];u[i]={...u[i],description:e.target.value};setItems(u)}} style={{...inp,flex:1,fontSize:14,padding:'11px 14px'}} placeholder="Service name"/>
+            <input value={x.quantity} onChange={e=>{const u=[...items];u[i]={...u[i],quantity:e.target.value};setItems(u)}} style={{...inp,width:54,textAlign:'center',fontSize:14,padding:'11px 8px'}} placeholder="1" type="number"/>
+            <div style={{display:'flex',alignItems:'center',gap:2,width:100}}><span style={{color:T.muted,fontSize:14}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,textAlign:'right',fontSize:14,padding:'11px 10px'}} type="number" step="0.01" placeholder="0.00"/></div>
+            {items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>×</button>}
           </div>
-          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:4,fontSize:12}} placeholder="Description / details…"/>
+          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:6,fontSize:12}} placeholder="Description — what does this include?"/>
         </div>)}
-        <button onClick={()=>setItems([...items,{description:'',detail:'',quantity:'1',amount:'0'}])} style={{marginTop:8,padding:'7px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add Line Item</button>
+        <button onClick={()=>setItems([...items,{description:'',detail:'',quantity:'1',amount:''}])} style={{marginTop:10,padding:'10px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:13,fontWeight:500,width:'100%',transition:'all .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=T.accentBg}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>+ Add Line Item</button>
 
-        {/* Discount */}
-        <div style={{marginTop:14,padding:'12px 0',borderTop:`1px solid ${T.border}`}}>
-          {label('Discount')}
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <div style={{display:'flex',gap:2,background:T.surf,borderRadius:6,padding:2,border:`1px solid ${T.border}`}}>
-              <button onClick={()=>setDiscType('$')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='$'?T.card:'transparent',color:discType==='$'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='$'?T.shadow:'none'}}>$</button>
-              <button onClick={()=>setDiscType('%')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='%'?T.card:'transparent',color:discType==='%'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='%'?T.shadow:'none'}}>%</button>
-            </div>
-            <input value={discVal} onChange={e=>setDiscVal(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/>
-            {discAmt>0&&<span style={{fontSize:12,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span>}
+        {/* Discount + Tax + Total */}
+        <div style={{marginTop:16,padding:'14px 0',borderTop:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:13,fontWeight:500,color:T.muted}}>Discount</span>
+          <div style={{display:'flex',gap:2,background:T.surf,borderRadius:6,padding:2,border:`1px solid ${T.border}`}}>
+            <button onClick={()=>setDiscType('$')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='$'?T.card:'transparent',color:discType==='$'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='$'?T.shadow:'none'}}>$</button>
+            <button onClick={()=>setDiscType('%')} style={{padding:'4px 10px',borderRadius:4,border:'none',background:discType==='%'?T.card:'transparent',color:discType==='%'?T.text:T.dim,fontSize:12,fontWeight:600,cursor:'pointer',boxShadow:discType==='%'?T.shadow:'none'}}>%</button>
           </div>
+          <input value={discVal} onChange={e=>setDiscVal(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/>
+          {discAmt>0&&<span style={{fontSize:13,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span>}
+          <div style={{flex:1}}/>
+          <span style={{fontSize:13,fontWeight:500,color:T.muted}}>Tax $</span>
+          <input value={tax} onChange={e=>setTax(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/>
         </div>
 
-        {/* Tax */}
-        <div style={{padding:'10px 0',borderTop:`1px solid ${T.border}`}}>
-          {label('Tax')}
-          <div style={{display:'flex',alignItems:'center',gap:4}}><span style={{color:T.muted}}>$</span><input value={tax} onChange={e=>setTax(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/></div>
+        <div style={{padding:'16px 0',borderTop:`2px solid ${T.borderB}`,marginTop:8}}>
+          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:13,color:T.muted}}>Subtotal</span><span style={{fontSize:14,color:T.sub}}>{fmtMoney(subtotal)}</span></div>}
+          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:13,color:T.green}}>Discount</span><span style={{fontSize:14,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span></div>}
+          {parseFloat(tax)>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:13,color:T.muted}}>Tax</span><span style={{fontSize:14,color:T.sub}}>{fmtMoney(parseFloat(tax)||0)}</span></div>}
+          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontSize:16,fontWeight:700,color:T.text}}>Total Due</span><span style={{fontSize:24,fontWeight:700,color:T.accent}}>{fmtMoney(total)}</span></div>
         </div>
-
-        {/* Totals */}
-        <div style={{padding:'14px 0',borderTop:`2px solid ${T.borderB}`,marginTop:4}}>
-          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:T.muted}}>Subtotal</span><span style={{fontSize:13,color:T.sub}}>{fmtMoney(subtotal)}</span></div>}
-          {discAmt>0&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:T.green}}>Discount ({discType==='%'?`${discVal}%`:`$${discVal}`})</span><span style={{fontSize:13,color:T.green,fontWeight:600}}>-{fmtMoney(discAmt)}</span></div>}
-          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{fontWeight:700,fontSize:14,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:22,color:T.accent}}>{fmtMoney(total)}</span></div>
-        </div>
-      </div>
+      </>)}
 
       {/* Details */}
-      <div style={{...card,padding:'20px',marginBottom:12}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          <div>{label('Due Date')}<input type="date" value={dd} onChange={e=>setDd(e.target.value)} style={inp}/></div>
-          <div>{label('Payment Terms')}<select style={{...inp,cursor:'pointer'}} onChange={e=>{if(e.target.value){const d=new Date();d.setDate(d.getDate()+parseInt(e.target.value));setDd(d.toISOString().split('T')[0])}}}><option value="">Custom</option><option value="0">Due Today</option><option value="7">Net 7</option><option value="15">Net 15</option><option value="30">Net 30</option></select></div>
+      {secCard(<>
+        {secTitle('Invoice Details')}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          {field('Due Date',<input type="date" value={dd} onChange={e=>setDd(e.target.value)} style={{...inp,fontSize:14,padding:'12px 14px'}}/>)}
+          {field('Payment Terms',<select style={{...inp,cursor:'pointer',fontSize:14,padding:'12px 14px'}} onChange={e=>{if(e.target.value){const d=new Date();d.setDate(d.getDate()+parseInt(e.target.value));setDd(d.toISOString().split('T')[0])}}}><option value="">Custom</option><option value="0">Due on Receipt</option><option value="7">Net 7</option><option value="15">Net 15</option><option value="30">Net 30</option></select>)}
         </div>
-        <div style={{marginTop:10}}>{label('Notes')}<textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} style={{...inp,resize:'vertical'}} placeholder="Payment instructions, thank you note…"/></div>
-      </div>
+        <div style={{marginTop:14}}>{field('Notes / Payment Instructions',<textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} style={{...inp,resize:'vertical',fontSize:14,padding:'12px 14px'}} placeholder="Thank you for your business! Payment is due upon receipt."/>,true)}</div>
+      </>)}
 
-      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'13px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Invoice'}</button>
-    </>)
+      <div style={{display:'flex',gap:10,marginBottom:40}}>
+        <button onClick={()=>setPage('invoices')} style={{...btnS,padding:'14px 24px',fontSize:14}}>Cancel</button>
+        <button onClick={go} disabled={sub} style={{...btnP,flex:1,padding:'14px',fontSize:15,opacity:sub?.6:1}}>{sub?'Creating…':'Create Invoice'}</button>
+      </div>
+    </div>)
   }
 
   function InvoiceDetailPage(){
