@@ -1,9 +1,9 @@
 'use client'
-// app/dashboard/cleaner/page.tsx — CleanSync Pro v4 · Luxury Design
+// CleanSync Pro · Cleaner Portal v6 — Refined Slate Design
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
-// ── TYPES ────────────────────────────────────────────────────────────────────
+// ── TYPES ─────────────────────────────────────────────────────────────
 interface User { id: string; name: string; email: string; role: string; phone?: string; company?: string; bio?: string }
 interface Quote {
   id: string; clientId: string; cleanerId: string|null; status: string; submissionType: string
@@ -39,139 +39,111 @@ type Page = 'dashboard'|'quotes'|'quote-detail'|'create-quote'|'jobs'|'create-jo
   |'clients'|'create-client'|'client-detail'|'invoices'|'create-invoice'|'invoice-detail'
   |'calendar'|'reports'|'activity'|'integrations'|'settings'
 
-// ── REFINED THEME ────────────────────────────────────────────────────────────
+// ── DESIGN SYSTEM ─────────────────────────────────────────────────────
+// Dark: Warm slate with blue accent. Light: Clean white with deep blue.
 const D = {
-  bg:'#030d1c',
-  nav:'rgba(3,10,28,0.96)',
-  card:'rgba(8,24,58,0.55)',
-  cardHover:'rgba(12,32,72,0.65)',
-  surf:'rgba(255,255,255,0.025)',
-  surfHover:'rgba(255,255,255,0.05)',
-  border:'rgba(148,210,225,0.08)',
-  borderB:'rgba(148,210,225,0.2)',
-  borderHover:'rgba(93,235,241,0.3)',
-  text:'#eef6ff',
-  sub:'rgba(255,255,255,0.72)',
-  muted:'rgba(255,255,255,0.5)',
-  dim:'rgba(255,255,255,0.28)',
-  accent:'#5dd8e0',
-  accentSoft:'#3fb8c8',
-  accentBg:'rgba(93,216,224,0.06)',
-  accentBorder:'rgba(93,216,224,0.15)',
-  green:'#34d399', greenBg:'rgba(52,211,153,0.08)',
-  amber:'#fbbf24', amberBg:'rgba(251,191,36,0.07)',
-  red:'#f87171', redBg:'rgba(248,113,113,0.07)',
-  violet:'#a78bfa', violetBg:'rgba(167,139,250,0.07)',
-  rose:'#fb7185', roseBg:'rgba(251,113,133,0.07)',
+  bg:'#0f1117', nav:'#0b0e14', card:'#161a22', cardHover:'#1c2028',
+  surf:'#1a1e26', surfHover:'#22262e',
+  border:'rgba(255,255,255,0.06)', borderB:'rgba(255,255,255,0.1)', borderHover:'rgba(255,255,255,0.14)',
+  text:'#eceef2', sub:'#b4b9c4', muted:'#7c8294', dim:'#4a4f5e',
+  accent:'#38bdf8', accentSoft:'#0ea5e9', accentBg:'rgba(56,189,248,0.08)', accentBorder:'rgba(56,189,248,0.18)',
+  green:'#34d399', greenBg:'rgba(52,211,153,0.1)',
+  amber:'#fbbf24', amberBg:'rgba(251,191,36,0.1)',
+  red:'#f87171', redBg:'rgba(248,113,113,0.08)',
+  violet:'#a78bfa', violetBg:'rgba(167,139,250,0.08)',
+  rose:'#fb7185', roseBg:'rgba(251,113,133,0.08)',
+  shadow:'0 1px 3px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.2)',
+  shadowLg:'0 4px 24px rgba(0,0,0,0.4)',
 }
 const L = {
-  bg:'#f3f8fc',
-  nav:'#0b3d5e',
-  card:'#ffffff',
-  cardHover:'#f8fbff',
-  surf:'#f7fafd',
-  surfHover:'#eef4f9',
-  border:'rgba(14,100,150,0.1)',
-  borderB:'rgba(14,100,150,0.22)',
-  borderHover:'rgba(14,100,150,0.35)',
-  text:'#0b2e48',
-  sub:'#1e5a7e',
-  muted:'#5690a8',
-  dim:'#a3cade',
-  accent:'#0891b2',
-  accentSoft:'#0e7490',
-  accentBg:'rgba(8,145,178,0.05)',
-  accentBorder:'rgba(8,145,178,0.15)',
-  green:'#059669', greenBg:'rgba(5,150,105,0.06)',
-  amber:'#d97706', amberBg:'rgba(217,119,6,0.06)',
-  red:'#dc2626', redBg:'rgba(220,38,38,0.05)',
+  bg:'#f8f9fb', nav:'#ffffff', card:'#ffffff', cardHover:'#f4f6f8',
+  surf:'#f1f3f5', surfHover:'#e8ebee',
+  border:'rgba(0,0,0,0.06)', borderB:'rgba(0,0,0,0.1)', borderHover:'rgba(0,0,0,0.14)',
+  text:'#111827', sub:'#374151', muted:'#6b7280', dim:'#9ca3af',
+  accent:'#0284c7', accentSoft:'#0369a1', accentBg:'rgba(2,132,199,0.06)', accentBorder:'rgba(2,132,199,0.18)',
+  green:'#059669', greenBg:'rgba(5,150,105,0.07)',
+  amber:'#d97706', amberBg:'rgba(217,119,6,0.07)',
+  red:'#dc2626', redBg:'rgba(220,38,38,0.06)',
   violet:'#7c3aed', violetBg:'rgba(124,58,237,0.06)',
-  rose:'#e11d48', roseBg:'rgba(225,29,72,0.05)',
+  rose:'#e11d48', roseBg:'rgba(225,29,72,0.06)',
+  shadow:'0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04)',
+  shadowLg:'0 4px 20px rgba(0,0,0,0.08)',
 }
 
 const STATUS: Record<string,{label:string;color:string;bg:string}> = {
-  pending:   {label:'Pending',   color:'#fbbf24', bg:'rgba(251,191,36,0.1)'},
-  reviewed:  {label:'Reviewed',  color:'#5dd8e0', bg:'rgba(93,216,224,0.1)'},
-  booked:    {label:'Booked',    color:'#34d399', bg:'rgba(52,211,153,0.1)'},
-  completed: {label:'Completed', color:'#a78bfa', bg:'rgba(167,139,250,0.1)'},
-  cancelled: {label:'Cancelled', color:'#f87171', bg:'rgba(248,113,113,0.1)'},
+  pending:{label:'Pending',color:'#fbbf24',bg:'rgba(251,191,36,0.12)'},
+  reviewed:{label:'Reviewed',color:'#38bdf8',bg:'rgba(56,189,248,0.12)'},
+  booked:{label:'Booked',color:'#34d399',bg:'rgba(52,211,153,0.12)'},
+  completed:{label:'Completed',color:'#a78bfa',bg:'rgba(167,139,250,0.12)'},
+  cancelled:{label:'Cancelled',color:'#f87171',bg:'rgba(248,113,113,0.12)'},
 }
 const INV_STATUS: Record<string,{label:string;color:string;bg:string}> = {
-  draft:     {label:'Draft',     color:'#94a3b8', bg:'rgba(148,163,184,0.08)'},
-  sent:      {label:'Sent',      color:'#fbbf24', bg:'rgba(251,191,36,0.1)'},
-  paid:      {label:'Paid',      color:'#34d399', bg:'rgba(52,211,153,0.1)'},
-  overdue:   {label:'Overdue',   color:'#f87171', bg:'rgba(248,113,113,0.1)'},
-  cancelled: {label:'Cancelled', color:'#6b7280', bg:'rgba(107,114,128,0.08)'},
+  draft:{label:'Draft',color:'#94a3b8',bg:'rgba(148,163,184,0.1)'},
+  sent:{label:'Sent',color:'#fbbf24',bg:'rgba(251,191,36,0.12)'},
+  paid:{label:'Paid',color:'#34d399',bg:'rgba(52,211,153,0.12)'},
+  overdue:{label:'Overdue',color:'#f87171',bg:'rgba(248,113,113,0.12)'},
+  cancelled:{label:'Cancelled',color:'#6b7280',bg:'rgba(107,114,128,0.1)'},
 }
 
-// ── UTILS ────────────────────────────────────────────────────────────────────
 function fmtDate(d:string|null){if(!d)return'—';return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
 function fmtTime(d:string){return new Date(d).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
-function fmtRel(d:string|null){
-  if(!d)return'Never';const m=Math.floor((Date.now()-new Date(d).getTime())/60000)
-  if(m<1)return'Just now';if(m<60)return`${m}m ago`;const h=Math.floor(m/60)
-  return h<24?`${h}h ago`:`${Math.floor(h/24)}d ago`
-}
+function fmtRel(d:string|null){if(!d)return'Never';const m=Math.floor((Date.now()-new Date(d).getTime())/60000);if(m<1)return'Just now';if(m<60)return`${m}m ago`;const h=Math.floor(m/60);return h<24?`${h}h ago`:`${Math.floor(h/24)}d ago`}
 function fmtMoney(n:number){return`$${n.toFixed(2)}`}
 function sameDay(a:Date,b:Date){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
-const SERVICE_TYPES = ['Standard Clean','Deep Clean','Move-In/Move-Out','Airbnb Turnover','Office Clean','Post-Construction','Custom']
-const FREQUENCIES = ['One-Time','Weekly','Bi-Weekly','Every 3 Weeks','Monthly','As Needed']
+const SERVICE_TYPES=['Standard Clean','Deep Clean','Move-In/Move-Out','Airbnb Turnover','Office Clean','Post-Construction','Custom']
+const FREQUENCIES=['One-Time','Weekly','Bi-Weekly','Every 3 Weeks','Monthly','As Needed']
 
-// ══════════════════════════════════════════════════════════════════════════════
 export default function CleanerDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState<User|null>(null)
-  const [dark, setDark] = useState(true)
-  const [page, setPage] = useState<Page>('dashboard')
-  const [quotes, setQuotes] = useState<Quote[]>([])
-  const [clients, setClients] = useState<QuoteClient[]>([])
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [loading, setLoading] = useState(true)
-  const [collapsed, setCollapsed] = useState(false)
-  const [activeQuoteId, setActiveQuoteId] = useState<string|null>(null)
-  const [activeInvoiceId, setActiveInvoiceId] = useState<string|null>(null)
-  const [activeClientId, setActiveClientId] = useState<string|null>(null)
-  const [selectedJob, setSelectedJob] = useState<Job|null>(null)
-  const [toast, setToast] = useState<{msg:string;type:'ok'|'err'}|null>(null)
+  const [user,setUser]=useState<User|null>(null)
+  const [dark,setDark]=useState(true)
+  const [page,setPage]=useState<Page>('dashboard')
+  const [quotes,setQuotes]=useState<Quote[]>([])
+  const [clients,setClients]=useState<QuoteClient[]>([])
+  const [jobs,setJobs]=useState<Job[]>([])
+  const [invoices,setInvoices]=useState<Invoice[]>([])
+  const [loading,setLoading]=useState(true)
+  const [collapsed,setCollapsed]=useState(false)
+  const [activeQuoteId,setActiveQuoteId]=useState<string|null>(null)
+  const [activeInvoiceId,setActiveInvoiceId]=useState<string|null>(null)
+  const [activeClientId,setActiveClientId]=useState<string|null>(null)
+  const [selectedJob,setSelectedJob]=useState<Job|null>(null)
+  const [toast,setToast]=useState<{msg:string;type:'ok'|'err'}|null>(null)
+  const T=dark?D:L
+  const showToast=(msg:string,type:'ok'|'err'='ok')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)}
 
-  const T = dark ? D : L
-  const showToast = (msg:string,type:'ok'|'err'='ok')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)}
-
+  // Auth + data
   useEffect(()=>{fetch('/api/auth/me').then(r=>r.json()).then(d=>{if(!d.user){router.push('/login');return};if(d.user.role==='provider'){router.replace('/dashboard/provider');return};setUser(d.user)})},[router])
-  const load = useCallback(async()=>{
-    const [qr,cr,jr,ir]=await Promise.all([fetch('/api/quotes'),fetch('/api/quote-clients'),fetch('/api/jobs'),fetch('/api/invoices')])
-    const [q,c,j,i]=await Promise.all([qr.json(),cr.json(),jr.json(),ir.json().catch(()=>[])])
-    setQuotes(Array.isArray(q)?q:[]);setClients(Array.isArray(c)?c:[]);setJobs(Array.isArray(j)?j:[]);setInvoices(Array.isArray(i)?i:[]);setLoading(false)
-  },[])
+  const load=useCallback(async()=>{const [qr,cr,jr,ir]=await Promise.all([fetch('/api/quotes'),fetch('/api/quote-clients'),fetch('/api/jobs'),fetch('/api/invoices')]);const [q,c,j,i]=await Promise.all([qr.json(),cr.json(),jr.json(),ir.json().catch(()=>[])]);setQuotes(Array.isArray(q)?q:[]);setClients(Array.isArray(c)?c:[]);setJobs(Array.isArray(j)?j:[]);setInvoices(Array.isArray(i)?i:[]);setLoading(false)},[])
   useEffect(()=>{if(user)load()},[user,load])
   async function logout(){await fetch('/api/auth/logout',{method:'POST'});router.push('/login')}
 
-  // ── Operations ───────────────────────────────────────────────────────────
-  async function updateQuoteStatus(id:string,status:string){await fetch(`/api/quotes/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});await load();showToast(`Quote marked ${status}`)}
-  async function deleteQuote(id:string){await fetch(`/api/quotes/${id}`,{method:'DELETE'});await load();if(activeQuoteId===id){setActiveQuoteId(null);setPage('quotes')};showToast('Quote deleted')}
-  async function saveQuote(id:string,data:Record<string,any>){await fetch(`/api/quotes/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});await load();showToast('Quote saved')}
+  // Operations
+  async function updateQuoteStatus(id:string,status:string){await fetch(`/api/quotes/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});await load();showToast(`Quote ${status}`)}
+  async function deleteQuote(id:string){await fetch(`/api/quotes/${id}`,{method:'DELETE'});await load();if(activeQuoteId===id){setActiveQuoteId(null);setPage('quotes')};showToast('Deleted')}
+  async function saveQuote(id:string,data:Record<string,any>){await fetch(`/api/quotes/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});await load();showToast('Saved')}
   async function createQuote(data:Record<string,any>){const r=await fetch('/api/quotes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();await load();if(d.quoteId){setActiveQuoteId(d.quoteId);setPage('quote-detail');showToast('Quote created')};return d}
-  async function sendQuoteEmail(id:string){const r=await fetch(`/api/quotes/${id}/email`,{method:'POST'});const d=await r.json();if(r.ok){await load();showToast('Quote email sent!')}else showToast(d.error||'Send failed','err');return r.ok}
+  async function sendQuoteEmail(id:string){const r=await fetch(`/api/quotes/${id}/email`,{method:'POST'});const d=await r.json();if(r.ok){await load();showToast('Email sent')}else showToast(d.error||'Failed','err');return r.ok}
   async function createClient(data:Record<string,any>){const r=await fetch('/api/quote-clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();await load();if(d.id){showToast('Client created');return d};showToast(d.error||'Failed','err');return null}
   async function createInvoice(data:Record<string,any>){const r=await fetch('/api/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json();await load();if(d.id){setActiveInvoiceId(d.id);setPage('invoice-detail');showToast('Invoice created')};return d}
-  async function updateInvoice(id:string,data:Record<string,any>){await fetch(`/api/invoices/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});await load();showToast('Invoice updated')}
-  async function deleteInvoice(id:string){await fetch(`/api/invoices/${id}`,{method:'DELETE'});await load();if(activeInvoiceId===id){setActiveInvoiceId(null);setPage('invoices')};showToast('Invoice deleted')}
-  async function convertToJob(quoteId:string){setActiveQuoteId(quoteId);setPage('convert-to-job')}
-  async function createPaymentLink(invoiceId:string){const r=await fetch(`/api/invoices/${invoiceId}/payment-link`,{method:'POST'});const d=await r.json();if(r.ok&&d.url){window.open(d.url,'_blank');await load();showToast('Payment link opened')}else showToast(d.error||'Failed to create link','err')}
-
+  async function updateInvoice(id:string,data:Record<string,any>){await fetch(`/api/invoices/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});await load();showToast('Updated')}
+  async function deleteInvoice(id:string){await fetch(`/api/invoices/${id}`,{method:'DELETE'});await load();if(activeInvoiceId===id){setActiveInvoiceId(null);setPage('invoices')};showToast('Deleted')}
+  function convertToJob(qid:string){setActiveQuoteId(qid);setPage('convert-to-job')}
+  async function createPaymentLink(iid:string){const r=await fetch(`/api/invoices/${iid}/payment-link`,{method:'POST'});const d=await r.json();if(r.ok&&d.url){window.open(d.url,'_blank');await load();showToast('Payment link opened')}else showToast(d.error||'Failed','err')}
   function openQuote(q:Quote){setActiveQuoteId(q.id);setPage('quote-detail')}
   function openClient(c:QuoteClient){setActiveClientId(c.id);setPage('client-detail')}
   function openInvoice(id:string){setActiveInvoiceId(id);setPage('invoice-detail')}
 
+  // Loading
   if(!user||loading) return(
-    <div style={{minHeight:'100vh',background:'#030d1c',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:20}}>
-      <div style={{width:44,height:44,border:'2.5px solid rgba(93,216,224,0.15)',borderTopColor:'#5dd8e0',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>
-      <div style={{color:'rgba(93,216,224,0.5)',fontFamily:'"DM Sans",sans-serif',fontSize:12,fontWeight:500,letterSpacing:2,textTransform:'uppercase'}}>CleanSync</div>
+    <div style={{minHeight:'100vh',background:D.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}}>
+      <div style={{width:36,height:36,border:'2px solid rgba(255,255,255,0.08)',borderTopColor:D.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
+      <div style={{color:D.muted,fontFamily:'"Inter",sans-serif',fontSize:11,fontWeight:500,letterSpacing:2,textTransform:'uppercase'}}>CleanSync</div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
+  // Computed
   const pending=quotes.filter(q=>q.status==='pending')
   const booked=quotes.filter(q=>q.status==='booked')
   const completed=quotes.filter(q=>q.status==='completed')
@@ -180,339 +152,236 @@ export default function CleanerDashboard() {
   const conversionRate=quotes.length>0?Math.round((booked.length+completed.length)/quotes.length*100):0
   const avgQuote=quotes.length>0?quotes.reduce((s,q)=>s+q.totalPrice,0)/quotes.length:0
 
-  // ── Refined Shared Styles ────────────────────────────────────────────────
-  const card:React.CSSProperties={background:T.card,border:`1px solid ${T.border}`,borderRadius:16,backdropFilter:'blur(12px)',transition:'border-color .2s, background .2s'}
-  const inp:React.CSSProperties={width:'100%',background:T.surf,border:`1px solid ${T.border}`,borderRadius:10,padding:'11px 14px',color:T.text,fontFamily:'"DM Sans",sans-serif',fontSize:13,fontWeight:500,outline:'none',transition:'border-color .15s'}
-  const btnP:React.CSSProperties={padding:'10px 22px',borderRadius:10,border:'none',background:`linear-gradient(135deg,${T.accent},${T.accentSoft})`,color:dark?'#030d1c':'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif',letterSpacing:0.2,transition:'opacity .15s, transform .1s'}
-  const btnS:React.CSSProperties={padding:'10px 18px',borderRadius:10,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif',transition:'all .15s'}
-  const hdr=(t:string,icon?:string)=>(<div style={{fontSize:10,fontWeight:600,letterSpacing:1.8,textTransform:'uppercase' as const,color:T.muted,marginBottom:16,display:'flex',alignItems:'center',gap:8}}>{icon&&<span style={{fontSize:13}}>{icon}</span>}{t}</div>)
-  const badge=(l:string,c:string,bg:string)=>(<span style={{fontSize:10,fontWeight:600,padding:'3px 10px',borderRadius:20,color:c,background:bg,border:`1px solid ${c}20`,letterSpacing:0.3}}>{l}</span>)
-  const rowCard=(onClick:()=>void,children:React.ReactNode)=>(<div onClick={onClick} style={{...card,padding:'14px 18px',cursor:'pointer',display:'flex',alignItems:'center',gap:14}} onMouseEnter={e=>{const d=e.currentTarget as HTMLDivElement;d.style.borderColor=T.borderHover;d.style.background=T.cardHover}} onMouseLeave={e=>{const d=e.currentTarget as HTMLDivElement;d.style.borderColor=T.border;d.style.background=T.card}}>{children}</div>)
-  const avatar=(initials:string,size=42)=>(<div style={{width:size,height:size,borderRadius:size/2,background:T.accentBg,border:`1.5px solid ${T.accentBorder}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.34,fontWeight:700,color:T.accent,flexShrink:0,letterSpacing:0.5}}>{initials}</div>)
-  const pageWrap=(maxW:number,children:React.ReactNode)=>(<div style={{maxWidth:maxW,margin:'0 auto'}}>{children}</div>)
-  const pageTitle=(title:string,sub?:string,right?:React.ReactNode)=>(<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24,flexWrap:'wrap',gap:12}}><div><h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:22,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{title}</h1>{sub&&<p style={{fontSize:13,color:T.muted,marginTop:4,fontWeight:400}}>{sub}</p>}</div>{right&&<div style={{display:'flex',gap:8,alignItems:'center'}}>{right}</div>}</div>)
+  // ── Design Primitives ───────────────────────────────────────────────
+  const card:React.CSSProperties={background:T.card,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:T.shadow,transition:'all .15s'}
+  const inp:React.CSSProperties={width:'100%',background:T.surf,border:`1px solid ${T.border}`,borderRadius:8,padding:'10px 13px',color:T.text,fontFamily:'"Inter",sans-serif',fontSize:13,fontWeight:400,outline:'none',transition:'border-color .15s'}
+  const btnP:React.CSSProperties={padding:'9px 20px',borderRadius:8,border:'none',background:T.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"Inter",sans-serif',transition:'opacity .12s'}
+  const btnS:React.CSSProperties={padding:'9px 16px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'"Inter",sans-serif',transition:'all .12s'}
+  const label=(t:string)=>(<div style={{fontSize:11,fontWeight:500,color:T.muted,marginBottom:6,letterSpacing:0.2}}>{t}</div>)
+  const badge=(l:string,c:string,bg:string)=>(<span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:6,color:c,background:bg,letterSpacing:0.1}}>{l}</span>)
+  const hdr=(t:string)=>(<div style={{fontSize:11,fontWeight:600,letterSpacing:0.5,textTransform:'uppercase' as const,color:T.dim,marginBottom:14}}>{t}</div>)
+  const avatar=(init:string,sz=38)=>(<div style={{width:sz,height:sz,borderRadius:sz*.26,background:T.accentBg,border:`1px solid ${T.accentBorder}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:sz*.36,fontWeight:600,color:T.accent,flexShrink:0}}>{init}</div>)
+  const pageWrap=(mw:number,ch:React.ReactNode)=>(<div style={{maxWidth:mw,margin:'0 auto'}}>{ch}</div>)
+  const pageTitle=(t:string,s?:string,r?:React.ReactNode)=>(<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24,gap:16,flexWrap:'wrap'}}><div><h1 style={{fontSize:21,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{t}</h1>{s&&<p style={{fontSize:13,color:T.muted,marginTop:4}}>{s}</p>}</div>{r&&<div style={{display:'flex',gap:8,alignItems:'center'}}>{r}</div>}</div>)
+  const hover=(e:React.MouseEvent<HTMLDivElement>,on:boolean)=>{const d=e.currentTarget;d.style.borderColor=on?T.borderHover:T.border;d.style.background=on?T.cardHover:T.card}
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // DASHBOARD — Upcoming Jobs left, Pending Quotes right
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
+  // DASHBOARD
+  // ══════════════════════════════════════════════════════════════════════
   function DashboardPage(){
-    return(
-      <div style={{maxWidth:1100,margin:'0 auto'}}>
-        <div style={{borderRadius:20,padding:'28px 32px',marginBottom:28,position:'relative',overflow:'hidden',background:dark?'linear-gradient(135deg,rgba(8,24,60,0.9),rgba(3,13,28,0.95))':'linear-gradient(135deg,#e2f1fb,#d0e8f8)',border:`1px solid ${T.borderB}`}}>
-          {dark&&<div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 30% 50%,rgba(93,216,224,0.06),transparent 60%)',pointerEvents:'none'}}/>}
-          <div style={{position:'relative',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
-            <div>
-              <div style={{fontFamily:'"DM Sans",sans-serif',fontSize:24,fontWeight:700,color:T.text,letterSpacing:-0.3}}>Welcome back, {user!.name.split(' ')[0]}</div>
-              <div style={{fontSize:13,color:T.muted,marginTop:5,fontWeight:400}}>{pending.length>0&&<span>{pending.length} pending quote{pending.length>1?'s':''} · </span>}{upcoming.length} upcoming job{upcoming.length!==1?'s':''}</div>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button>
-              <button onClick={()=>setPage('create-invoice')} style={{...btnP,background:`linear-gradient(135deg,${T.green},#059669)`}}>New Invoice</button>
-            </div>
-          </div>
-        </div>
-
-        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:28}}>
-          {[{l:'Pending',v:String(pending.length),c:T.amber,click:()=>setPage('quotes')},{l:'Active',v:String(booked.length),c:T.green,click:()=>setPage('quotes')},{l:'Clients',v:String(clients.length),c:T.accent,click:()=>setPage('clients')},{l:'Upcoming',v:String(upcoming.length),c:T.violet,click:()=>setPage('jobs')},{l:'Revenue',v:fmtMoney(totalRevenue),c:T.rose,click:()=>setPage('reports')}].map(s=>(
-            <div key={s.l} onClick={s.click} style={{...card,padding:'18px 16px',cursor:'pointer'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
-              <div style={{fontSize:10,fontWeight:600,letterSpacing:1.5,textTransform:'uppercase',color:T.dim,marginBottom:6}}>{s.l}</div>
-              <div style={{fontFamily:'"DM Sans",sans-serif',fontSize:s.l==='Revenue'?20:26,fontWeight:700,color:s.c,letterSpacing:-0.5}}>{s.v}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:20}}>
-          {/* LEFT: Upcoming Jobs */}
+    const PLAT:Record<string,string>={hostaway:'#f59e0b',jobber:'#3b82f6',manual:'#6366f1',airbnb:'#ef4444'}
+    return(<div style={{maxWidth:1060,margin:'0 auto'}}>
+      {/* Welcome */}
+      <div style={{...card,padding:'24px 28px',marginBottom:24,background:dark?'linear-gradient(135deg,#161a24,#1a1e28)':T.card}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
           <div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-              {hdr('Upcoming Jobs','📅')}
-              <button onClick={()=>setPage('jobs')} style={{fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>View All →</button>
-            </div>
-            {upcoming.length===0?<div style={{color:T.dim,fontSize:13,padding:'40px 0',textAlign:'center'}}>No upcoming jobs. Sync your platforms or add one manually.</div>:(
-              <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                {upcoming.slice(0,8).map(j=>{
-                  const PLAT:Record<string,string>={hostaway:'#fb8500',jobber:'#00c4ff',manual:D.accent,airbnb:'#ff385c'}
-                  const pc=PLAT[j.platform]||T.accent
-                  return(
-                    <div key={j.id} onClick={()=>setSelectedJob(j)} style={{...card,padding:'13px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover;(e.currentTarget as HTMLDivElement).style.background=T.cardHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border;(e.currentTarget as HTMLDivElement).style.background=T.card}}>
-                      <div style={{width:4,height:32,borderRadius:2,background:pc,flexShrink:0}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:T.text}}>{j.displayName}</div>
-                        <div style={{fontSize:11,color:T.dim,marginTop:2}}>{j.propertyLabel}</div>
-                      </div>
-                      <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:12,fontWeight:600,color:T.accent}}>{fmtDate(j.checkoutTime)}</div>
-                        <div style={{fontSize:10,color:T.dim}}>{fmtTime(j.checkoutTime)}</div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            <div style={{fontSize:22,fontWeight:700,color:T.text}}>Welcome back, {user!.name.split(' ')[0]}</div>
+            <div style={{fontSize:13,color:T.muted,marginTop:4}}>{pending.length>0?`${pending.length} pending quote${pending.length>1?'s':''} · `:''}Today is {new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
           </div>
+          <div style={{display:'flex',gap:8}}><button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button><button onClick={()=>setPage('create-invoice')} style={{...btnP,background:T.green}}>New Invoice</button></div>
+        </div>
+      </div>
 
-          {/* RIGHT: Pending Quotes + Quick Actions + Snapshot */}
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            {/* Pending Quotes */}
-            <div style={{...card,padding:'18px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                {hdr('Pending Quotes','📋')}
-                <button onClick={()=>setPage('quotes')} style={{fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>All →</button>
-              </div>
-              {pending.length===0?<div style={{color:T.dim,fontSize:12,padding:'12px 0'}}>No pending quotes.</div>:(
-                <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                  {pending.slice(0,5).map(q=>{const isIB=q.submissionType==='instant_book';return(
-                    <div key={q.id} onClick={()=>openQuote(q)} style={{padding:'10px 11px',borderRadius:10,background:T.surf,border:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer',transition:'all .12s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover;(e.currentTarget as HTMLDivElement).style.background=T.surfHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border;(e.currentTarget as HTMLDivElement).style.background=T.surf}}>
-                      {avatar(q.client.firstName.charAt(0).toUpperCase(),32)}
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{q.client.firstName} {q.client.lastName}{isIB&&<span style={{fontSize:8,marginLeft:4,color:T.green}}>⚡</span>}</div>
-                        <div style={{fontSize:10,color:T.dim}}>{q.serviceType} · {fmtRel(q.createdAt)}</div>
-                      </div>
-                      <div style={{fontSize:13,fontWeight:700,color:isIB?T.green:T.accent,flexShrink:0}}>{fmtMoney(q.totalPrice)}</div>
-                    </div>
-                  )})}
+      {/* KPIs */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:24}}>
+        {[{l:'Pending',v:String(pending.length),c:T.amber,p:'quotes' as Page},{l:'Booked',v:String(booked.length),c:T.green,p:'quotes' as Page},{l:'Clients',v:String(clients.length),c:T.accent,p:'clients' as Page},{l:'Jobs',v:String(upcoming.length),c:T.violet,p:'jobs' as Page},{l:'Revenue',v:fmtMoney(totalRevenue),c:T.rose,p:'reports' as Page}].map(s=>(
+          <div key={s.l} onClick={()=>setPage(s.p)} style={{...card,padding:'16px',cursor:'pointer'}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+            <div style={{fontSize:11,fontWeight:500,color:T.muted,marginBottom:6}}>{s.l}</div>
+            <div style={{fontSize:s.l==='Revenue'?18:24,fontWeight:700,color:s.c,letterSpacing:-0.5}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Alert */}
+      {pending.length>0&&<div onClick={()=>setPage('quotes')} style={{...card,padding:'14px 18px',marginBottom:20,cursor:'pointer',borderLeft:`3px solid ${T.amber}`,display:'flex',justifyContent:'space-between',alignItems:'center'}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+        <div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{pending.length} quote{pending.length>1?'s':''} awaiting review</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{pending.filter(q=>q.submissionType==='instant_book').length>0?`Including ${pending.filter(q=>q.submissionType==='instant_book').length} instant book`:''} Tap to review</div></div>
+        <span style={{color:T.muted,fontSize:16}}>→</span>
+      </div>}
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16}}>
+        {/* Upcoming Jobs */}
+        <div>{hdr('Upcoming Jobs')}
+          {upcoming.length===0?<div style={{color:T.dim,fontSize:13,padding:'28px 0',textAlign:'center'}}>No upcoming jobs.</div>:(
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {upcoming.slice(0,8).map(j=>{const pc=PLAT[j.platform]||T.accent;return(
+                <div key={j.id} onClick={()=>setSelectedJob(j)} style={{...card,padding:'12px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+                  <div style={{width:3,height:30,borderRadius:2,background:pc,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.displayName}</div><div style={{fontSize:11,color:T.muted,marginTop:2}}>{j.propertyLabel}</div></div>
+                  <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:600,color:T.accent}}>{fmtDate(j.checkoutTime)}</div><div style={{fontSize:10,color:T.dim}}>{fmtTime(j.checkoutTime)}</div></div>
                 </div>
-              )}
+              )})}
+              {upcoming.length>8&&<button onClick={()=>setPage('jobs')} style={{fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,textAlign:'center',padding:'8px'}}>View all {upcoming.length} jobs →</button>}
             </div>
-            {/* Quick Actions */}
-            <div style={{...card,padding:'18px'}}>
-              {hdr('Quick Actions','⚡')}
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{...card,padding:'16px'}}>{hdr('Pending Quotes')}
+            {pending.length===0?<div style={{color:T.dim,fontSize:12}}>No pending.</div>:(
               <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                {[{l:'Create Quote',i:'📋',p:'create-quote' as Page},{l:'Add Client',i:'👤',p:'create-client' as Page},{l:'Create Invoice',i:'💰',p:'create-invoice' as Page},{l:'Add Job',i:'🗓',p:'create-job' as Page}].map(a=>(
-                  <button key={a.l} onClick={()=>setPage(a.p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',fontFamily:'"DM Sans",sans-serif',fontSize:12,fontWeight:500,color:T.sub,textAlign:'left',width:'100%',transition:'all .15s'}} onMouseEnter={e=>{const b=e.currentTarget;b.style.background=T.accentBg;b.style.borderColor=T.accentBorder}} onMouseLeave={e=>{const b=e.currentTarget;b.style.background='transparent';b.style.borderColor=T.border}}>
-                    <span style={{fontSize:14}}>{a.i}</span>{a.l}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Snapshot */}
-            <div style={{...card,padding:'18px'}}>
-              {hdr('Snapshot','📊')}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                {[{l:'Conversion',v:`${conversionRate}%`,c:T.green},{l:'Avg Quote',v:fmtMoney(avgQuote),c:T.accent},{l:'This Month',v:fmtMoney(quotes.filter(q=>new Date(q.createdAt).getMonth()===new Date().getMonth()&&q.status==='completed').reduce((s,q)=>s+q.totalPrice,0)),c:T.amber},{l:'Due',v:String(invoices.filter(i=>i.status==='sent').length),c:T.rose}].map(s=>(
-                  <div key={s.l} style={{background:T.surf,borderRadius:10,padding:'12px',border:`1px solid ${T.border}`}}>
-                    <div style={{fontSize:9,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.dim}}>{s.l}</div>
-                    <div style={{fontSize:16,fontWeight:700,color:s.c,marginTop:3,letterSpacing:-0.3}}>{s.v}</div>
+                {pending.slice(0,5).map(q=>(
+                  <div key={q.id} onClick={()=>openQuote(q)} style={{padding:'9px 10px',borderRadius:8,background:T.surf,border:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:8,cursor:'pointer',transition:'all .12s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=T.surfHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=T.surf}}>
+                    {avatar(q.client.firstName.charAt(0),30)}
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{q.client.firstName} {q.client.lastName}</div><div style={{fontSize:10,color:T.dim}}>{q.serviceType}</div></div>
+                    <span style={{fontSize:13,fontWeight:700,color:T.accent,flexShrink:0}}>{fmtMoney(q.totalPrice)}</span>
                   </div>
                 ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // QUOTES — Master-detail with preview panel
-  // ══════════════════════════════════════════════════════════════════════════
-  function QuotesPage(){
-    const [filter,setFilter]=useState('all')
-    const [search,setSearch]=useState('')
-    const [previewId,setPreviewId]=useState<string|null>(null)
-    const filtered=quotes
-      .filter(q=>filter==='all'||q.status===filter)
-      .filter(q=>!search||`${q.client.firstName} ${q.client.lastName} ${q.client.email} ${q.serviceType}`.toLowerCase().includes(search.toLowerCase()))
-      .sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime())
-    const preview=previewId?quotes.find(q=>q.id===previewId):filtered[0]||null
-
-    return(
-      <div>
-        {pageTitle('Quotes & Bookings',`${quotes.length} total · ${pending.length} pending · ${booked.length} booked`,<button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button>)}
-        {/* Filters */}
-        <div style={{display:'flex',gap:10,marginBottom:18,flexWrap:'wrap'}}>
-          <div style={{display:'flex',gap:2,background:T.surf,borderRadius:10,padding:3,border:`1px solid ${T.border}`}}>
-            {['all','pending','reviewed','booked','completed','cancelled'].map(s=>(
-              <button key={s} onClick={()=>{setFilter(s);setPreviewId(null)}} style={{padding:'6px 12px',borderRadius:8,border:'none',cursor:'pointer',fontSize:11,fontWeight:filter===s?600:400,background:filter===s?T.accentBg:'transparent',color:filter===s?T.accent:T.dim,fontFamily:'"DM Sans",sans-serif',textTransform:'capitalize' as const,transition:'all .12s'}}>{s}</button>
-            ))}
-          </div>
-          <input style={{...inp,flex:1,minWidth:180,maxWidth:300}} placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
-        </div>
-
-        {filtered.length===0?<div style={{textAlign:'center',padding:'60px 0',color:T.dim,fontSize:13}}>No quotes match.</div>:(
-          <div style={{display:'grid',gridTemplateColumns:'1fr 380px',gap:16,alignItems:'start'}}>
-            {/* Left: list */}
-            <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:'calc(100vh - 220px)',overflowY:'auto',paddingRight:4}}>
-              {filtered.map(q=>{
-                const sc=STATUS[q.status]||STATUS.pending,isIB=q.submissionType==='instant_book',isSel=preview?.id===q.id
-                return(
-                  <div key={q.id} onClick={()=>setPreviewId(q.id)} style={{...card,padding:'12px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,borderColor:isSel?T.borderHover:T.border,background:isSel?T.cardHover:T.card}} onMouseEnter={e=>{if(!isSel)(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{if(!isSel)(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
-                    {avatar(q.client.firstName.charAt(0).toUpperCase(),36)}
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:T.text,display:'flex',alignItems:'center',gap:5}}>
-                        {q.client.firstName} {q.client.lastName}
-                        {isIB&&<span style={{fontSize:8,color:T.green}}>⚡</span>}
-                      </div>
-                      <div style={{fontSize:10,color:T.dim,marginTop:2}}>{q.serviceType} · {fmtRel(q.createdAt)}</div>
-                    </div>
-                    <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontSize:14,fontWeight:700,color:isIB?T.green:T.accent,letterSpacing:-0.3}}>{fmtMoney(q.totalPrice)}</div>
-                      <span style={{fontSize:9,fontWeight:600,color:sc.color}}>{sc.label}</span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Right: preview */}
-            {preview&&(
-              <div style={{...card,padding:'22px',position:'sticky',top:20,maxHeight:'calc(100vh - 180px)',overflowY:'auto'}}>
-                {(()=>{const q=preview,sc=STATUS[q.status]||STATUS.pending,isIB=q.submissionType==='instant_book';return(<>
-                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-                    {avatar(q.client.firstName.charAt(0).toUpperCase(),48)}
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:16,fontWeight:700,color:T.text}}>{q.client.firstName} {q.client.lastName}</div>
-                      <div style={{fontSize:11,color:T.muted,marginTop:2}}>{q.client.email} · {q.client.phone||'No phone'}</div>
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
-                    {badge(sc.label,sc.color,sc.bg)}
-                    {isIB&&badge('⚡ Instant',T.green,T.greenBg)}
-                    <span style={{fontSize:10,color:T.dim}}>{fmtDate(q.createdAt)}</span>
-                  </div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 16px',background:T.accentBg,borderRadius:12,marginBottom:16}}>
-                    <span style={{fontSize:12,fontWeight:500,color:T.sub}}>Total per visit</span>
-                    <span style={{fontSize:22,fontWeight:700,color:isIB?T.green:T.accent,letterSpacing:-0.5}}>{fmtMoney(q.totalPrice)}</span>
-                  </div>
-                  {/* Details */}
-                  <div style={{marginBottom:16}}>
-                    {[{l:'Service',v:q.serviceType},{l:'Frequency',v:q.frequency},{l:'Address',v:q.address||'—'},{l:'Sq Ft',v:q.sqftRange||'—'},{l:'Beds / Baths',v:[q.bedrooms,q.bathrooms].filter(x=>x!=null).join(' / ')||'—'},{l:'Preferred Date',v:fmtDate(q.preferredDate1)}].map(f=>(
-                      <div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${T.border}`}}>
-                        <span style={{fontSize:11,color:T.dim,fontWeight:500}}>{f.l}</span>
-                        <span style={{fontSize:12,color:T.text,fontWeight:500,textAlign:'right',maxWidth:180}}>{f.v}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {q.additionalNotes&&q.additionalNotes!=='None selected'&&<div style={{padding:'10px 12px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,marginBottom:16,lineHeight:1.6}}>{q.additionalNotes}</div>}
-                  {/* Actions */}
-                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                    <button onClick={()=>openQuote(q)} style={{...btnP,width:'100%',textAlign:'center'}}>Open Full View →</button>
-                    {q.status==='pending'&&<button onClick={()=>updateQuoteStatus(q.id,'reviewed')} style={{width:'100%',padding:'10px',borderRadius:10,background:T.accentBg,border:`1px solid ${T.accentBorder}`,color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Mark Reviewed</button>}
-                    {['pending','reviewed'].includes(q.status)&&<button onClick={()=>updateQuoteStatus(q.id,'booked')} style={{width:'100%',padding:'10px',borderRadius:10,background:`linear-gradient(135deg,${T.green},#059669)`,color:dark?'#030d1c':'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>✓ Confirm Booking</button>}
-                  </div>
-                </>)})()}
               </div>
             )}
           </div>
-        )}
+          <div style={{...card,padding:'16px'}}>{hdr('Quick Actions')}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+              {[{l:'New Quote',p:'create-quote' as Page},{l:'Add Client',p:'create-client' as Page},{l:'Invoice',p:'create-invoice' as Page},{l:'Add Job',p:'create-job' as Page}].map(a=>(
+                <button key={a.l} onClick={()=>setPage(a.p)} style={{padding:'10px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',fontSize:12,fontWeight:500,color:T.sub,fontFamily:'"Inter",sans-serif',transition:'all .1s',textAlign:'center'}} onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=T.surf;(e.currentTarget as HTMLButtonElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent';(e.currentTarget as HTMLButtonElement).style.borderColor=T.border}}>
+                  {a.l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{...card,padding:'16px'}}>{hdr('Snapshot')}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              {[{l:'Conversion',v:`${conversionRate}%`,c:T.green},{l:'Avg Quote',v:fmtMoney(avgQuote),c:T.accent},{l:'Due',v:String(invoices.filter(i=>i.status==='sent').length),c:T.amber},{l:'This Mo.',v:fmtMoney(quotes.filter(q=>new Date(q.createdAt).getMonth()===new Date().getMonth()&&q.status==='completed').reduce((s,q)=>s+q.totalPrice,0)),c:T.rose}].map(s=>(
+                <div key={s.l} style={{background:T.surf,borderRadius:8,padding:'10px'}}><div style={{fontSize:10,fontWeight:500,color:T.dim}}>{s.l}</div><div style={{fontSize:15,fontWeight:700,color:s.c,marginTop:2}}>{s.v}</div></div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
-    )
+    </div>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // QUOTE DETAIL
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
+  // QUOTES — master-detail
+  // ══════════════════════════════════════════════════════════════════════
+  function QuotesPage(){
+    const [filter,setFilter]=useState('all'),[search,setSearch]=useState(''),[prevId,setPrevId]=useState<string|null>(null)
+    const filtered=quotes.filter(q=>filter==='all'||q.status===filter).filter(q=>!search||`${q.client.firstName} ${q.client.lastName} ${q.client.email} ${q.serviceType}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime())
+    const preview=prevId?quotes.find(q=>q.id===prevId):filtered[0]||null
+    return(<div>
+      {pageTitle('Quotes',`${quotes.length} total · ${pending.length} pending`,<button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button>)}
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:2,background:T.surf,borderRadius:8,padding:2,border:`1px solid ${T.border}`}}>
+          {['all','pending','reviewed','booked','completed','cancelled'].map(s=><button key={s} onClick={()=>{setFilter(s);setPrevId(null)}} style={{padding:'6px 11px',borderRadius:6,border:'none',cursor:'pointer',fontSize:12,fontWeight:filter===s?600:400,background:filter===s?T.card:'transparent',color:filter===s?T.text:T.muted,fontFamily:'"Inter",sans-serif',textTransform:'capitalize' as const,boxShadow:filter===s?T.shadow:'none'}}>{s}</button>)}
+        </div>
+        <input style={{...inp,flex:1,minWidth:160,maxWidth:260}} placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
+      </div>
+      {filtered.length===0?<div style={{textAlign:'center',padding:'48px 0',color:T.dim}}>No quotes match.</div>:(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 360px',gap:14,alignItems:'start'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:'calc(100vh - 200px)',overflowY:'auto',paddingRight:4}}>
+            {filtered.map(q=>{const sc=STATUS[q.status]||STATUS.pending,isIB=q.submissionType==='instant_book',sel=preview?.id===q.id;return(
+              <div key={q.id} onClick={()=>setPrevId(q.id)} style={{...card,padding:'12px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,borderColor:sel?T.borderHover:T.border,background:sel?T.cardHover:T.card}} onMouseEnter={e=>{if(!sel)hover(e,true)}} onMouseLeave={e=>{if(!sel)hover(e,false)}}>
+                {avatar(q.client.firstName.charAt(0),34)}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text,display:'flex',alignItems:'center',gap:6}}>{q.client.firstName} {q.client.lastName}{isIB&&<span style={{fontSize:9,color:T.green}}>⚡</span>}</div>
+                  <div style={{fontSize:11,color:T.muted,marginTop:2}}>{q.serviceType} · {fmtRel(q.createdAt)}</div>
+                </div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:700,color:isIB?T.green:T.accent}}>{fmtMoney(q.totalPrice)}</div><span style={{fontSize:10,fontWeight:500,color:sc.color}}>{sc.label}</span></div>
+              </div>
+            )})}
+          </div>
+          {preview&&(()=>{const q=preview,sc=STATUS[q.status]||STATUS.pending,isIB=q.submissionType==='instant_book';return(
+            <div style={{...card,padding:'20px',position:'sticky',top:16,maxHeight:'calc(100vh - 160px)',overflowY:'auto'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+                {avatar(q.client.firstName.charAt(0),44)}
+                <div style={{flex:1}}><div style={{fontSize:16,fontWeight:700,color:T.text}}>{q.client.firstName} {q.client.lastName}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{q.client.email}</div></div>
+              </div>
+              <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>{badge(sc.label,sc.color,sc.bg)}{isIB&&badge('⚡ Instant',T.green,T.greenBg)}<span style={{fontSize:11,color:T.dim}}>{fmtDate(q.createdAt)}</span></div>
+              <div style={{padding:'14px',background:T.surf,borderRadius:10,marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:12,color:T.muted}}>Total per visit</span>
+                <span style={{fontSize:20,fontWeight:700,color:isIB?T.green:T.accent}}>{fmtMoney(q.totalPrice)}</span>
+              </div>
+              {[{l:'Service',v:q.serviceType},{l:'Frequency',v:q.frequency},{l:'Address',v:q.address||'—'},{l:'Date',v:fmtDate(q.preferredDate1)}].map(f=><div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:12,color:T.muted}}>{f.l}</span><span style={{fontSize:12,fontWeight:500,color:T.text,textAlign:'right',maxWidth:180}}>{f.v}</span></div>)}
+              <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:14}}>
+                <button onClick={()=>openQuote(q)} style={{...btnP,width:'100%',textAlign:'center'}}>Open Full View</button>
+                {q.status==='pending'&&<button onClick={()=>updateQuoteStatus(q.id,'reviewed')} style={{...btnS,width:'100%',textAlign:'center'}}>Mark Reviewed</button>}
+                {['pending','reviewed'].includes(q.status)&&<button onClick={()=>updateQuoteStatus(q.id,'booked')} style={{width:'100%',padding:'9px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"Inter",sans-serif'}}>Confirm Booking</button>}
+              </div>
+            </div>
+          )})()}
+        </div>
+      )}
+    </div>)
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // QUOTE DETAIL (editable)
+  // ══════════════════════════════════════════════════════════════════════
   function QuoteDetailPage(){
-    const quote=quotes.find(q=>q.id===activeQuoteId)
-    if(!quote) return <div style={{padding:60,color:T.dim,textAlign:'center',fontSize:13}}>Quote not found. <button onClick={()=>setPage('quotes')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Back</button></div>
+    const quote=quotes.find(q=>q.id===activeQuoteId);if(!quote) return <div style={{padding:48,color:T.dim,textAlign:'center'}}>Not found. <button onClick={()=>setPage('quotes')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Back</button></div>
     const q=quote,sc=STATUS[q.status]||STATUS.pending,isIB=q.submissionType==='instant_book'
     const [editing,setEditing]=useState(false),[saving,setSaving]=useState(false),[sending,setSending]=useState(false),[confirmDel,setConfirmDel]=useState(false),[deleting,setDeleting]=useState(false)
     const [eTotal,setETotal]=useState(q.totalPrice.toString()),[eSub,setESub]=useState(q.subtotal.toString()),[eDisc,setEDisc]=useState(q.discount.toString()),[eDiscL,setEDiscL]=useState(q.discountLabel)
     const [eService,setEService]=useState(q.serviceType),[eFreq,setEFreq]=useState(q.frequency),[eAddr,setEAddr]=useState(q.address),[eSqft,setESqft]=useState(q.sqftRange||''),[eBeds,setEBeds]=useState(q.bedrooms?.toString()||''),[eBaths,setEBaths]=useState(q.bathrooms?.toString()||'')
     const [eAddons,setEAddons]=useState(q.addonsList),[eNotes,setENotes]=useState(q.additionalNotes),[eKey,setEKey]=useState(q.keyAreas)
     const [li,setLi]=useState<{label:string;detail:string;amount:string}[]>(()=>{const ls=q.priceBreakdown.split('\n').filter(Boolean);return ls.length>0?ls.map(l=>{const m=l.match(/\$[\d,.]+/);const parts=l.split('...')[0]?.trim()||l;const [lbl,det]=(parts.includes('||')?parts.split('||'):[parts,'']);return{label:lbl.trim(),detail:det.trim(),amount:m?m[0].replace('$',''):'0'}}):[{label:'Base Service',detail:'',amount:q.totalPrice.toString()}]})
-    function updLi(i:number,f:'label'|'amount'|'detail',v:string){const u=[...li];u[i]={...u[i],[f]:v};setLi(u);if(f==='amount'||f==='label'){const s=u.reduce((a,x)=>a+(parseFloat(x.amount)||0),0);setESub(s.toFixed(2));setETotal(Math.max(0,s-(parseFloat(eDisc)||0)).toFixed(2))}}
+    function updLi(i:number,f:'label'|'amount'|'detail',v:string){const u=[...li];u[i]={...u[i],[f]:v};setLi(u);if(f!=='detail'){const s=u.reduce((a,x)=>a+(parseFloat(x.amount)||0),0);setESub(s.toFixed(2));setETotal(Math.max(0,s-(parseFloat(eDisc)||0)).toFixed(2))}}
     async function handleSave(){setSaving(true);const bd=li.map(x=>`${x.label}${x.detail?'||'+x.detail:''}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');await saveQuote(q.id,{totalPrice:parseFloat(eTotal),subtotal:parseFloat(eSub),discount:parseFloat(eDisc),discountLabel:eDiscL,priceBreakdown:bd,serviceType:eService,frequency:eFreq,address:eAddr,sqftRange:eSqft||null,bedrooms:eBeds?parseInt(eBeds):null,bathrooms:eBaths?parseFloat(eBaths):null,addonsList:eAddons,additionalNotes:eNotes,keyAreas:eKey});setSaving(false);setEditing(false)}
     async function handleEmail(){setSending(true);await sendQuoteEmail(q.id);setSending(false)}
     async function handleDel(){setDeleting(true);await deleteQuote(q.id);setDeleting(false)}
-    async function toInvoice(){const items=li.map(x=>({description:x.label,amount:parseFloat(x.amount)||0,quantity:1}));await createInvoice({toClientId:q.clientId,amount:parseFloat(eTotal),lineItems:JSON.stringify(items),notes:`Quote → ${q.client.firstName} ${q.client.lastName}`})}
-    const ef=editing?{...inp,background:dark?'rgba(255,255,255,0.04)':'#f5f9fd',border:`1px solid ${T.borderB}`} as React.CSSProperties:{...inp,background:'transparent',border:'1px solid transparent',cursor:'default',padding:'10px 0'} as React.CSSProperties
+    async function toInvoice(){const items=li.map(x=>({description:x.label+(x.detail?' — '+x.detail:''),amount:parseFloat(x.amount)||0,quantity:1}));await createInvoice({toClientId:q.clientId,amount:parseFloat(eTotal),lineItems:JSON.stringify(items),notes:`Quote → ${q.client.firstName} ${q.client.lastName}`})}
+    const ef=editing?{...inp,background:T.surf,border:`1px solid ${T.borderB}`} as React.CSSProperties:{...inp,background:'transparent',border:'1px solid transparent',cursor:'default',padding:'10px 0'} as React.CSSProperties
 
-    return pageWrap(940,<>
+    return pageWrap(900,<>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <button onClick={()=>setPage('quotes')} style={{...btnS,padding:'7px 14px'}}>← Quotes</button>
-          <span style={{color:T.dim,fontSize:12}}>/</span>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <button onClick={()=>setPage('quotes')} style={{...btnS,padding:'7px 12px'}}>← Quotes</button>
           <span style={{fontSize:13,fontWeight:600,color:T.text}}>{q.client.firstName} {q.client.lastName}</span>
           {badge(sc.label,sc.color,sc.bg)}{isIB&&badge('⚡ Instant',T.green,T.greenBg)}
         </div>
         <div style={{display:'flex',gap:6}}>
-          {!editing?<button onClick={()=>setEditing(true)} style={{...btnS,borderColor:T.accentBorder,color:T.accent}}>Edit</button>:<><button onClick={()=>setEditing(false)} style={btnS}>Cancel</button><button onClick={handleSave} disabled={saving} style={{...btnP,opacity:saving?.6:1}}>{saving?'Saving…':'Save'}</button></>}
+          {!editing?<button onClick={()=>setEditing(true)} style={{...btnS,color:T.accent,borderColor:T.accentBorder}}>Edit</button>:<><button onClick={()=>setEditing(false)} style={btnS}>Cancel</button><button onClick={handleSave} disabled={saving} style={{...btnP,opacity:saving?.6:1}}>{saving?'Saving…':'Save'}</button></>}
         </div>
       </div>
-
-      {/* Header */}
-      <div style={{...card,padding:'24px 28px',marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
-        <div style={{display:'flex',alignItems:'center',gap:16}}>
-          {avatar(q.client.firstName.charAt(0).toUpperCase(),52)}
-          <div>
-            <div style={{fontSize:20,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{q.client.firstName} {q.client.lastName}</div>
-            <div style={{fontSize:12,color:T.muted,marginTop:3}}>{q.client.email} · {q.client.phone||'No phone'}</div>
-            <div style={{fontSize:11,color:T.dim,marginTop:2}}>Submitted {fmtDate(q.createdAt)} · {q.serviceType}</div>
-          </div>
+      <div style={{...card,padding:'22px',marginBottom:14,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:14}}>
+        <div style={{display:'flex',alignItems:'center',gap:14}}>
+          {avatar(q.client.firstName.charAt(0),48)}
+          <div><div style={{fontSize:18,fontWeight:700,color:T.text}}>{q.client.firstName} {q.client.lastName}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{q.client.email} · {q.client.phone||'—'}</div><div style={{fontSize:11,color:T.dim,marginTop:1}}>Submitted {fmtDate(q.createdAt)}</div></div>
         </div>
-        <div style={{textAlign:'right'}}>
-          <div style={{fontSize:30,fontWeight:700,color:isIB?T.green:T.accent,letterSpacing:-0.5}}>{fmtMoney(parseFloat(eTotal)||q.totalPrice)}</div>
-          {q.instantBookSavings!=null&&q.instantBookSavings>0&&<div style={{fontSize:12,color:T.green,fontWeight:500,marginTop:3}}>Saving {fmtMoney(q.instantBookSavings)}/visit</div>}
-        </div>
+        <div style={{textAlign:'right'}}><div style={{fontSize:28,fontWeight:700,color:isIB?T.green:T.accent}}>{fmtMoney(parseFloat(eTotal)||q.totalPrice)}</div></div>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 300px',gap:16,alignItems:'start'}}>
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
-          {/* Line Items */}
-          <div style={{...card,padding:'22px'}}>{hdr('Pricing','💰')}
-            {li.map((x,i)=>(<div key={i} style={{padding:'7px 0',borderBottom:`1px solid ${T.border}`}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:14,alignItems:'start'}}>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{...card,padding:'20px'}}>{hdr('Line Items')}
+            {li.map((x,i)=><div key={i} style={{padding:'8px 0',borderBottom:`1px solid ${T.border}`}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
-                {editing?<><input value={x.label} onChange={e=>updLi(i,'label',e.target.value)} style={{...ef,flex:1}} placeholder="Item name"/><span style={{color:T.muted,fontWeight:600}}>$</span><input value={x.amount} onChange={e=>updLi(i,'amount',e.target.value)} style={{...ef,width:80,textAlign:'right'}} type="number" step="0.01"/><button onClick={()=>setLi(li.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button></>:<><span style={{flex:1,fontSize:13,color:T.muted}}>{x.label}</span><span style={{fontSize:13,color:T.text,fontWeight:600}}>${parseFloat(x.amount||'0').toFixed(2)}</span></>}
+                {editing?<><input value={x.label} onChange={e=>updLi(i,'label',e.target.value)} style={{...ef,flex:1}} placeholder="Item"/><span style={{color:T.muted}}>$</span><input value={x.amount} onChange={e=>updLi(i,'amount',e.target.value)} style={{...ef,width:80,textAlign:'right'}} type="number" step="0.01"/><button onClick={()=>setLi(li.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}30`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button></>:<><span style={{flex:1,fontSize:13,color:T.sub}}>{x.label}</span><span style={{fontSize:13,fontWeight:600,color:T.text}}>${parseFloat(x.amount||'0').toFixed(2)}</span></>}
               </div>
-              {editing?<input value={x.detail} onChange={e=>updLi(i,'detail',e.target.value)} style={{...ef,marginTop:4,fontSize:11,color:T.dim}} placeholder="Description / details for this item…"/>:x.detail&&<div style={{fontSize:11,color:T.dim,marginTop:3,paddingLeft:2,lineHeight:1.5}}>{x.detail}</div>}
-            </div>))}
-            {editing&&<button onClick={()=>setLi([...li,{label:'New Item',detail:'',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.accentBorder}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,fontFamily:'"DM Sans",sans-serif',width:'100%'}}>+ Add Item</button>}
-            {(q.discount>0||editing)&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderTop:`1px solid ${T.border}`,marginTop:6}}>
-              {editing?<><input value={eDiscL} onChange={e=>setEDiscL(e.target.value)} placeholder="Discount" style={{...ef,flex:1,color:T.green}}/><span style={{color:T.green,fontWeight:600}}>-$</span><input value={eDisc} onChange={e=>setEDisc(e.target.value)} onBlur={()=>setETotal(Math.max(0,(parseFloat(eSub)||0)-(parseFloat(eDisc)||0)).toFixed(2))} style={{...ef,width:80,textAlign:'right',color:T.green}} type="number" step="0.01"/></>:<><span style={{fontSize:12,color:T.green,fontWeight:500}}>✓ {q.discountLabel}</span><span style={{fontSize:12,color:T.green,fontWeight:600}}>-{fmtMoney(q.discount)}</span></>}
+              {editing?<input value={x.detail} onChange={e=>updLi(i,'detail',e.target.value)} style={{...ef,marginTop:4,fontSize:12,color:T.muted}} placeholder="Description…"/>:x.detail&&<div style={{fontSize:12,color:T.dim,marginTop:3,lineHeight:1.5}}>{x.detail}</div>}
+            </div>)}
+            {editing&&<button onClick={()=>setLi([...li,{label:'',detail:'',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add Item</button>}
+            {(q.discount>0||editing)&&<div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderTop:`1px solid ${T.border}`,marginTop:6}}>
+              {editing?<><input value={eDiscL} onChange={e=>setEDiscL(e.target.value)} placeholder="Discount" style={{...ef,flex:1,color:T.green}}/><span style={{color:T.green}}>-$</span><input value={eDisc} onChange={e=>setEDisc(e.target.value)} onBlur={()=>setETotal(Math.max(0,(parseFloat(eSub)||0)-(parseFloat(eDisc)||0)).toFixed(2))} style={{...ef,width:80,textAlign:'right',color:T.green}} type="number" step="0.01"/></>:<><span style={{fontSize:12,color:T.green}}>✓ {q.discountLabel}</span><span style={{fontSize:12,color:T.green,fontWeight:600}}>-{fmtMoney(q.discount)}</span></>}
             </div>}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 0',borderTop:`1.5px solid ${T.borderB}`,marginTop:4}}>
-              <span style={{fontWeight:700,fontSize:14,color:T.text}}>Total per visit</span>
-              <span style={{fontWeight:700,fontSize:22,color:isIB?T.green:T.accent,letterSpacing:-0.5}}>{fmtMoney(parseFloat(eTotal)||q.totalPrice)}</span>
-            </div>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'12px 0',borderTop:`2px solid ${T.borderB}`,marginTop:4}}><span style={{fontWeight:700,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:18,color:isIB?T.green:T.accent}}>{fmtMoney(parseFloat(eTotal)||q.totalPrice)}</span></div>
           </div>
-
-          {/* Service */}
-          <div style={{...card,padding:'22px'}}>{hdr('Service Details','🏠')}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              {[{l:'Service',v:eService,s:setEService},{l:'Frequency',v:eFreq,s:setEFreq},{l:'Sq Ft',v:eSqft,s:setESqft},{l:'Beds',v:eBeds,s:setEBeds},{l:'Baths',v:eBaths,s:setEBaths}].map(f=>(
-                <div key={f.l}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.l}</div>{editing?<input value={f.v} onChange={e=>f.s(e.target.value)} style={ef}/>:<div style={{fontSize:13,fontWeight:500,color:T.text,padding:'10px 0'}}>{f.v||'—'}</div>}</div>
-              ))}
+          <div style={{...card,padding:'20px'}}>{hdr('Service')}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {[{l:'Service',v:eService,s:setEService},{l:'Frequency',v:eFreq,s:setEFreq},{l:'Sq Ft',v:eSqft,s:setESqft},{l:'Beds',v:eBeds,s:setEBeds},{l:'Baths',v:eBaths,s:setEBaths}].map(f=><div key={f.l}>{label(f.l)}{editing?<input value={f.v} onChange={e=>f.s(e.target.value)} style={ef}/>:<div style={{fontSize:13,color:T.text,padding:'10px 0'}}>{f.v||'—'}</div>}</div>)}
             </div>
-            <div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Address</div>{editing?<input value={eAddr} onChange={e=>setEAddr(e.target.value)} style={ef}/>:<div style={{fontSize:13,fontWeight:500,color:T.text,padding:'10px 0'}}>{q.address||'—'}</div>}</div>
+            <div style={{marginTop:10}}>{label('Address')}{editing?<input value={eAddr} onChange={e=>setEAddr(e.target.value)} style={ef}/>:<div style={{fontSize:13,color:T.text,padding:'10px 0'}}>{q.address||'—'}</div>}</div>
           </div>
-
-          {/* Notes */}
-          <div style={{...card,padding:'22px'}}>{hdr('Notes','📝')}
-            {[{l:'Add-ons',v:eAddons,s:setEAddons},{l:'Key Areas',v:eKey,s:setEKey},{l:'Notes',v:eNotes,s:setENotes}].map(f=>(
-              <div key={f.l} style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.l}</div>{editing?<textarea value={f.v} onChange={e=>f.s(e.target.value)} rows={2} style={{...ef,resize:'vertical'}}/>:<div style={{fontSize:13,color:T.muted,lineHeight:1.7,padding:'4px 0'}}>{f.v&&f.v!=='None selected'?f.v:'—'}</div>}</div>
-            ))}
+          <div style={{...card,padding:'20px'}}>{hdr('Notes')}
+            {[{l:'Add-ons',v:eAddons,s:setEAddons},{l:'Key Areas',v:eKey,s:setEKey},{l:'Notes',v:eNotes,s:setENotes}].map(f=><div key={f.l} style={{marginBottom:12}}>{label(f.l)}{editing?<textarea value={f.v} onChange={e=>f.s(e.target.value)} rows={2} style={{...ef,resize:'vertical'}}/>:<div style={{fontSize:13,color:T.muted,lineHeight:1.6}}>{f.v&&f.v!=='None selected'?f.v:'—'}</div>}</div>)}
           </div>
         </div>
-
-        {/* Right */}
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
-          <div style={{...card,padding:'20px'}}>{hdr('Client','👤')}
-            {[{l:'Name',v:`${q.client.firstName} ${q.client.lastName}`},{l:'Email',v:q.client.email},{l:'Phone',v:q.client.phone||'—'},{l:'Location',v:[q.client.city,q.client.state].filter(Boolean).join(', ')||'—'},{l:'Since',v:fmtDate(q.client.createdAt)}].map(f=>(
-              <div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${T.border}`,gap:8}}><span style={{fontSize:11,color:T.dim,fontWeight:500}}>{f.l}</span><span style={{fontSize:12,color:T.text,fontWeight:500,textAlign:'right'}}>{f.v}</span></div>
-            ))}
-            <button onClick={()=>{setActiveClientId(q.clientId);setPage('client-detail')}} style={{...btnS,width:'100%',marginTop:10,fontSize:11}}>View Profile →</button>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{...card,padding:'18px'}}>{hdr('Client')}
+            {[{l:'Name',v:`${q.client.firstName} ${q.client.lastName}`},{l:'Email',v:q.client.email},{l:'Phone',v:q.client.phone||'—'},{l:'Since',v:fmtDate(q.client.createdAt)}].map(f=><div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:11,color:T.muted}}>{f.l}</span><span style={{fontSize:12,fontWeight:500,color:T.text}}>{f.v}</span></div>)}
           </div>
-          <div style={{...card,padding:'20px'}}>{hdr('Scheduling','📅')}
-            {[{l:'Date 1',v:fmtDate(q.preferredDate1)},{l:'Date 2',v:fmtDate(q.preferredDate2)},{l:'Times',v:q.preferredTimes||'—'}].map(f=>(
-              <div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${T.border}`,gap:8}}><span style={{fontSize:11,color:T.dim,fontWeight:500}}>{f.l}</span><span style={{fontSize:12,color:T.text,fontWeight:500,textAlign:'right'}}>{f.v}</span></div>
-            ))}
-          </div>
-          <div style={{...card,padding:'20px'}}>{hdr('Actions','⚡')}
-            <div style={{display:'flex',flexDirection:'column',gap:7}}>
-              {!isIB&&<button onClick={handleEmail} disabled={sending} style={{width:'100%',padding:'11px',borderRadius:10,background:`linear-gradient(135deg,${T.accent},${T.accentSoft})`,color:dark?'#030d1c':'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif',opacity:sending?.6:1}}>{sending?'Sending…':'✉ Send Quote Email'}</button>}
-              {q.status==='pending'&&<button onClick={()=>updateQuoteStatus(q.id,'reviewed')} style={{width:'100%',padding:'10px',borderRadius:10,background:T.accentBg,border:`1px solid ${T.accentBorder}`,color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Mark Reviewed</button>}
-              {['pending','reviewed'].includes(q.status)&&<button onClick={()=>updateQuoteStatus(q.id,'booked')} style={{width:'100%',padding:'10px',borderRadius:10,background:`linear-gradient(135deg,${T.green},#059669)`,color:dark?'#030d1c':'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>✓ Confirm Booking</button>}
-              {q.status==='booked'&&<button onClick={()=>updateQuoteStatus(q.id,'completed')} style={{width:'100%',padding:'10px',borderRadius:10,background:`linear-gradient(135deg,${T.violet},#6d28d9)`,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Mark Completed</button>}
-              {q.status!=='cancelled'&&<button onClick={()=>updateQuoteStatus(q.id,'cancelled')} style={{width:'100%',padding:'10px',borderRadius:10,background:T.redBg,border:`1px solid ${T.red}20`,color:T.red,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Cancel</button>}
-              <button onClick={toInvoice} style={{width:'100%',padding:'10px',borderRadius:10,background:T.amberBg,border:`1px solid ${T.amber}20`,color:T.amber,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Convert to Invoice</button>
-              {['booked','completed'].includes(q.status)&&<button onClick={()=>convertToJob(q.id)} style={{width:'100%',padding:'10px',borderRadius:10,background:T.violetBg,border:`1px solid ${T.violet}20`,color:T.violet,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>🗓 Convert to Job</button>}
-              <div style={{borderTop:`1px solid ${T.border}`,paddingTop:10,marginTop:4}}>
-                {!confirmDel?<button onClick={()=>setConfirmDel(true)} style={{width:'100%',padding:'9px',borderRadius:8,border:`1px solid ${T.red}15`,background:'transparent',color:T.red,fontSize:11,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif',opacity:0.6}}>Delete Quote</button>:(
-                  <div style={{background:T.redBg,borderRadius:10,padding:'14px',border:`1px solid ${T.red}20`}}>
-                    <div style={{fontSize:12,fontWeight:600,color:T.red,marginBottom:8}}>Delete permanently?</div>
-                    <div style={{display:'flex',gap:8}}><button onClick={()=>setConfirmDel(false)} style={{...btnS,flex:1,fontSize:11}}>No</button><button onClick={handleDel} disabled={deleting} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:T.red,color:'#fff',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'"DM Sans",sans-serif',opacity:deleting?.5:1}}>Delete</button></div>
-                  </div>
+          <div style={{...card,padding:'18px'}}>{hdr('Actions')}
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {!isIB&&<button onClick={handleEmail} disabled={sending} style={{...btnP,width:'100%',textAlign:'center',opacity:sending?.6:1}}>{sending?'Sending…':'Send Quote Email'}</button>}
+              {q.status==='pending'&&<button onClick={()=>updateQuoteStatus(q.id,'reviewed')} style={{...btnS,width:'100%'}}>Mark Reviewed</button>}
+              {['pending','reviewed'].includes(q.status)&&<button onClick={()=>updateQuoteStatus(q.id,'booked')} style={{width:'100%',padding:'9px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"Inter",sans-serif'}}>Confirm Booking</button>}
+              {q.status==='booked'&&<button onClick={()=>updateQuoteStatus(q.id,'completed')} style={{width:'100%',padding:'9px',borderRadius:8,background:T.violet,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer'}}>Completed</button>}
+              {q.status!=='cancelled'&&<button onClick={()=>updateQuoteStatus(q.id,'cancelled')} style={{width:'100%',padding:'8px',borderRadius:8,background:T.redBg,color:T.red,border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>Cancel</button>}
+              <button onClick={toInvoice} style={{width:'100%',padding:'8px',borderRadius:8,background:T.amberBg,color:T.amber,border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>Convert to Invoice</button>
+              {['booked','completed'].includes(q.status)&&<button onClick={()=>convertToJob(q.id)} style={{width:'100%',padding:'8px',borderRadius:8,background:T.violetBg,color:T.violet,border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>Convert to Job</button>}
+              <div style={{borderTop:`1px solid ${T.border}`,paddingTop:8,marginTop:4}}>
+                {!confirmDel?<button onClick={()=>setConfirmDel(true)} style={{width:'100%',padding:'7px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.red,fontSize:11,fontWeight:500,cursor:'pointer',opacity:.6}}>Delete</button>:(
+                  <div style={{background:T.redBg,borderRadius:8,padding:'12px'}}><div style={{fontSize:12,fontWeight:600,color:T.red,marginBottom:6}}>Confirm delete?</div><div style={{display:'flex',gap:6}}><button onClick={()=>setConfirmDel(false)} style={{...btnS,flex:1,fontSize:11}}>No</button><button onClick={handleDel} disabled={deleting} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:T.red,color:'#fff',cursor:'pointer',fontSize:11,fontWeight:600,opacity:deleting?.5:1}}>Delete</button></div></div>
                 )}
               </div>
             </div>
@@ -522,723 +391,388 @@ export default function CleanerDashboard() {
     </>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   // CREATE QUOTE
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   function CreateQuotePage(){
-    const [selC,setSelC]=useState('');const [newC,setNewC]=useState(false)
+    const [selC,setSelC]=useState(''),[newC,setNewC]=useState(false)
     const [nc,setNc]=useState({firstName:'',lastName:'',email:'',phone:'',address:'',city:'',state:'AK',zip:''})
     const [qf,setQf]=useState({serviceType:'Standard Clean',frequency:'One-Time',address:'',sqftRange:'',bedrooms:'',bathrooms:'',addonsList:'',keyAreas:'',additionalNotes:'',preferredDate1:'',preferredDate2:'',preferredTimes:''})
     const [items,setItems]=useState<{label:string;detail:string;amount:string}[]>([{label:'Base Service',detail:'',amount:'0'}])
     const [sub,setSub]=useState(false);const total=items.reduce((s,x)=>s+(parseFloat(x.amount)||0),0)
-    async function go(){if(!selC&&!nc.email){showToast('Select or create a client','err');return};setSub(true);const bd=items.map(x=>`${x.label}${x.detail?'||'+x.detail:''}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');const d:any={service_type:qf.serviceType,frequency:qf.frequency,address:qf.address,sqft_range:qf.sqftRange,bedrooms:qf.bedrooms,house_bathrooms:qf.bathrooms,addons_list:qf.addonsList,key_areas:qf.keyAreas,additional_notes:qf.additionalNotes,preferred_date_1:qf.preferredDate1||undefined,preferred_date_2:qf.preferredDate2||undefined,preferred_times:qf.preferredTimes,price_breakdown:bd,subtotal:`$${total.toFixed(2)}`,total_price:`$${total.toFixed(2)}`,discount:'$0',discount_label:'',submission_type:'quote'};if(selC){const c=clients.find(x=>x.id===selC);if(c){d.email=c.email;d.first_name=c.firstName;d.last_name=c.lastName;d.phone=c.phone}}else{d.email=nc.email;d.first_name=nc.firstName;d.last_name=nc.lastName;d.phone=nc.phone;d.address=nc.address||qf.address;d.city=nc.city;d.state=nc.state;d.zip=nc.zip};await createQuote(d);setSub(false)}
-    return pageWrap(640,<>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('quotes')} style={{...btnS,padding:'7px 14px'}}>← Back</button><h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:20,fontWeight:700,color:T.text}}>New Quote</h1></div>
-      <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Client','👤')}
-        {!newC?<div><select value={selC} onChange={e=>setSelC(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select existing client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select><button onClick={()=>setNewC(true)} style={{marginTop:10,fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>+ New Client</button></div>:(
-          <div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>{[{l:'First Name',k:'firstName'},{l:'Last Name',k:'lastName'},{l:'Email *',k:'email'},{l:'Phone',k:'phone'},{l:'City',k:'city'},{l:'State',k:'state'}].map(f=><div key={f.k}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.l}</div><input value={(nc as any)[f.k]} onChange={e=>setNc({...nc,[f.k]:e.target.value})} style={inp}/></div>)}</div><button onClick={()=>setNewC(false)} style={{marginTop:10,fontSize:12,color:T.muted,background:'none',border:'none',cursor:'pointer',fontWeight:500}}>← Existing Client</button></div>
+    async function go(){if(!selC&&!nc.email){showToast('Select a client','err');return};setSub(true);const bd=items.map(x=>`${x.label}${x.detail?'||'+x.detail:''}...$${parseFloat(x.amount||'0').toFixed(2)}`).join('\n');const d:any={service_type:qf.serviceType,frequency:qf.frequency,address:qf.address,sqft_range:qf.sqftRange,bedrooms:qf.bedrooms,house_bathrooms:qf.bathrooms,addons_list:qf.addonsList,key_areas:qf.keyAreas,additional_notes:qf.additionalNotes,preferred_date_1:qf.preferredDate1||undefined,preferred_times:qf.preferredTimes,price_breakdown:bd,subtotal:`$${total.toFixed(2)}`,total_price:`$${total.toFixed(2)}`,discount:'$0',discount_label:'',submission_type:'quote'};if(selC){const c=clients.find(x=>x.id===selC);if(c){d.email=c.email;d.first_name=c.firstName;d.last_name=c.lastName;d.phone=c.phone}}else{d.email=nc.email;d.first_name=nc.firstName;d.last_name=nc.lastName;d.phone=nc.phone;d.city=nc.city;d.state=nc.state;d.zip=nc.zip};await createQuote(d);setSub(false)}
+    return pageWrap(600,<>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('quotes')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>New Quote</h1></div>
+      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Client')}
+        {!newC?<div><select value={selC} onChange={e=>setSelC(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select><button onClick={()=>setNewC(true)} style={{marginTop:8,fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>+ New Client</button></div>:(
+          <div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>{[{l:'First Name',k:'firstName'},{l:'Last Name',k:'lastName'},{l:'Email *',k:'email'},{l:'Phone',k:'phone'}].map(f=><div key={f.k}>{label(f.l)}<input value={(nc as any)[f.k]} onChange={e=>setNc({...nc,[f.k]:e.target.value})} style={inp}/></div>)}</div><button onClick={()=>setNewC(false)} style={{marginTop:8,fontSize:12,color:T.muted,background:'none',border:'none',cursor:'pointer'}}>← Existing Client</button></div>
         )}
       </div>
-      <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Service','🏠')}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Type</div><select value={qf.serviceType} onChange={e=>setQf({...qf,serviceType:e.target.value})} style={{...inp,cursor:'pointer'}}>{SERVICE_TYPES.map(s=><option key={s}>{s}</option>)}</select></div>
-          <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Frequency</div><select value={qf.frequency} onChange={e=>setQf({...qf,frequency:e.target.value})} style={{...inp,cursor:'pointer'}}>{FREQUENCIES.map(f=><option key={f}>{f}</option>)}</select></div>
-          {[{l:'Address',k:'address'},{l:'Sq Ft',k:'sqftRange'},{l:'Beds',k:'bedrooms'},{l:'Baths',k:'bathrooms'}].map(f=><div key={f.k}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.l}</div><input value={(qf as any)[f.k]} onChange={e=>setQf({...qf,[f.k]:e.target.value})} style={inp}/></div>)}
+      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Service')}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <div>{label('Type')}<select value={qf.serviceType} onChange={e=>setQf({...qf,serviceType:e.target.value})} style={{...inp,cursor:'pointer'}}>{SERVICE_TYPES.map(s=><option key={s}>{s}</option>)}</select></div>
+          <div>{label('Frequency')}<select value={qf.frequency} onChange={e=>setQf({...qf,frequency:e.target.value})} style={{...inp,cursor:'pointer'}}>{FREQUENCIES.map(f=><option key={f}>{f}</option>)}</select></div>
+          {[{l:'Address',k:'address'},{l:'Sq Ft',k:'sqftRange'},{l:'Beds',k:'bedrooms'},{l:'Baths',k:'bathrooms'}].map(f=><div key={f.k}>{label(f.l)}<input value={(qf as any)[f.k]} onChange={e=>setQf({...qf,[f.k]:e.target.value})} style={inp}/></div>)}
         </div>
-        <div style={{marginTop:10}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Preferred Date</div><input type="date" value={qf.preferredDate1} onChange={e=>setQf({...qf,preferredDate1:e.target.value})} style={inp}/></div>
+        <div style={{marginTop:8}}>{label('Preferred Date')}<input type="date" value={qf.preferredDate1} onChange={e=>setQf({...qf,preferredDate1:e.target.value})} style={inp}/></div>
       </div>
-      <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Line Items','💰')}
-        {items.map((x,i)=><div key={i} style={{padding:'7px 0',borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}><input value={x.label} onChange={e=>{const u=[...items];u[i]={...u[i],label:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Item name"/><span style={{color:T.muted,fontWeight:600}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:90,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>
-          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:4,fontSize:11}} placeholder="Description / what this item covers…"/>
+      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Line Items')}
+        {items.map((x,i)=><div key={i} style={{padding:'6px 0',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}><input value={x.label} onChange={e=>{const u=[...items];u[i]={...u[i],label:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Item"/><span style={{color:T.muted}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:80,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.red}30`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>
+          <input value={x.detail} onChange={e=>{const u=[...items];u[i]={...u[i],detail:e.target.value};setItems(u)}} style={{...inp,marginTop:4,fontSize:12}} placeholder="Description…"/>
         </div>)}
-        <button onClick={()=>setItems([...items,{label:'',detail:'',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.accentBorder}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add Item</button>
-        <div style={{display:'flex',justifyContent:'space-between',padding:'14px 0',borderTop:`1.5px solid ${T.borderB}`,marginTop:12}}><span style={{fontWeight:700,fontSize:14,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:22,color:T.accent,letterSpacing:-0.5}}>{fmtMoney(total)}</span></div>
+        <button onClick={()=>setItems([...items,{label:'',detail:'',amount:'0'}])} style={{marginTop:8,padding:'7px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add</button>
+        <div style={{display:'flex',justifyContent:'space-between',padding:'12px 0',borderTop:`2px solid ${T.borderB}`,marginTop:10}}><span style={{fontWeight:700,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:18,color:T.accent}}>{fmtMoney(total)}</span></div>
       </div>
-      <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Notes','📝')}<textarea value={qf.additionalNotes} onChange={e=>setQf({...qf,additionalNotes:e.target.value})} rows={3} placeholder="Notes…" style={{...inp,resize:'vertical'}}/></div>
-      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'14px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Quote'}</button>
+      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Notes')}<textarea value={qf.additionalNotes} onChange={e=>setQf({...qf,additionalNotes:e.target.value})} rows={3} placeholder="Notes…" style={{...inp,resize:'vertical'}}/></div>
+      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'12px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Quote'}</button>
     </>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // JOBS — Date-grouped list with preview panel
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
+  // JOBS — date-grouped with editable preview
+  // ══════════════════════════════════════════════════════════════════════
   function JobsPage(){
-    const [filter,setFilter]=useState<'all'|'upcoming'|'today'|'past'>('upcoming')
-    const [search,setSearch]=useState('')
-    const [selJobId,setSelJobId]=useState<string|null>(null)
+    const [filter,setFilter]=useState<'all'|'upcoming'|'today'|'past'>('upcoming'),[search,setSearch]=useState(''),[selJId,setSelJId]=useState<string|null>(null)
     const now=new Date(),td=new Date(now.getFullYear(),now.getMonth(),now.getDate()),te=new Date(td.getTime()+86400000)
     const fj=jobs.filter(j=>{const d=new Date(j.checkoutTime);return filter==='upcoming'?d>=now:filter==='today'?d>=td&&d<te:filter==='past'?d<now:true}).filter(j=>!search||`${j.displayName} ${j.propertyLabel} ${j.platform}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>filter==='past'?new Date(b.checkoutTime).getTime()-new Date(a.checkoutTime).getTime():new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
-    const PLAT:Record<string,string>={hostaway:'#fb8500',jobber:'#00c4ff',manual:D.accent,airbnb:'#ff385c'}
-
-    // Group by date + fill empty days between first and last
-    const dateGroups:Map<string,Job[]>=new Map()
-    if(fj.length>0&&filter!=='past'){
-      const first=new Date(fj[0].checkoutTime)
-      const lastD=fj.length>1?new Date(fj[fj.length-1].checkoutTime):first
-      const numDays=Math.min(14,Math.max(3,Math.ceil((lastD.getTime()-first.getTime())/86400000)+1))
-      for(let i=0;i<numDays;i++){
-        const d=new Date(first.getFullYear(),first.getMonth(),first.getDate()+i)
-        const key=d.toISOString().split('T')[0]
-        dateGroups.set(key,fj.filter(j=>sameDay(new Date(j.checkoutTime),d)))
-      }
-    } else {
-      fj.forEach(j=>{
-        const key=new Date(j.checkoutTime).toISOString().split('T')[0]
-        if(!dateGroups.has(key)) dateGroups.set(key,[])
-        dateGroups.get(key)!.push(j)
-      })
-    }
-
-    // Default select first job
-    const selJob=selJobId?fj.find(j=>j.id===selJobId)||fj[0]||null:fj[0]||null
-
-    return(
-      <div>
-        {pageTitle('Jobs',`${jobs.length} total · ${upcoming.length} upcoming`,<button onClick={()=>setPage('create-job')} style={btnP}>Add Job</button>)}
-        <div style={{display:'flex',gap:10,marginBottom:18,flexWrap:'wrap'}}>
-          <div style={{display:'flex',gap:2,background:T.surf,borderRadius:10,padding:3,border:`1px solid ${T.border}`}}>
-            {(['upcoming','today','past','all'] as const).map(x=><button key={x} onClick={()=>{setFilter(x);setSelJobId(null)}} style={{padding:'6px 12px',borderRadius:8,border:'none',cursor:'pointer',fontSize:11,fontWeight:filter===x?600:400,background:filter===x?T.accentBg:'transparent',color:filter===x?T.accent:T.dim,fontFamily:'"DM Sans",sans-serif',textTransform:'capitalize'}}>{x}</button>)}
-          </div>
-          <input style={{...inp,flex:1,minWidth:160,maxWidth:260}} placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
+    const PLAT:Record<string,string>={hostaway:'#f59e0b',jobber:'#3b82f6',manual:'#6366f1',airbnb:'#ef4444'}
+    const groups:Map<string,Job[]>=new Map()
+    if(fj.length>0&&filter!=='past'){const f0=new Date(fj[0].checkoutTime),fN=fj.length>1?new Date(fj[fj.length-1].checkoutTime):f0;const days=Math.min(14,Math.max(3,Math.ceil((fN.getTime()-f0.getTime())/86400000)+1));for(let i=0;i<days;i++){const d=new Date(f0.getFullYear(),f0.getMonth(),f0.getDate()+i);const k=d.toISOString().split('T')[0];groups.set(k,fj.filter(j=>sameDay(new Date(j.checkoutTime),d)))}}else{fj.forEach(j=>{const k=new Date(j.checkoutTime).toISOString().split('T')[0];if(!groups.has(k))groups.set(k,[]);groups.get(k)!.push(j)})}
+    const selJob=selJId?fj.find(j=>j.id===selJId)||fj[0]||null:fj[0]||null
+    return(<div>
+      {pageTitle('Jobs',`${jobs.length} total · ${upcoming.length} upcoming`,<button onClick={()=>setPage('create-job')} style={btnP}>Add Job</button>)}
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:2,background:T.surf,borderRadius:8,padding:2,border:`1px solid ${T.border}`}}>
+          {(['upcoming','today','past','all'] as const).map(x=><button key={x} onClick={()=>{setFilter(x);setSelJId(null)}} style={{padding:'6px 11px',borderRadius:6,border:'none',cursor:'pointer',fontSize:12,fontWeight:filter===x?600:400,background:filter===x?T.card:'transparent',color:filter===x?T.text:T.muted,fontFamily:'"Inter",sans-serif',textTransform:'capitalize',boxShadow:filter===x?T.shadow:'none'}}>{x}</button>)}
         </div>
-
-        {fj.length===0?<div style={{textAlign:'center',padding:'60px 0',color:T.dim,fontSize:13}}>No jobs match.</div>:(
-          <div style={{display:'grid',gridTemplateColumns:'1fr 360px',gap:16,alignItems:'start'}}>
-            {/* Left: date-grouped list */}
-            <div style={{maxHeight:'calc(100vh - 220px)',overflowY:'auto',paddingRight:4}}>
-              {Array.from(dateGroups.entries()).map(([dateKey,dayJobs])=>{
-                const d=new Date(dateKey+'T12:00:00')
-                const isToday=sameDay(d,now)
-                const dayLabel=isToday?'Today':d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
-                return(
-                  <div key={dateKey} style={{marginBottom:6}}>
-                    <div style={{padding:'8px 0',display:'flex',alignItems:'center',gap:8}}>
-                      <div style={{fontSize:11,fontWeight:600,color:isToday?T.accent:T.muted,letterSpacing:0.5}}>{dayLabel}</div>
-                      <div style={{flex:1,height:1,background:T.border}}/>
-                      {dayJobs.length>0&&<span style={{fontSize:10,color:T.dim}}>{dayJobs.length}</span>}
-                    </div>
-                    {dayJobs.length===0?(
-                      <div style={{padding:'10px 14px',fontSize:11,color:T.dim,fontStyle:'italic'}}>No jobs</div>
-                    ):(
-                      <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                        {dayJobs.map(j=>{const pc=PLAT[j.platform]||T.accent;const isSel=selJob?.id===j.id;return(
-                          <div key={j.id} onClick={()=>setSelJobId(j.id)} style={{padding:'11px 14px',borderRadius:12,background:isSel?T.cardHover:T.card,border:`1px solid ${isSel?T.borderHover:T.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:10,transition:'all .12s'}} onMouseEnter={e=>{if(!isSel)(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{if(!isSel)(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
-                            <div style={{width:3,height:28,borderRadius:2,background:pc,flexShrink:0}}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:600,color:T.text}}>{j.displayName}</div>
-                              <div style={{fontSize:10,color:T.dim,marginTop:2}}>{j.propertyLabel}</div>
-                            </div>
-                            <div style={{fontSize:11,color:T.accent,fontWeight:600,flexShrink:0}}>{fmtTime(j.checkoutTime)}</div>
-                          </div>
-                        )})}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Right: editable preview */}
-            {selJob&&(()=>{
-              const [editJ,setEditJ]=useState(false)
-              const [ej,setEj]=useState({displayName:selJob.displayName,propertyLabel:selJob.propertyLabel,address:selJob.address,notes:selJob.notes||'',customerName:selJob.customerName||'',worth:selJob.worth?.toString()||''})
-              const [savingJ,setSavingJ]=useState(false)
-              async function saveJob(){setSavingJ(true);await fetch(`/api/jobs/${selJob.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({displayName:ej.displayName,propertyLabel:ej.propertyLabel,address:ej.address,notes:ej.notes||null,customerName:ej.customerName||null,worth:ej.worth?parseFloat(ej.worth):null})});await load();setSavingJ(false);setEditJ(false);showToast('Job updated')}
-              async function delJob(){await fetch(`/api/jobs/${selJob.id}`,{method:'DELETE'});await load();setSelJobId(null);showToast('Job deleted')}
-              const jInp=editJ?{...inp,background:dark?'rgba(255,255,255,0.04)':'#f5f9fd',border:`1px solid ${T.borderB}`,padding:'8px 12px',fontSize:12} as React.CSSProperties:{} as React.CSSProperties
-              return(
-              <div style={{...card,padding:'24px',position:'sticky',top:20}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
-                  <div style={{flex:1}}>
-                    {editJ?<input value={ej.displayName} onChange={e=>setEj({...ej,displayName:e.target.value})} style={{...jInp,fontSize:16,fontWeight:700,marginBottom:4}}/>:<div style={{fontSize:18,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{selJob.displayName}</div>}
-                    {editJ?<input value={ej.propertyLabel} onChange={e=>setEj({...ej,propertyLabel:e.target.value})} style={{...jInp,color:T.muted}}/>:<div style={{fontSize:12,color:T.muted,marginTop:4}}>{selJob.propertyLabel}</div>}
-                  </div>
-                  <button onClick={()=>{if(editJ){saveJob()}else{setEditJ(true);setEj({displayName:selJob.displayName,propertyLabel:selJob.propertyLabel,address:selJob.address,notes:selJob.notes||'',customerName:selJob.customerName||'',worth:selJob.worth?.toString()||''})}}} style={{...btnS,padding:'6px 14px',fontSize:11,color:editJ?T.accent:T.muted,borderColor:editJ?T.accentBorder:T.border}}>{savingJ?'Saving…':editJ?'Save':'Edit'}</button>
-                </div>
-                <div style={{display:'flex',gap:6,marginBottom:16}}>
-                  {badge(selJob.platform,PLAT[selJob.platform]||T.accent,`${PLAT[selJob.platform]||T.accent}15`)}
-                  {sameDay(new Date(selJob.checkoutTime),now)&&badge('Today',T.accent,T.accentBg)}
-                </div>
-                {[{l:'Checkout',v:`${fmtDate(selJob.checkoutTime)} · ${fmtTime(selJob.checkoutTime)}`,i:'📅'},{l:'Check-in',v:selJob.checkinTime?`${fmtDate(selJob.checkinTime)} · ${fmtTime(selJob.checkinTime)}`:'—',i:'🏠'},{l:'Address',v:selJob.address||'—',i:'📍',k:'address'},{l:'Guest',v:selJob.customerName||'—',i:'👤',k:'customerName'},{l:'Worth',v:selJob.worth?fmtMoney(selJob.worth):'—',i:'💰',k:'worth'}].map(f=>(
-                  <div key={f.l} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
-                    <span style={{fontSize:13}}>{f.i}</span>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1}}>{f.l}</div>
-                      {editJ&&(f as any).k?<input value={(ej as any)[(f as any).k]||''} onChange={e=>setEj({...ej,[(f as any).k]:e.target.value})} style={{...jInp,marginTop:2}}/>:<div style={{fontSize:13,fontWeight:500,color:T.text,marginTop:2}}>{f.v}</div>}
-                    </div>
-                  </div>
-                ))}
-                {editJ?<div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div><textarea value={ej.notes} onChange={e=>setEj({...ej,notes:e.target.value})} rows={3} style={{...jInp,width:'100%',resize:'vertical'}}/></div>:selJob.notes&&<div style={{marginTop:14,padding:'10px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.6}}>{selJob.notes}</div>}
-                {(selJob.sqft||selJob.beds||selJob.baths)&&<div style={{display:'flex',gap:10,marginTop:14}}>
-                  {selJob.sqft&&<div style={{background:T.surf,borderRadius:8,padding:'8px 12px',border:`1px solid ${T.border}`,fontSize:11,color:T.muted}}><span style={{fontWeight:600,color:T.text}}>{selJob.sqft}</span> sqft</div>}
-                  {selJob.beds&&<div style={{background:T.surf,borderRadius:8,padding:'8px 12px',border:`1px solid ${T.border}`,fontSize:11,color:T.muted}}><span style={{fontWeight:600,color:T.text}}>{selJob.beds}</span> bed{selJob.beds>1?'s':''}</div>}
-                  {selJob.baths&&<div style={{background:T.surf,borderRadius:8,padding:'8px 12px',border:`1px solid ${T.border}`,fontSize:11,color:T.muted}}><span style={{fontWeight:600,color:T.text}}>{selJob.baths}</span> bath{selJob.baths>1?'s':''}</div>}
-                </div>}
-                {editJ&&<div style={{display:'flex',gap:8,marginTop:16}}>
-                  <button onClick={()=>setEditJ(false)} style={{...btnS,flex:1,fontSize:11}}>Cancel</button>
-                  <button onClick={delJob} style={{padding:'8px 14px',borderRadius:8,border:`1px solid ${T.red}20`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,fontWeight:500,fontFamily:'"DM Sans",sans-serif'}}>Delete</button>
-                </div>}
-              </div>
-            )})()}
-          </div>
-        )}
+        <input style={{...inp,flex:1,minWidth:140,maxWidth:240}} placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
       </div>
-    )
+      {fj.length===0?<div style={{textAlign:'center',padding:'48px 0',color:T.dim}}>No jobs.</div>:(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:14,alignItems:'start'}}>
+          <div style={{maxHeight:'calc(100vh - 200px)',overflowY:'auto',paddingRight:4}}>
+            {Array.from(groups.entries()).map(([dk,dj])=>{const d=new Date(dk+'T12:00:00'),isToday=sameDay(d,now);return(
+              <div key={dk} style={{marginBottom:6}}>
+                <div style={{padding:'7px 0',display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:12,fontWeight:600,color:isToday?T.accent:T.sub}}>{isToday?'Today':d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span><div style={{flex:1,height:1,background:T.border}}/>{dj.length>0&&<span style={{fontSize:10,color:T.dim}}>{dj.length}</span>}</div>
+                {dj.length===0?<div style={{padding:'8px 12px',fontSize:11,color:T.dim,fontStyle:'italic'}}>No jobs</div>:(
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {dj.map(j=>{const pc=PLAT[j.platform]||T.accent,sel=selJob?.id===j.id;return(
+                      <div key={j.id} onClick={()=>setSelJId(j.id)} style={{...card,padding:'11px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,borderColor:sel?T.borderHover:T.border,background:sel?T.cardHover:T.card}} onMouseEnter={e=>{if(!sel)hover(e,true)}} onMouseLeave={e=>{if(!sel)hover(e,false)}}>
+                        <div style={{width:3,height:26,borderRadius:2,background:pc,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.displayName}</div><div style={{fontSize:11,color:T.muted,marginTop:1}}>{j.propertyLabel}</div></div>
+                        <span style={{fontSize:11,fontWeight:600,color:T.accent,flexShrink:0}}>{fmtTime(j.checkoutTime)}</span>
+                      </div>
+                    )})}
+                  </div>
+                )}
+              </div>
+            )})}
+          </div>
+          {selJob&&(()=>{
+            const [eJ,setEJ]=useState(false),[em,setEm]=useState({displayName:selJob.displayName,propertyLabel:selJob.propertyLabel,address:selJob.address,notes:selJob.notes||'',customerName:selJob.customerName||'',worth:selJob.worth?.toString()||'',sqft:selJob.sqft?.toString()||'',beds:selJob.beds?.toString()||'',baths:selJob.baths?.toString()||''}),[savJ,setSavJ]=useState(false)
+            async function sav(){setSavJ(true);await fetch(`/api/jobs/${selJob.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({displayName:em.displayName,propertyLabel:em.propertyLabel,address:em.address||null,notes:em.notes||null,customerName:em.customerName||null,worth:em.worth?parseFloat(em.worth):null,sqft:em.sqft?parseInt(em.sqft):null,beds:em.beds?parseInt(em.beds):null,baths:em.baths?parseFloat(em.baths):null})});await load();setSavJ(false);setEJ(false);showToast('Updated')}
+            async function del(){await fetch(`/api/jobs/${selJob.id}`,{method:'DELETE'});await load();setSelJId(null);showToast('Deleted')}
+            let duties:{title?:string;description?:string}[]=[];try{duties=JSON.parse(selJob.duties||'[]')}catch{}
+            const jI=eJ?{...inp,padding:'8px 10px',fontSize:12} as React.CSSProperties:{} as React.CSSProperties
+            return(<div style={{...card,padding:'22px',position:'sticky',top:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+                <div style={{flex:1}}>{eJ?<input value={em.displayName} onChange={e=>setEm({...em,displayName:e.target.value})} style={{...jI,fontSize:16,fontWeight:700}}/>:<div style={{fontSize:17,fontWeight:700,color:T.text}}>{selJob.displayName}</div>}{eJ?<input value={em.propertyLabel} onChange={e=>setEm({...em,propertyLabel:e.target.value})} style={{...jI,marginTop:4,color:T.muted}}/>:<div style={{fontSize:12,color:T.muted,marginTop:4}}>{selJob.propertyLabel}</div>}</div>
+                <button onClick={()=>{if(eJ){sav()}else{setEJ(true);setEm({displayName:selJob.displayName,propertyLabel:selJob.propertyLabel,address:selJob.address,notes:selJob.notes||'',customerName:selJob.customerName||'',worth:selJob.worth?.toString()||'',sqft:selJob.sqft?.toString()||'',beds:selJob.beds?.toString()||'',baths:selJob.baths?.toString()||''})}}} style={{...btnS,padding:'6px 12px',fontSize:11}}>{savJ?'…':eJ?'Save':'Edit'}</button>
+              </div>
+              <div style={{display:'flex',gap:6,marginBottom:14}}>{badge(selJob.platform,PLAT[selJob.platform]||T.accent,`${(PLAT[selJob.platform]||T.accent)}18`)}{sameDay(new Date(selJob.checkoutTime),now)&&badge('Today',T.accent,T.accentBg)}</div>
+              {[{l:'Checkout',v:`${fmtDate(selJob.checkoutTime)} · ${fmtTime(selJob.checkoutTime)}`},{l:'Check-in',v:selJob.checkinTime?`${fmtDate(selJob.checkinTime)} · ${fmtTime(selJob.checkinTime)}`:'—'},{l:'Address',v:selJob.address||'—',k:'address'},{l:'Guest',v:selJob.customerName||'—',k:'customerName'},{l:'Worth',v:selJob.worth?fmtMoney(selJob.worth):'—',k:'worth'}].map(f=><div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:11,color:T.muted}}>{f.l}</span>{eJ&&(f as any).k?<input value={(em as any)[(f as any).k]||''} onChange={e=>setEm({...em,[(f as any).k]:e.target.value})} style={{...jI,width:160,textAlign:'right'}}/>:<span style={{fontSize:12,fontWeight:500,color:T.text,textAlign:'right',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.v}</span>}</div>)}
+              {duties.length>0&&<div style={{marginTop:14}}>{hdr('Duties')}{duties.map((d,i)=><div key={i} style={{padding:'8px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:4}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>{d.description&&<div style={{fontSize:11,color:T.muted,marginTop:2}}>{d.description}</div>}</div>)}</div>}
+              {eJ?<div style={{marginTop:12}}>{label('Notes')}<textarea value={em.notes} onChange={e=>setEm({...em,notes:e.target.value})} rows={3} style={{...jI,width:'100%',resize:'vertical'}}/></div>:selJob.notes&&<div style={{marginTop:12,padding:'10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.5}}>{selJob.notes}</div>}
+              {eJ&&<div style={{display:'flex',gap:6,marginTop:12}}><button onClick={()=>setEJ(false)} style={{...btnS,flex:1}}>Cancel</button><button onClick={del} style={{padding:'8px 12px',borderRadius:8,background:T.redBg,color:T.red,border:'none',fontSize:11,fontWeight:500,cursor:'pointer'}}>Delete</button></div>}
+            </div>)
+          })()}
+        </div>
+      )}
+    </div>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
   // CREATE JOB
-  // ══════════════════════════════════════════════════════════════════════════
   function CreateJobPage(){
     const [jf,setJf]=useState({displayName:'',propertyLabel:'',address:'',checkoutDate:'',checkoutTimeVal:'10:00',checkinDate:'',checkinTimeVal:'',notes:''});const [sub,setSub]=useState(false)
     async function go(){if(!jf.displayName||!jf.checkoutDate){showToast('Name and date required','err');return};setSub(true);const co=new Date(`${jf.checkoutDate}T${jf.checkoutTimeVal||'10:00'}`);const b:any={displayName:jf.displayName,propertyLabel:jf.propertyLabel||jf.displayName,address:jf.address,checkoutTime:co.toISOString(),platform:'manual',notes:jf.notes};if(jf.checkinDate)b.checkinTime=new Date(`${jf.checkinDate}T${jf.checkinTimeVal||'14:00'}`).toISOString();await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});await load();showToast('Job created');setPage('jobs');setSub(false)}
-    return pageWrap(580,<>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('jobs')} style={{...btnS,padding:'7px 14px'}}>← Back</button><h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:20,fontWeight:700,color:T.text}}>Add Job</h1></div>
-      <div style={{...card,padding:'22px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-          {[{l:'Job Name *',k:'displayName',span:true},{l:'Property',k:'propertyLabel'},{l:'Address',k:'address'},{l:'Checkout Date *',k:'checkoutDate',t:'date'},{l:'Checkout Time',k:'checkoutTimeVal',t:'time'},{l:'Check-in Date',k:'checkinDate',t:'date'},{l:'Check-in Time',k:'checkinTimeVal',t:'time'}].map(f=><div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.l}</div><input value={(jf as any)[f.k]} onChange={e=>setJf({...jf,[f.k]:e.target.value})} type={(f as any).t||'text'} style={inp}/></div>)}
-        </div>
-        <div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div><textarea value={jf.notes} onChange={e=>setJf({...jf,notes:e.target.value})} rows={3} style={{...inp,resize:'vertical'}}/></div>
-        <button onClick={go} disabled={sub} style={{...btnP,width:'100%',marginTop:16,padding:'12px',opacity:sub?.6:1}}>{sub?'Creating…':'Create Job'}</button>
-      </div>
+    return pageWrap(560,<>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('jobs')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>Add Job</h1></div>
+      <div style={{...card,padding:'20px'}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        {[{l:'Job Name *',k:'displayName',span:true},{l:'Property',k:'propertyLabel'},{l:'Address',k:'address'},{l:'Checkout Date *',k:'checkoutDate',t:'date'},{l:'Time',k:'checkoutTimeVal',t:'time'},{l:'Check-in Date',k:'checkinDate',t:'date'},{l:'Check-in Time',k:'checkinTimeVal',t:'time'}].map(f=><div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}>{label(f.l)}<input value={(jf as any)[f.k]} onChange={e=>setJf({...jf,[f.k]:e.target.value})} type={(f as any).t||'text'} style={inp}/></div>)}
+      </div><div style={{marginTop:10}}>{label('Notes')}<textarea value={jf.notes} onChange={e=>setJf({...jf,notes:e.target.value})} rows={3} style={{...inp,resize:'vertical'}}/></div>
+      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',marginTop:14,padding:'11px',opacity:sub?.6:1}}>{sub?'Creating…':'Create Job'}</button></div>
     </>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // CONVERT QUOTE → JOB (with calendar preview, one-off vs recurring)
-  // ══════════════════════════════════════════════════════════════════════════
+  // CONVERT QUOTE → JOB (with calendar preview)
   function ConvertToJobPage(){
-    const quote=quotes.find(q=>q.id===activeQuoteId)
-    if(!quote) return <div style={{padding:60,color:T.dim,textAlign:'center'}}>Quote not found. <button onClick={()=>setPage('quotes')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Back</button></div>
-    const q=quote,cn=`${q.client.firstName} ${q.client.lastName}`.trim()
-
-    // Form state
+    const quote=quotes.find(q=>q.id===activeQuoteId);if(!quote) return <div style={{padding:48,color:T.dim,textAlign:'center'}}>Not found. <button onClick={()=>setPage('quotes')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Back</button></div>
+    const q=quote,cn=`${q.client.firstName} ${q.client.lastName}`
     const defaultDate=q.preferredDate1?new Date(q.preferredDate1).toISOString().split('T')[0]:''
-    const [jDate,setJDate]=useState(defaultDate)
-    const [jTime,setJTime]=useState('10:00')
-    const [jName,setJName]=useState(`${q.serviceType} — ${cn}`)
-    const [jAddr,setJAddr]=useState(q.address||[q.client.address,q.client.city,q.client.state].filter(Boolean).join(', '))
-    const [jNotes,setJNotes]=useState(q.additionalNotes||'')
+    const [jDate,setJDate]=useState(defaultDate),[jTime,setJTime]=useState('10:00'),[jName,setJName]=useState(`${q.serviceType} — ${cn}`),[jAddr,setJAddr]=useState(q.address||[q.client.address,q.client.city,q.client.state].filter(Boolean).join(', ')),[jNotes,setJNotes]=useState(q.additionalNotes||'')
     const [recurring,setRecurring]=useState(q.frequency!=='One-Time')
     const [freq,setFreq]=useState<'weekly'|'bi-weekly'|'every-3-weeks'|'monthly'>(q.frequency.toLowerCase().includes('bi')?'bi-weekly':q.frequency.toLowerCase().includes('week')?'weekly':q.frequency.toLowerCase().includes('3')?'every-3-weeks':'monthly')
-    const [endDate,setEndDate]=useState('')
-    const [submitting,setSubmitting]=useState(false)
-
-    // Mini calendar for the selected month
-    const calMonth=jDate?new Date(jDate+'T12:00:00'):new Date()
-    const yr=calMonth.getFullYear(),mo=calMonth.getMonth()
-    const first=new Date(yr,mo,1),dow=first.getDay(),last=new Date(yr,mo+1,0)
-    const cells:({type:'pad';n:number}|{type:'day';day:number;date:Date})[]=[]
-    for(let i=0;i<dow;i++) cells.push({type:'pad',n:new Date(yr,mo,-dow+i+1).getDate()})
-    for(let d=1;d<=last.getDate();d++) cells.push({type:'day',day:d,date:new Date(yr,mo,d)})
-    const trail=(dow+last.getDate())%7;if(trail) for(let i=1;i<=7-trail;i++) cells.push({type:'pad',n:i})
-
-    // Compute recurring dates for preview
-    const newJobDates:Date[]=[]
-    if(jDate){
-      const start=new Date(jDate+'T12:00:00')
-      if(!recurring){newJobDates.push(start)}else{
-        const end=endDate?new Date(endDate+'T23:59:59'):new Date(yr,mo+3,0)
-        const step=freq==='weekly'?7:freq==='bi-weekly'?14:freq==='every-3-weeks'?21:30
-        let cur=new Date(start)
-        while(cur<=end&&newJobDates.length<52){newJobDates.push(new Date(cur));if(freq==='monthly'){cur=new Date(cur.getFullYear(),cur.getMonth()+1,cur.getDate())}else{cur=new Date(cur.getTime()+step*86400000)}}
-      }
-    }
-
-    function existingOn(d:Date){return jobs.filter(j=>sameDay(new Date(j.checkoutTime),d))}
-    function newOn(d:Date){return newJobDates.filter(nd=>sameDay(nd,d))}
-    const today=new Date()
-
-    async function handleSubmit(){
-      if(!jDate){showToast('Select a date','err');return}
-      setSubmitting(true)
-      // Create jobs for each date
-      for(const d of newJobDates){
-        const checkout=new Date(d);const [h,m]=jTime.split(':');checkout.setHours(parseInt(h)||10,parseInt(m)||0,0,0)
-        await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-          platform:'manual',displayName:jName,propertyLabel:jAddr.split(',')[0]||cn,address:jAddr,
-          customerName:cn,checkoutTime:checkout.toISOString(),checkinTime:null,
-          sqft:q.sqftRange?parseInt(q.sqftRange.replace(/[^\d]/g,''))||null:null,beds:q.bedrooms,baths:q.bathrooms,
-          worth:q.totalPrice,notes:[`From quote #${q.id.slice(-6)}`,recurring?`Recurring: ${freq}`:'One-off',jNotes].filter(Boolean).join('\n'),
-          cleanerIds:'[]',duties:'[]',
-        })})
-      }
-      // Mark quote completed if booked
-      if(q.status==='booked') await fetch(`/api/quotes/${q.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'completed'})})
-      await load();showToast(`${newJobDates.length} job${newJobDates.length>1?'s':''} created`);setPage('jobs');setSubmitting(false)
-    }
-
-    return(
-      <div style={{maxWidth:1000,margin:'0 auto'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
-          <button onClick={()=>{setActiveQuoteId(q.id);setPage('quote-detail')}} style={{...btnS,padding:'7px 14px'}}>← Back to Quote</button>
-          <h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:20,fontWeight:700,color:T.text}}>Schedule Job from Quote</h1>
+    const [endDate,setEndDate]=useState(''),[submitting,setSubmitting]=useState(false)
+    const calM=jDate?new Date(jDate+'T12:00:00'):new Date();const cy=calM.getFullYear(),cm=calM.getMonth()
+    const cFirst=new Date(cy,cm,1),cDow=cFirst.getDay(),cLast=new Date(cy,cm+1,0),cToday=new Date()
+    const cCells:({t:'p';n:number}|{t:'d';day:number;date:Date})[]=[];for(let i=0;i<cDow;i++)cCells.push({t:'p',n:new Date(cy,cm,-cDow+i+1).getDate()});for(let d=1;d<=cLast.getDate();d++)cCells.push({t:'d',day:d,date:new Date(cy,cm,d)});const tr=(cDow+cLast.getDate())%7;if(tr)for(let i=1;i<=7-tr;i++)cCells.push({t:'p',n:i})
+    const newDates:Date[]=[];if(jDate){const start=new Date(jDate+'T12:00:00');if(!recurring)newDates.push(start);else{const end=endDate?new Date(endDate+'T23:59:59'):new Date(cy,cm+3,0);const step=freq==='weekly'?7:freq==='bi-weekly'?14:freq==='every-3-weeks'?21:30;let cur=new Date(start);while(cur<=end&&newDates.length<52){newDates.push(new Date(cur));if(freq==='monthly')cur=new Date(cur.getFullYear(),cur.getMonth()+1,cur.getDate());else cur=new Date(cur.getTime()+step*86400000)}}}
+    function exOn(d:Date){return jobs.filter(j=>sameDay(new Date(j.checkoutTime),d))}
+    function nwOn(d:Date){return newDates.filter(nd=>sameDay(nd,d))}
+    async function go(){if(!jDate){showToast('Select a date','err');return};setSubmitting(true);for(const d of newDates){const co=new Date(d);const [h,m]=jTime.split(':');co.setHours(parseInt(h)||10,parseInt(m)||0,0,0);await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({platform:'manual',displayName:jName,propertyLabel:jAddr.split(',')[0]||cn,address:jAddr,customerName:cn,checkoutTime:co.toISOString(),checkinTime:null,sqft:q.sqftRange?parseInt(q.sqftRange.replace(/[^\d]/g,''))||null:null,beds:q.bedrooms,baths:q.bathrooms,worth:q.totalPrice,notes:[`From quote #${q.id.slice(-6)}`,recurring?`Recurring: ${freq}`:'One-off',jNotes].filter(Boolean).join('\n'),cleanerIds:'[]',duties:'[]'})})};if(q.status==='booked')await fetch(`/api/quotes/${q.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'completed'})});await load();showToast(`${newDates.length} job${newDates.length>1?'s':''} created`);setPage('jobs');setSubmitting(false)}
+    return(<div style={{maxWidth:960,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>{setActiveQuoteId(q.id);setPage('quote-detail')}} style={{...btnS,padding:'7px 12px'}}>← Quote</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>Schedule Job</h1></div>
+      <div style={{...card,padding:'14px 18px',marginBottom:16,display:'flex',alignItems:'center',gap:12}}>{avatar(q.client.firstName.charAt(0),36)}<div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{cn}</div><div style={{fontSize:11,color:T.muted}}>{q.serviceType} · {q.frequency}</div></div><span style={{fontSize:16,fontWeight:700,color:T.accent}}>{fmtMoney(q.totalPrice)}</span></div>
+      <div style={{display:'grid',gridTemplateColumns:'380px 1fr',gap:14,alignItems:'start'}}>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{...card,padding:'18px'}}>{hdr('Schedule')}
+            <div style={{display:'flex',gap:6,marginBottom:14}}><button onClick={()=>setRecurring(false)} style={{flex:1,padding:'9px',borderRadius:8,border:`1px solid ${!recurring?T.accentBorder:T.border}`,background:!recurring?T.accentBg:'transparent',color:!recurring?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>One-Off</button><button onClick={()=>setRecurring(true)} style={{flex:1,padding:'9px',borderRadius:8,border:`1px solid ${recurring?T.accentBorder:T.border}`,background:recurring?T.accentBg:'transparent',color:recurring?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Recurring</button></div>
+            {recurring&&<div style={{marginBottom:12}}>{label('Frequency')}<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4}}>{([['weekly','Weekly'],['bi-weekly','Bi-Weekly'],['every-3-weeks','3 Weeks'],['monthly','Monthly']] as const).map(([k,l])=><button key={k} onClick={()=>setFreq(k)} style={{padding:'7px',borderRadius:6,border:`1px solid ${freq===k?T.accentBorder:T.border}`,background:freq===k?T.accentBg:'transparent',color:freq===k?T.accent:T.muted,fontSize:11,fontWeight:freq===k?600:400,cursor:'pointer'}}>{l}</button>)}</div></div>}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><div>{label('Start Date *')}<input type="date" value={jDate} onChange={e=>setJDate(e.target.value)} style={inp}/></div><div>{label('Time')}<input type="time" value={jTime} onChange={e=>setJTime(e.target.value)} style={inp}/></div></div>
+            {recurring&&<div style={{marginTop:8}}>{label('End Date')}<input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={inp}/></div>}
+            {newDates.length>0&&<div style={{marginTop:10,padding:'10px',background:T.accentBg,borderRadius:8,fontSize:12,fontWeight:500,color:T.accent}}>{recurring?`${newDates.length} jobs (${freq})`:`1 job on ${fmtDate(jDate)}`}</div>}
+          </div>
+          <div style={{...card,padding:'18px'}}>{hdr('Details')}{label('Name')}<input value={jName} onChange={e=>setJName(e.target.value)} style={{...inp,marginBottom:8}}/>{label('Address')}<input value={jAddr} onChange={e=>setJAddr(e.target.value)} style={{...inp,marginBottom:8}}/>{label('Notes')}<textarea value={jNotes} onChange={e=>setJNotes(e.target.value)} rows={3} style={{...inp,resize:'vertical'}}/></div>
+          <button onClick={go} disabled={submitting} style={{...btnP,width:'100%',padding:'12px',fontSize:14,opacity:submitting?.6:1}}>{submitting?'Creating…':`Create ${newDates.length>1?newDates.length+' Jobs':'Job'}`}</button>
         </div>
-
-        {/* Quote summary bar */}
-        <div style={{...card,padding:'16px 20px',marginBottom:20,display:'flex',alignItems:'center',gap:14}}>
-          {avatar(q.client.firstName.charAt(0).toUpperCase(),40)}
-          <div style={{flex:1}}>
-            <div style={{fontSize:14,fontWeight:600,color:T.text}}>{cn}</div>
-            <div style={{fontSize:11,color:T.dim}}>{q.serviceType} · {q.frequency} · {q.address}</div>
+        <div style={{...card,padding:'18px',position:'sticky',top:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><span style={{fontSize:14,fontWeight:700,color:T.text}}>{calM.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span></div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:1}}>{['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{textAlign:'center',padding:'4px',fontSize:10,fontWeight:600,color:T.muted}}>{d}</div>)}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:T.border,borderRadius:8,overflow:'hidden'}}>
+            {cCells.map((c,i)=>{if(c.t==='p')return <div key={`p${i}`} style={{background:T.card,padding:'5px',minHeight:48}}><span style={{fontSize:10,color:T.dim,opacity:.35}}>{c.n}</span></div>;const{day,date}=c,isT=sameDay(date,cToday),ex=exOn(date),nw=nwOn(date);return(
+              <div key={day} style={{background:nw.length>0?T.greenBg:isT?T.accentBg:T.card,padding:'4px',minHeight:48,borderTop:nw.length>0?`2px solid ${T.green}`:isT?`2px solid ${T.accent}`:'2px solid transparent'}}>
+                <div style={{fontSize:11,fontWeight:isT?700:500,color:nw.length>0?T.green:isT?T.accent:T.sub}}>{day}</div>
+                {ex.slice(0,2).map(j=><div key={j.id} style={{fontSize:8,color:T.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{j.displayName}</div>)}
+                {nw.length>0&&<div style={{fontSize:8,fontWeight:700,color:T.green,marginTop:1}}>★ New</div>}
+              </div>
+            )})}
           </div>
-          <div style={{fontSize:18,fontWeight:700,color:T.accent,letterSpacing:-0.3}}>{fmtMoney(q.totalPrice)}</div>
-        </div>
-
-        <div style={{display:'grid',gridTemplateColumns:'400px 1fr',gap:20,alignItems:'start'}}>
-          {/* Left: Job config */}
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            {/* One-off vs Recurring */}
-            <div style={{...card,padding:'20px'}}>
-              {hdr('Schedule Type')}
-              <div style={{display:'flex',gap:6,marginBottom:16}}>
-                <button onClick={()=>setRecurring(false)} style={{flex:1,padding:'10px',borderRadius:10,border:`1px solid ${!recurring?T.accentBorder:T.border}`,background:!recurring?T.accentBg:'transparent',color:!recurring?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>One-Off</button>
-                <button onClick={()=>setRecurring(true)} style={{flex:1,padding:'10px',borderRadius:10,border:`1px solid ${recurring?T.accentBorder:T.border}`,background:recurring?T.accentBg:'transparent',color:recurring?T.accent:T.muted,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Recurring</button>
-              </div>
-              {recurring&&<div style={{marginBottom:14}}>
-                <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Frequency</div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4}}>
-                  {([['weekly','Weekly'],['bi-weekly','Bi-Weekly'],['every-3-weeks','Every 3 Wks'],['monthly','Monthly']] as const).map(([k,l])=>(
-                    <button key={k} onClick={()=>setFreq(k)} style={{padding:'8px',borderRadius:8,border:`1px solid ${freq===k?T.accentBorder:T.border}`,background:freq===k?T.accentBg:'transparent',color:freq===k?T.accent:T.muted,fontSize:11,fontWeight:freq===k?600:400,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>{l}</button>
-                  ))}
-                </div>
-              </div>}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Start Date *</div><input type="date" value={jDate} onChange={e=>setJDate(e.target.value)} style={inp}/></div>
-                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Time</div><input type="time" value={jTime} onChange={e=>setJTime(e.target.value)} style={inp}/></div>
-              </div>
-              {recurring&&<div style={{marginTop:10}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>End Date (optional)</div><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={inp}/></div>}
-              {newJobDates.length>0&&<div style={{marginTop:12,padding:'10px 12px',background:T.accentBg,borderRadius:8,border:`1px solid ${T.accentBorder}`,fontSize:12,color:T.accent,fontWeight:500}}>
-                {recurring?`${newJobDates.length} jobs will be created (${freq})`:`1 job on ${fmtDate(jDate)}`}
-              </div>}
-            </div>
-
-            {/* Job details */}
-            <div style={{...card,padding:'20px'}}>
-              {hdr('Job Details')}
-              <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Job Name</div><input value={jName} onChange={e=>setJName(e.target.value)} style={inp}/></div>
-                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Address</div><input value={jAddr} onChange={e=>setJAddr(e.target.value)} style={inp}/></div>
-                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div><textarea value={jNotes} onChange={e=>setJNotes(e.target.value)} rows={3} style={{...inp,resize:'vertical'}} placeholder="Special instructions…"/></div>
-              </div>
-            </div>
-
-            <button onClick={handleSubmit} disabled={submitting} style={{...btnP,width:'100%',padding:'14px',fontSize:14,opacity:submitting?.6:1}}>{submitting?'Creating…':`Create ${newJobDates.length>1?newJobDates.length+' Jobs':'Job'}`}</button>
-          </div>
-
-          {/* Right: Calendar preview */}
-          <div style={{...card,padding:'20px',position:'sticky',top:20}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:700,color:T.text}}>{calMonth.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</div>
-              <div style={{display:'flex',gap:4}}>
-                <button onClick={()=>{const d=new Date(yr,mo-1,15);setJDate(d.toISOString().split('T')[0].slice(0,7)+'-'+jDate.split('-')[2]||'01')}} style={{width:26,height:26,borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12}}>‹</button>
-                <button onClick={()=>{const d=new Date(yr,mo+1,15);setJDate(d.toISOString().split('T')[0].slice(0,7)+'-'+(jDate.split('-')[2]||'01'))}} style={{width:26,height:26,borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.muted,cursor:'pointer',fontSize:12}}>›</button>
-              </div>
-            </div>
-            <div style={{display:'flex',gap:10,marginBottom:10}}>
-              {[{c:T.accent,l:'Existing'},{c:T.green,l:'New Job'}].map(x=><div key={x.l} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:T.muted}}><div style={{width:7,height:7,borderRadius:2,background:x.c}}/>{x.l}</div>)}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,marginBottom:1}}>
-              {['S','M','T','W','T','F','S'].map((d,i)=><div key={i} style={{textAlign:'center',padding:'5px 0',fontSize:9,fontWeight:600,color:T.dim,letterSpacing:0.5}}>{d}</div>)}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:T.border,borderRadius:10,overflow:'hidden'}}>
-              {cells.map((cell,idx)=>{
-                if(cell.type==='pad') return <div key={`p${idx}`} style={{background:dark?'rgba(255,255,255,0.008)':L.surf,padding:'6px 4px',minHeight:54}}><span style={{fontSize:10,color:T.dim,opacity:0.4}}>{cell.n}</span></div>
-                const{day,date}=cell,isT=sameDay(date,today),ex=existingOn(date),nw=newOn(date),hasNew=nw.length>0
-                return(
-                  <div key={day} style={{background:hasNew?(dark?'rgba(52,211,153,0.08)':'rgba(5,150,105,0.05)'):isT?T.accentBg:dark?D.surf:L.surf,padding:'4px',minHeight:54,borderTop:hasNew?`2px solid ${T.green}`:isT?`2px solid ${T.accent}`:'2px solid transparent'}}>
-                    <div style={{fontSize:10,fontWeight:600,color:hasNew?T.green:isT?T.accent:T.dim,marginBottom:2}}>{day}</div>
-                    {ex.slice(0,2).map(j=><div key={j.id} style={{padding:'1px 3px',borderRadius:3,background:T.accentBg,borderLeft:`2px solid ${T.accent}`,fontSize:8,fontWeight:600,color:T.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:1}}>{j.displayName}</div>)}
-                    {hasNew&&<div style={{padding:'1px 3px',borderRadius:3,background:T.greenBg,borderLeft:`2px solid ${T.green}`,fontSize:8,fontWeight:600,color:T.green,marginBottom:1}}>★ New</div>}
-                    {ex.length>2&&<div style={{fontSize:7,color:T.dim}}>+{ex.length-2}</div>}
-                  </div>
-                )
-              })}
-            </div>
-            {/* Next month preview for recurring */}
-            {recurring&&newJobDates.length>0&&(()=>{
-              const futureByMonth:Record<string,number>={}
-              newJobDates.forEach(d=>{const k=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});futureByMonth[k]=(futureByMonth[k]||0)+1})
-              return <div style={{marginTop:14}}>
-                <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:8}}>Schedule Summary</div>
-                {Object.entries(futureByMonth).map(([m,c])=><div key={m} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${T.border}`,fontSize:12}}>
-                  <span style={{color:T.text,fontWeight:500}}>{m}</span>
-                  <span style={{color:T.green,fontWeight:600}}>{c} job{c>1?'s':''}</span>
-                </div>)}
-              </div>
-            })()}
-          </div>
+          {recurring&&newDates.length>0&&(()=>{const byM:Record<string,number>={};newDates.forEach(d=>{const k=d.toLocaleDateString('en-US',{month:'short',year:'numeric'});byM[k]=(byM[k]||0)+1});return <div style={{marginTop:12}}>{hdr('Summary')}{Object.entries(byM).map(([m,c])=><div key={m} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid ${T.border}`,fontSize:12}}><span style={{color:T.sub}}>{m}</span><span style={{color:T.green,fontWeight:600}}>{c} job{c>1?'s':''}</span></div>)}</div>})()}
         </div>
       </div>
-    )
+    </div>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   // CLIENTS
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   function ClientsPage(){
     const [s,setS]=useState('');const fil=clients.filter(c=>!s||`${c.firstName} ${c.lastName} ${c.email}`.toLowerCase().includes(s.toLowerCase()))
-    return(<div>
-      {pageTitle('Clients',`${clients.length} client${clients.length!==1?'s':''}`,<button onClick={()=>setPage('create-client')} style={btnP}>Add Client</button>)}
-      <input style={{...inp,marginBottom:18,maxWidth:400}} placeholder="Search clients…" value={s} onChange={e=>setS(e.target.value)}/>
-      {fil.length===0?<div style={{textAlign:'center',padding:'60px 0',color:T.dim}}>No clients yet.</div>:(
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:10}}>
-          {fil.map(c=>{const cq=quotes.filter(q=>q.clientId===c.id);const spent=cq.filter(q=>q.status==='completed').reduce((a,q)=>a+q.totalPrice,0);return(
-            <div key={c.id} onClick={()=>openClient(c)} style={{...card,padding:'18px',cursor:'pointer'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover;(e.currentTarget as HTMLDivElement).style.background=T.cardHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border;(e.currentTarget as HTMLDivElement).style.background=T.card}}>
-              <div style={{display:'flex',alignItems:'center',gap:12}}>
-                {avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`.toUpperCase())}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{c.firstName} {c.lastName}</div>
-                  <div style={{fontSize:11,color:T.muted,marginTop:2}}>{c.email}</div>
-                </div>
-                <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{fontSize:12,color:T.dim}}>{cq.length} quote{cq.length!==1?'s':''}</div>
-                  {spent>0&&<div style={{fontSize:13,color:T.green,fontWeight:600}}>{fmtMoney(spent)}</div>}
-                </div>
-              </div>
-              {(cq.length>0||c.city)&&<div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>
-                {cq.slice(0,3).map(q=>{const sc=STATUS[q.status]||STATUS.pending;return<span key={q.id} style={{fontSize:9,fontWeight:600,padding:'2px 7px',borderRadius:6,color:sc.color,background:sc.bg}}>{sc.label}</span>})}
-                {[c.city,c.state].filter(Boolean).length>0&&<span style={{fontSize:10,color:T.dim,marginLeft:'auto'}}>{[c.city,c.state].filter(Boolean).join(', ')}</span>}
-              </div>}
+    return(<div>{pageTitle('Clients',`${clients.length} client${clients.length!==1?'s':''}`,<button onClick={()=>setPage('create-client')} style={btnP}>Add Client</button>)}
+      <input style={{...inp,marginBottom:16,maxWidth:360}} placeholder="Search…" value={s} onChange={e=>setS(e.target.value)}/>
+      {fil.length===0?<div style={{textAlign:'center',padding:'48px 0',color:T.dim}}>No clients.</div>:(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:10}}>
+          {fil.map(c=>{const cq=quotes.filter(q=>q.clientId===c.id),spent=cq.filter(q=>q.status==='completed').reduce((a,q)=>a+q.totalPrice,0);return(
+            <div key={c.id} onClick={()=>openClient(c)} style={{...card,padding:'16px',cursor:'pointer'}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>{avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`,40)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{c.firstName} {c.lastName}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{c.email}</div></div><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,color:T.dim}}>{cq.length} quote{cq.length!==1?'s':''}</div>{spent>0&&<div style={{fontSize:13,fontWeight:700,color:T.green}}>{fmtMoney(spent)}</div>}</div></div>
+              {cq.length>0&&<div style={{display:'flex',gap:4,marginTop:10,flexWrap:'wrap'}}>{cq.slice(0,3).map(q=>{const sc=STATUS[q.status]||STATUS.pending;return badge(sc.label,sc.color,sc.bg)})}</div>}
             </div>
           )})}
         </div>
       )}
     </div>)
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // CREATE CLIENT
-  // ══════════════════════════════════════════════════════════════════════════
   function CreateClientPage(){
     const [f,setF]=useState({firstName:'',lastName:'',email:'',phone:'',address:'',city:'',state:'AK',zip:'',notes:''});const [sub,setSub]=useState(false)
     async function go(){if(!f.email||!f.firstName){showToast('Name and email required','err');return};setSub(true);const r=await createClient(f);if(r?.id){setActiveClientId(r.id);setPage('client-detail')};setSub(false)}
-    return pageWrap(580,<>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('clients')} style={{...btnS,padding:'7px 14px'}}>← Back</button><h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:20,fontWeight:700,color:T.text}}>Add Client</h1></div>
-      <div style={{...card,padding:'22px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-          {[{l:'First Name *',k:'firstName'},{l:'Last Name',k:'lastName'},{l:'Email *',k:'email'},{l:'Phone',k:'phone'},{l:'Address',k:'address'},{l:'City',k:'city'},{l:'State',k:'state'},{l:'Zip',k:'zip'}].map(fi=><div key={fi.k}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{fi.l}</div><input value={(f as any)[fi.k]} onChange={e=>setF({...f,[fi.k]:e.target.value})} style={inp}/></div>)}
-        </div>
-        <div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div><textarea value={f.notes} onChange={e=>setF({...f,notes:e.target.value})} rows={3} style={{...inp,resize:'vertical'}} placeholder="Private notes…"/></div>
-        <button onClick={go} disabled={sub} style={{...btnP,width:'100%',marginTop:16,padding:'12px',opacity:sub?.6:1}}>{sub?'Creating…':'Create Client'}</button>
-      </div>
+    return pageWrap(560,<><div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('clients')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>Add Client</h1></div>
+      <div style={{...card,padding:'20px'}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>{[{l:'First Name *',k:'firstName'},{l:'Last Name',k:'lastName'},{l:'Email *',k:'email'},{l:'Phone',k:'phone'},{l:'Address',k:'address'},{l:'City',k:'city'},{l:'State',k:'state'},{l:'Zip',k:'zip'}].map(fi=><div key={fi.k}>{label(fi.l)}<input value={(f as any)[fi.k]} onChange={e=>setF({...f,[fi.k]:e.target.value})} style={inp}/></div>)}</div><div style={{marginTop:10}}>{label('Notes')}<textarea value={f.notes} onChange={e=>setF({...f,notes:e.target.value})} rows={3} style={{...inp,resize:'vertical'}}/></div><button onClick={go} disabled={sub} style={{...btnP,width:'100%',marginTop:14,padding:'11px',opacity:sub?.6:1}}>{sub?'Creating…':'Create Client'}</button></div>
     </>)
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // CLIENT DETAIL
-  // ══════════════════════════════════════════════════════════════════════════
   function ClientDetailPage(){
-    const client=clients.find(c=>c.id===activeClientId);if(!client) return <div style={{padding:60,color:T.dim,textAlign:'center'}}>Not found. <button onClick={()=>setPage('clients')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Back</button></div>
-    const c=client,cq=quotes.filter(q=>q.clientId===c.id),ci=invoices.filter(i=>false),spent=cq.filter(q=>q.status==='completed').reduce((a,q)=>a+q.totalPrice,0)+ci.filter(i=>i.status==='paid').reduce((a,i)=>a+i.amount,0)
-    return pageWrap(800,<>
-      <button onClick={()=>setPage('clients')} style={{...btnS,padding:'7px 14px',marginBottom:20}}>← Clients</button>
-      <div style={{...card,padding:'24px',marginBottom:16,display:'flex',alignItems:'center',gap:16}}>
-        {avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`.toUpperCase(),56)}
-        <div style={{flex:1}}>
-          <div style={{fontSize:22,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{c.firstName} {c.lastName}</div>
-          <div style={{fontSize:13,color:T.muted,marginTop:3}}>{c.email} · {c.phone||'No phone'}</div>
-          <div style={{fontSize:11,color:T.dim,marginTop:2}}>{[c.address,c.city,c.state,c.zip].filter(Boolean).join(', ')||'No address'} · Since {fmtDate(c.createdAt)}</div>
-        </div>
-        <div style={{textAlign:'right'}}><div style={{fontSize:10,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.dim}}>Total</div><div style={{fontSize:26,fontWeight:700,color:T.green,letterSpacing:-0.5}}>{fmtMoney(spent)}</div></div>
+    const client=clients.find(c=>c.id===activeClientId);if(!client)return <div style={{padding:48,color:T.dim,textAlign:'center'}}>Not found. <button onClick={()=>setPage('clients')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer'}}>Back</button></div>
+    const c=client,cq=quotes.filter(q=>q.clientId===c.id),spent=cq.filter(q=>q.status==='completed').reduce((a,q)=>a+q.totalPrice,0)
+    return pageWrap(760,<><button onClick={()=>setPage('clients')} style={{...btnS,padding:'7px 12px',marginBottom:16}}>← Clients</button>
+      <div style={{...card,padding:'22px',marginBottom:14,display:'flex',alignItems:'center',gap:14}}>{avatar(`${c.firstName.charAt(0)}${c.lastName.charAt(0)}`,52)}<div style={{flex:1}}><div style={{fontSize:20,fontWeight:700,color:T.text}}>{c.firstName} {c.lastName}</div><div style={{fontSize:13,color:T.muted,marginTop:3}}>{c.email} · {c.phone||'—'}</div><div style={{fontSize:12,color:T.dim,marginTop:1}}>Since {fmtDate(c.createdAt)}</div></div><div style={{textAlign:'right'}}><div style={{fontSize:11,fontWeight:500,color:T.dim}}>Total</div><div style={{fontSize:24,fontWeight:700,color:T.green}}>{fmtMoney(spent)}</div></div></div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:14}}>{[{l:'Quotes',v:cq.length,c:T.accent},{l:'Booked',v:cq.filter(q=>q.status==='booked').length,c:T.green},{l:'Done',v:cq.filter(q=>q.status==='completed').length,c:T.violet},{l:'Invoices',v:0,c:T.amber}].map(s=><div key={s.l} style={{...card,padding:'12px',textAlign:'center'}}><div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:10,fontWeight:500,color:T.dim,marginTop:2}}>{s.l}</div></div>)}</div>
+      <div style={{...card,padding:'20px',marginBottom:14}}>{hdr('Quote History')}
+        {cq.length===0?<div style={{color:T.dim,fontSize:12}}>No quotes.</div>:cq.map(q=>{const sc=STATUS[q.status]||STATUS.pending;return <div key={q.id} onClick={()=>openQuote(q)} style={{display:'flex',justifyContent:'space-between',padding:'10px 12px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:4,cursor:'pointer',transition:'border-color .12s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}><div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{q.serviceType} · {q.frequency}</div><div style={{fontSize:10,color:T.dim,marginTop:1}}>{fmtDate(q.createdAt)}</div></div><div style={{display:'flex',alignItems:'center',gap:6}}>{badge(sc.label,sc.color,sc.bg)}<span style={{fontSize:14,fontWeight:700,color:T.accent}}>{fmtMoney(q.totalPrice)}</span></div></div>})}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:16}}>
-        {[{l:'Quotes',v:cq.length,c:T.accent},{l:'Booked',v:cq.filter(q=>q.status==='booked').length,c:T.green},{l:'Completed',v:cq.filter(q=>q.status==='completed').length,c:T.violet},{l:'Invoices',v:ci.length,c:T.amber}].map(s=><div key={s.l} style={{...card,padding:'14px',textAlign:'center'}}><div style={{fontSize:20,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:10,fontWeight:600,letterSpacing:1,textTransform:'uppercase',color:T.dim,marginTop:3}}>{s.l}</div></div>)}
-      </div>
-      <div style={{...card,padding:'22px',marginBottom:16}}>{hdr('Quote History','📋')}
-        {cq.length===0?<div style={{color:T.dim,fontSize:13}}>No quotes.</div>:(
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>
-            {cq.map(q=>{const sc=STATUS[q.status]||STATUS.pending;return(
-              <div key={q.id} onClick={()=>openQuote(q)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px',background:T.surf,borderRadius:10,cursor:'pointer',border:`1px solid ${T.border}`,transition:'all .12s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
-                <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{q.serviceType} · {q.frequency}</div><div style={{fontSize:10,color:T.dim,marginTop:2}}>{fmtDate(q.createdAt)}</div></div>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>{badge(sc.label,sc.color,sc.bg)}<span style={{fontSize:14,fontWeight:700,color:T.accent,letterSpacing:-0.3}}>{fmtMoney(q.totalPrice)}</span></div>
-              </div>
-            )})}
-          </div>
-        )}
-      </div>
-      <div style={{display:'flex',gap:8}}><button onClick={()=>setPage('create-quote')} style={btnP}>New Quote for {c.firstName}</button><button onClick={()=>setPage('create-invoice')} style={{...btnP,background:`linear-gradient(135deg,${T.amber},#d97706)`}}>Invoice</button></div>
+      <div style={{display:'flex',gap:8}}><button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button><button onClick={()=>setPage('create-invoice')} style={{...btnP,background:T.amber}}>Invoice</button></div>
     </>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   // INVOICES
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   function InvoicesPage(){
     const [f,setF]=useState('all');const fi=invoices.filter(i=>f==='all'||i.status===f)
-    return(<div>
-      {pageTitle('Invoices',`${invoices.length} total · ${fmtMoney(invoices.filter(i=>i.status==='paid').reduce((s,i)=>s+i.amount,0))} collected`,<button onClick={()=>setPage('create-invoice')} style={btnP}>New Invoice</button>)}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:20}}>
-        {[{k:'all',l:'All',v:invoices.length,c:T.accent},{k:'draft',l:'Draft',v:invoices.filter(i=>i.status==='draft').length,c:'#94a3b8'},{k:'sent',l:'Sent',v:invoices.filter(i=>i.status==='sent').length,c:T.amber},{k:'paid',l:'Paid',v:invoices.filter(i=>i.status==='paid').length,c:T.green},{k:'overdue',l:'Overdue',v:invoices.filter(i=>i.status==='overdue').length,c:T.red}].map(s=>(
-          <div key={s.k} onClick={()=>setF(s.k)} style={{...card,padding:'14px',textAlign:'center',cursor:'pointer',borderColor:f===s.k?`${s.c}40`:T.border,transition:'all .15s'}}>
-            <div style={{fontSize:20,fontWeight:700,color:s.c,letterSpacing:-0.3}}>{s.v}</div>
-            <div style={{fontSize:10,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.dim,marginTop:3}}>{s.l}</div>
-          </div>
-        ))}
+    return(<div>{pageTitle('Invoices',`${invoices.length} total · ${fmtMoney(invoices.filter(i=>i.status==='paid').reduce((s,i)=>s+i.amount,0))} collected`,<button onClick={()=>setPage('create-invoice')} style={btnP}>New Invoice</button>)}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8,marginBottom:16}}>
+        {[{k:'all',l:'All',v:invoices.length,c:T.accent},{k:'draft',l:'Draft',v:invoices.filter(i=>i.status==='draft').length,c:'#94a3b8'},{k:'sent',l:'Sent',v:invoices.filter(i=>i.status==='sent').length,c:T.amber},{k:'paid',l:'Paid',v:invoices.filter(i=>i.status==='paid').length,c:T.green},{k:'overdue',l:'Overdue',v:invoices.filter(i=>i.status==='overdue').length,c:T.red}].map(s=><div key={s.k} onClick={()=>setF(s.k)} style={{...card,padding:'12px',textAlign:'center',cursor:'pointer',borderColor:f===s.k?`${s.c}40`:T.border}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}><div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:10,fontWeight:500,color:T.dim,marginTop:2}}>{s.l}</div></div>)}
       </div>
-      {fi.length===0?<div style={{textAlign:'center',padding:'60px 0',color:T.dim}}>No invoices yet.</div>:(
-        <div style={{display:'flex',flexDirection:'column',gap:6,maxWidth:900}}>
-          {fi.map(inv=>{const is=INV_STATUS[inv.status]||INV_STATUS.draft;const li=(()=>{try{return JSON.parse(inv.lineItems)}catch{return[]}})();return rowCard(()=>openInvoice(inv.id),<>
-            <div style={{width:40,height:40,borderRadius:10,background:is.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>💰</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:T.text}}>{inv.notes||`Invoice #${inv.id.slice(-6)}`}</div>
-              <div style={{fontSize:11,color:T.dim,marginTop:2}}>{li.length} item{li.length!==1?'s':''} · {fmtDate(inv.createdAt)}{inv.dueDate?` · Due ${fmtDate(inv.dueDate)}`:''}</div>
+      {fi.length===0?<div style={{textAlign:'center',padding:'48px 0',color:T.dim}}>No invoices.</div>:(
+        <div style={{display:'flex',flexDirection:'column',gap:6,maxWidth:860}}>
+          {fi.map(inv=>{const is=INV_STATUS[inv.status]||INV_STATUS.draft;const li=(()=>{try{return JSON.parse(inv.lineItems)}catch{return[]}})();return(
+            <div key={inv.id} onClick={()=>openInvoice(inv.id)} style={{...card,padding:'14px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:14}} onMouseEnter={e=>hover(e,true)} onMouseLeave={e=>hover(e,false)}>
+              <div style={{width:36,height:36,borderRadius:10,background:is.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>💰</div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:T.text}}>{inv.notes||`Invoice #${inv.id.slice(-6)}`}</div><div style={{fontSize:11,color:T.muted,marginTop:2}}>{li.length} item{li.length!==1?'s':''} · {fmtDate(inv.createdAt)}{inv.dueDate?` · Due ${fmtDate(inv.dueDate)}`:''}</div></div>
+              <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>{badge(is.label,is.color,is.bg)}<span style={{fontSize:16,fontWeight:700,color:inv.status==='paid'?T.green:T.accent}}>{fmtMoney(inv.amount)}</span></div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-              {badge(is.label,is.color,is.bg)}
-              <span style={{fontSize:17,fontWeight:700,color:inv.status==='paid'?T.green:T.accent,letterSpacing:-0.3}}>{fmtMoney(inv.amount)}</span>
-            </div>
-          </>)})}
+          )})}
         </div>
       )}
     </div>)
   }
-
-  // CREATE INVOICE
   function CreateInvoicePage(){
     const [sc,setSc]=useState('');const [items,setItems]=useState<{description:string;quantity:string;amount:string}[]>([{description:'Cleaning Service',quantity:'1',amount:'0'}]);const [dd,setDd]=useState('');const [notes,setNotes]=useState('');const [tax,setTax]=useState('0');const [sub,setSub]=useState(false)
-    const st=items.reduce((s,x)=>(parseFloat(x.amount)||0)*(parseFloat(x.quantity)||1)+s,0);const total=st+(parseFloat(tax)||0)
+    const st=items.reduce((s,x)=>(parseFloat(x.amount)||0)*(parseFloat(x.quantity)||1)+s,0),total=st+(parseFloat(tax)||0)
     async function go(){if(!sc){showToast('Select client','err');return};setSub(true);await createInvoice({toClientId:sc,amount:total,tax:parseFloat(tax)||0,lineItems:JSON.stringify(items.map(x=>({description:x.description,quantity:parseFloat(x.quantity)||1,amount:parseFloat(x.amount)||0}))),dueDate:dd||undefined,notes});setSub(false)}
-    return pageWrap(580,<>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 14px'}}>← Back</button><h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:20,fontWeight:700,color:T.text}}>New Invoice</h1></div>
-      <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Bill To','👤')}<select value={sc} onChange={e=>setSc(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select></div>
-      <div style={{...card,padding:'22px',marginBottom:14}}>{hdr('Items','💰')}
-        {items.map((x,i)=><div key={i} style={{display:'flex',gap:8,padding:'7px 0',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}><input value={x.description} onChange={e=>{const u=[...items];u[i]={...u[i],description:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Description"/><input value={x.quantity} onChange={e=>{const u=[...items];u[i]={...u[i],quantity:e.target.value};setItems(u)}} style={{...inp,width:50,textAlign:'center'}} placeholder="Qty" type="number"/><span style={{color:T.muted,fontWeight:600}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:80,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.red}25`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>)}
-        <button onClick={()=>setItems([...items,{description:'',quantity:'1',amount:'0'}])} style={{marginTop:10,padding:'8px',borderRadius:8,border:`1px dashed ${T.accentBorder}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add</button>
-        <div style={{marginTop:12,padding:'10px 0',borderTop:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Tax</div><div style={{display:'flex',alignItems:'center',gap:4}}><span style={{color:T.muted}}>$</span><input value={tax} onChange={e=>setTax(e.target.value)} style={{...inp,width:80}} type="number" step="0.01"/></div></div>
-          <div style={{textAlign:'right'}}><div style={{fontSize:10,color:T.dim,fontWeight:600}}>Total</div><div style={{fontSize:24,fontWeight:700,color:T.accent,letterSpacing:-0.5}}>{fmtMoney(total)}</div></div>
-        </div>
+    return pageWrap(560,<><div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}><button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 12px'}}>← Back</button><h1 style={{fontSize:20,fontWeight:700,color:T.text}}>New Invoice</h1></div>
+      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Bill To')}<select value={sc} onChange={e=>setSc(e.target.value)} style={{...inp,cursor:'pointer'}}><option value="">Select client…</option>{clients.map(c=><option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.email}</option>)}</select></div>
+      <div style={{...card,padding:'20px',marginBottom:12}}>{hdr('Items')}
+        {items.map((x,i)=><div key={i} style={{display:'flex',gap:6,padding:'6px 0',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}><input value={x.description} onChange={e=>{const u=[...items];u[i]={...u[i],description:e.target.value};setItems(u)}} style={{...inp,flex:1}} placeholder="Description"/><input value={x.quantity} onChange={e=>{const u=[...items];u[i]={...u[i],quantity:e.target.value};setItems(u)}} style={{...inp,width:44,textAlign:'center'}} placeholder="Qty" type="number"/><span style={{color:T.muted}}>$</span><input value={x.amount} onChange={e=>{const u=[...items];u[i]={...u[i],amount:e.target.value};setItems(u)}} style={{...inp,width:76,textAlign:'right'}} type="number" step="0.01"/>{items.length>1&&<button onClick={()=>setItems(items.filter((_,j)=>j!==i))} style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.red}30`,background:T.redBg,color:T.red,cursor:'pointer',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>}</div>)}
+        <button onClick={()=>setItems([...items,{description:'',quantity:'1',amount:'0'}])} style={{marginTop:8,padding:'7px',borderRadius:8,border:`1px dashed ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:500,width:'100%'}}>+ Add</button>
+        <div style={{marginTop:10,padding:'10px 0',borderTop:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}><div>{label('Tax')}<div style={{display:'flex',alignItems:'center',gap:4}}><span style={{color:T.muted}}>$</span><input value={tax} onChange={e=>setTax(e.target.value)} style={{...inp,width:72}} type="number" step="0.01"/></div></div><div style={{textAlign:'right'}}><div style={{fontSize:10,color:T.dim}}>Total</div><div style={{fontSize:22,fontWeight:700,color:T.accent}}>{fmtMoney(total)}</div></div></div>
       </div>
-      <div style={{...card,padding:'22px',marginBottom:14}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-          <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Due Date</div><input type="date" value={dd} onChange={e=>setDd(e.target.value)} style={inp}/></div>
-          <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div><input value={notes} onChange={e=>setNotes(e.target.value)} style={inp} placeholder="Notes…"/></div>
-        </div>
-      </div>
-      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'14px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Invoice'}</button>
+      <div style={{...card,padding:'20px',marginBottom:12}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><div>{label('Due Date')}<input type="date" value={dd} onChange={e=>setDd(e.target.value)} style={inp}/></div><div>{label('Notes')}<input value={notes} onChange={e=>setNotes(e.target.value)} style={inp} placeholder="Notes…"/></div></div></div>
+      <button onClick={go} disabled={sub} style={{...btnP,width:'100%',padding:'12px',fontSize:14,opacity:sub?.6:1}}>{sub?'Creating…':'Create Invoice'}</button>
     </>)
   }
-
-  // INVOICE DETAIL
   function InvoiceDetailPage(){
-    const inv=invoices.find(i=>i.id===activeInvoiceId);if(!inv)return <div style={{padding:60,color:T.dim,textAlign:'center'}}>Not found. <button onClick={()=>setPage('invoices')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Back</button></div>
+    const inv=invoices.find(i=>i.id===activeInvoiceId);if(!inv)return <div style={{padding:48,color:T.dim,textAlign:'center'}}>Not found. <button onClick={()=>setPage('invoices')} style={{color:T.accent,background:'none',border:'none',cursor:'pointer'}}>Back</button></div>
     const is=INV_STATUS[inv.status]||INV_STATUS.draft;const li=(()=>{try{return JSON.parse(inv.lineItems)}catch{return[]}})() as {description:string;quantity:number;amount:number}[];const [cd,setCd]=useState(false)
-    return pageWrap(660,<>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:20}}>
-        <button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 14px'}}>← Invoices</button>
-        <span style={{color:T.dim,fontSize:12}}>/</span>
-        <span style={{fontSize:13,fontWeight:600,color:T.text}}>#{inv.id.slice(-6)}</span>
-        {badge(is.label,is.color,is.bg)}
-      </div>
-      <div style={{...card,padding:'28px',marginBottom:16}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
-          <div><div style={{fontSize:22,fontWeight:700,color:T.text,letterSpacing:-0.3}}>Invoice #{inv.id.slice(-6)}</div><div style={{fontSize:12,color:T.muted,marginTop:4}}>Created {fmtDate(inv.createdAt)}{inv.dueDate?` · Due ${fmtDate(inv.dueDate)}`:''}</div>{inv.paidAt&&<div style={{fontSize:12,color:T.green,fontWeight:500,marginTop:2}}>Paid {fmtDate(inv.paidAt)}</div>}</div>
-          <div style={{fontSize:30,fontWeight:700,color:inv.status==='paid'?T.green:T.accent,letterSpacing:-0.5}}>{fmtMoney(inv.amount)}</div>
-        </div>
+    return pageWrap(620,<>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:20}}><button onClick={()=>setPage('invoices')} style={{...btnS,padding:'7px 12px'}}>← Invoices</button><span style={{fontSize:13,fontWeight:600,color:T.text}}>#{inv.id.slice(-6)}</span>{badge(is.label,is.color,is.bg)}</div>
+      <div style={{...card,padding:'26px',marginBottom:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:22}}><div><div style={{fontSize:20,fontWeight:700,color:T.text}}>Invoice #{inv.id.slice(-6)}</div><div style={{fontSize:12,color:T.muted,marginTop:4}}>Created {fmtDate(inv.createdAt)}{inv.dueDate?` · Due ${fmtDate(inv.dueDate)}`:''}</div>{inv.paidAt&&<div style={{fontSize:12,color:T.green,marginTop:2}}>Paid {fmtDate(inv.paidAt)}</div>}</div><div style={{fontSize:28,fontWeight:700,color:inv.status==='paid'?T.green:T.accent}}>{fmtMoney(inv.amount)}</div></div>
         <div style={{marginBottom:20}}>
-          <div style={{display:'flex',padding:'8px 0',borderBottom:`1.5px solid ${T.borderB}`,fontSize:10,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.dim}}><span style={{flex:1}}>Description</span><span style={{width:50,textAlign:'center'}}>Qty</span><span style={{width:80,textAlign:'right'}}>Amount</span></div>
-          {li.map((x:any,i:number)=><div key={i} style={{display:'flex',padding:'11px 0',borderBottom:`1px solid ${T.border}`}}><span style={{flex:1,fontSize:13,color:T.text}}>{x.description}</span><span style={{width:50,textAlign:'center',fontSize:13,color:T.muted}}>{x.quantity||1}</span><span style={{width:80,textAlign:'right',fontSize:13,color:T.text,fontWeight:600}}>{fmtMoney((x.amount||0)*(x.quantity||1))}</span></div>)}
-          {inv.tax>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:12,color:T.muted}}>Tax</span><span style={{fontSize:13,color:T.text,fontWeight:600}}>{fmtMoney(inv.tax)}</span></div>}
-          <div style={{display:'flex',justifyContent:'space-between',padding:'14px 0',borderTop:`1.5px solid ${T.borderB}`,marginTop:4}}><span style={{fontWeight:700,fontSize:14,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:22,color:inv.status==='paid'?T.green:T.accent,letterSpacing:-0.5}}>{fmtMoney(inv.amount)}</span></div>
+          <div style={{display:'flex',padding:'8px 0',borderBottom:`1.5px solid ${T.borderB}`,fontSize:11,fontWeight:600,color:T.dim}}><span style={{flex:1}}>Description</span><span style={{width:44,textAlign:'center'}}>Qty</span><span style={{width:72,textAlign:'right'}}>Amount</span></div>
+          {li.map((x:any,i:number)=><div key={i} style={{display:'flex',padding:'10px 0',borderBottom:`1px solid ${T.border}`}}><span style={{flex:1,fontSize:13,color:T.sub}}>{x.description}</span><span style={{width:44,textAlign:'center',fontSize:13,color:T.muted}}>{x.quantity||1}</span><span style={{width:72,textAlign:'right',fontSize:13,fontWeight:600,color:T.text}}>{fmtMoney((x.amount||0)*(x.quantity||1))}</span></div>)}
+          {inv.tax>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'8px 0'}}><span style={{fontSize:12,color:T.muted}}>Tax</span><span style={{fontSize:13,fontWeight:600,color:T.text}}>{fmtMoney(inv.tax)}</span></div>}
+          <div style={{display:'flex',justifyContent:'space-between',padding:'12px 0',borderTop:`2px solid ${T.borderB}`,marginTop:2}}><span style={{fontWeight:700,color:T.text}}>Total</span><span style={{fontWeight:700,fontSize:18,color:inv.status==='paid'?T.green:T.accent}}>{fmtMoney(inv.amount)}</span></div>
         </div>
-        {inv.notes&&<div style={{padding:'12px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,marginBottom:16}}>{inv.notes}</div>}
-        <div style={{display:'flex',flexDirection:'column',gap:7}}>
-          <div style={{display:'flex',gap:7}}>
-            <button onClick={()=>window.open(`/api/invoices/${inv.id}/pdf`,'_blank')} style={{flex:1,padding:'10px',borderRadius:10,background:T.accentBg,border:`1px solid ${T.accentBorder}`,color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>📄 View PDF</button>
-            {inv.status!=='paid'&&<button onClick={()=>createPaymentLink(inv.id)} style={{flex:1,padding:'10px',borderRadius:10,background:`linear-gradient(135deg,#635bff,#4f46e5)`,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>💳 Payment Link</button>}
-          </div>
+        {inv.notes&&<div style={{padding:'10px 14px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,marginBottom:14}}>{inv.notes}</div>}
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          <div style={{display:'flex',gap:6}}><button onClick={()=>window.open(`/api/invoices/${inv.id}/pdf`,'_blank')} style={{flex:1,padding:'9px',borderRadius:8,background:T.surf,border:`1px solid ${T.border}`,color:T.sub,fontSize:12,fontWeight:600,cursor:'pointer'}}>📄 PDF</button>{inv.status!=='paid'&&<button onClick={()=>createPaymentLink(inv.id)} style={{flex:1,padding:'9px',borderRadius:8,background:'#635bff',color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer'}}>💳 Payment Link</button>}</div>
           {inv.status==='draft'&&<button onClick={()=>updateInvoice(inv.id,{status:'sent'})} style={{...btnP,width:'100%',textAlign:'center'}}>Mark Sent</button>}
-          {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'paid',paidAt:new Date().toISOString()})} style={{width:'100%',padding:'12px',borderRadius:10,background:`linear-gradient(135deg,${T.green},#059669)`,color:dark?'#030d1c':'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>✓ Mark Paid</button>}
-          {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'overdue'})} style={{width:'100%',padding:'10px',borderRadius:10,background:T.redBg,border:`1px solid ${T.red}20`,color:T.red,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Mark Overdue</button>}
-          {!cd?<button onClick={()=>setCd(true)} style={{width:'100%',padding:'9px',borderRadius:8,border:`1px solid ${T.red}15`,background:'transparent',color:T.red,fontSize:11,fontWeight:500,cursor:'pointer',opacity:0.5,marginTop:8}}>Delete</button>:(
-            <div style={{background:T.redBg,borderRadius:10,padding:'14px',border:`1px solid ${T.red}20`,marginTop:8}}><div style={{fontSize:12,fontWeight:600,color:T.red,marginBottom:8}}>Delete?</div><div style={{display:'flex',gap:8}}><button onClick={()=>setCd(false)} style={{...btnS,flex:1}}>No</button><button onClick={()=>deleteInvoice(inv.id)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:T.red,color:'#fff',cursor:'pointer',fontSize:11,fontWeight:600}}>Yes</button></div></div>
+          {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'paid',paidAt:new Date().toISOString()})} style={{width:'100%',padding:'9px',borderRadius:8,background:T.green,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer'}}>✓ Mark Paid</button>}
+          {inv.status==='sent'&&<button onClick={()=>updateInvoice(inv.id,{status:'overdue'})} style={{width:'100%',padding:'8px',borderRadius:8,background:T.redBg,color:T.red,border:'none',fontSize:12,fontWeight:500,cursor:'pointer'}}>Mark Overdue</button>}
+          {!cd?<button onClick={()=>setCd(true)} style={{width:'100%',padding:'7px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.red,fontSize:11,cursor:'pointer',opacity:.5,marginTop:6}}>Delete</button>:(
+            <div style={{background:T.redBg,borderRadius:8,padding:'12px',marginTop:6}}><div style={{fontSize:12,fontWeight:600,color:T.red,marginBottom:6}}>Confirm?</div><div style={{display:'flex',gap:6}}><button onClick={()=>setCd(false)} style={{...btnS,flex:1,fontSize:11}}>No</button><button onClick={()=>deleteInvoice(inv.id)} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:T.red,color:'#fff',cursor:'pointer',fontSize:11,fontWeight:600}}>Delete</button></div></div>
           )}
         </div>
       </div>
     </>)
   }
-  // ══════════════════════════════════════════════════════════════════════════
-  // CALENDAR — fixed grid, elegant, readable
-  // ══════════════════════════════════════════════════════════════════════════
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CALENDAR — scrollable fixed grid, property colors, job popups
+  // ══════════════════════════════════════════════════════════════════════
   function CalendarPage(){
     const [calDate,setCalDate]=useState(new Date())
-    const yr=calDate.getFullYear(),mo=calDate.getMonth()
-    const first=new Date(yr,mo,1),dow=first.getDay(),last=new Date(yr,mo+1,0),today=new Date()
-    const cells:({type:'pad';n:number}|{type:'day';day:number;date:Date})[]=[]
-    for(let i=0;i<dow;i++){const d=new Date(yr,mo,-dow+i+1);cells.push({type:'pad',n:d.getDate()})}
-    for(let d=1;d<=last.getDate();d++) cells.push({type:'day',day:d,date:new Date(yr,mo,d)})
-    const trail=(dow+last.getDate())%7;if(trail) for(let i=1;i<=7-trail;i++) cells.push({type:'pad',n:i})
+    const yr=calDate.getFullYear(),mo=calDate.getMonth(),today=new Date()
+    const first=new Date(yr,mo,1),dow=first.getDay(),last=new Date(yr,mo+1,0)
+    // Build cells INCLUDING actual dates for pad days
+    type Cell={day:number;date:Date;isPad:boolean}
+    const cells:Cell[]=[]
+    for(let i=0;i<dow;i++){const d=new Date(yr,mo,-dow+i+1);cells.push({day:d.getDate(),date:d,isPad:true})}
+    for(let d=1;d<=last.getDate();d++) cells.push({day:d,date:new Date(yr,mo,d),isPad:false})
+    const trail=(dow+last.getDate())%7;if(trail) for(let i=1;i<=7-trail;i++){const d=new Date(yr,mo+1,i);cells.push({day:d.getDate(),date:d,isPad:true})}
     const rows=cells.length/7
     const allJobs=jobs.sort((a,b)=>new Date(a.checkoutTime).getTime()-new Date(b.checkoutTime).getTime())
     function jobsOn(d:Date){return allJobs.filter(j=>sameDay(new Date(j.checkoutTime),d))}
     function quotesOn(d:Date){return quotes.filter(q=>(q.preferredDate1&&sameDay(new Date(q.preferredDate1),d))||(q.preferredDate2&&sameDay(new Date(q.preferredDate2),d)))}
 
-    // Property colors/names/rules (persisted)
+    // Property state
     const [propColors,setPropColors]=useState<Record<string,string>>(()=>{if(typeof window==='undefined')return{};try{return JSON.parse(localStorage.getItem('cs_propColors')||'{}')}catch{return{}}})
     const [propNames,setPropNames]=useState<Record<string,string>>(()=>{if(typeof window==='undefined')return{};try{return JSON.parse(localStorage.getItem('cs_propNames')||'{}')}catch{return{}}})
     const [colorRules,setColorRules]=useState<{keyword:string;color:string}[]>(()=>{if(typeof window==='undefined')return[];try{return JSON.parse(localStorage.getItem('cs_colorRules')||'[]')}catch{return[]}})
-    function savePropColors(c:Record<string,string>){setPropColors(c);localStorage.setItem('cs_propColors',JSON.stringify(c))}
-    function savePropNames(n:Record<string,string>){setPropNames(n);localStorage.setItem('cs_propNames',JSON.stringify(n))}
-    function saveColorRules(r:{keyword:string;color:string}[]){setColorRules(r);localStorage.setItem('cs_colorRules',JSON.stringify(r))}
-
-    const PALETTE=['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#14b8a6','#6366f1','#84cc16','#e11d48']
-    function getJobColor(j:Job):string{
-      const label=j.propertyLabel||j.displayName
-      const lower=label.toLowerCase()
-      for(const r of colorRules){if(r.keyword&&lower.includes(r.keyword.toLowerCase()))return r.color}
-      if(propColors[label])return propColors[label]
-      if(j.platform==='hostaway')return'#f59e0b';if(j.platform==='jobber')return'#3b82f6';if(j.platform==='airbnb')return'#ef4444'
-      return'#6366f1'
-    }
-    function getDisplayName(j:Job):string{return propNames[j.propertyLabel||j.displayName]||j.displayName}
-
-    const [expandedDay,setExpandedDay]=useState<number|null>(null)
-    const [showSettings,setShowSettings]=useState(false)
-    const [newRule,setNewRule]=useState({keyword:'',color:'#f59e0b'})
-    const [renameKey,setRenameKey]=useState<string|null>(null)
-    const [renameTo,setRenameTo]=useState('')
+    function sPC(c:Record<string,string>){setPropColors(c);localStorage.setItem('cs_propColors',JSON.stringify(c))}
+    function sPN(n:Record<string,string>){setPropNames(n);localStorage.setItem('cs_propNames',JSON.stringify(n))}
+    function sCR(r:{keyword:string;color:string}[]){setColorRules(r);localStorage.setItem('cs_colorRules',JSON.stringify(r))}
+    const PAL=['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#14b8a6','#6366f1','#84cc16','#e11d48']
+    function jColor(j:Job):string{const lb=j.propertyLabel||j.displayName,lw=lb.toLowerCase();for(const r of colorRules){if(r.keyword&&lw.includes(r.keyword.toLowerCase()))return r.color};if(propColors[lb])return propColors[lb];if(j.platform==='hostaway')return'#f59e0b';if(j.platform==='jobber')return'#3b82f6';if(j.platform==='airbnb')return'#ef4444';return'#6366f1'}
+    function jName(j:Job):string{return propNames[j.propertyLabel||j.displayName]||j.displayName}
     const allProps=[...new Set(allJobs.map(j=>j.propertyLabel||j.displayName))].sort()
 
-    // Job detail popup
-    const [calJob,setCalJob]=useState<Job|null>(null)
-    const [editingCJ,setEditingCJ]=useState(false)
-    const [eCJ,setECJ]=useState({address:'',sqft:'',beds:'',baths:'',notes:'',customerName:'',worth:''})
-    const [savingCJ,setSavingCJ]=useState(false)
-    function openCalJob(j:Job,e:React.MouseEvent){e.stopPropagation();setCalJob(j);setEditingCJ(false);setECJ({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})}
-    async function saveCalJob(){if(!calJob)return;setSavingCJ(true);await fetch(`/api/jobs/${calJob.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:eCJ.address||null,sqft:eCJ.sqft?parseInt(eCJ.sqft):null,beds:eCJ.beds?parseInt(eCJ.beds):null,baths:eCJ.baths?parseFloat(eCJ.baths):null,notes:eCJ.notes||null,customerName:eCJ.customerName||null,worth:eCJ.worth?parseFloat(eCJ.worth):null})});await load();setSavingCJ(false);setEditingCJ(false);showToast('Job updated')}
+    const [expandDay,setExpandDay]=useState<string|null>(null)
+    const [showCfg,setShowCfg]=useState(false)
+    const [newRule,setNewRule]=useState({keyword:'',color:'#f59e0b'})
+    const [renKey,setRenKey]=useState<string|null>(null),[renVal,setRenVal]=useState('')
 
-    const MAX_VIS=3
-    const cellH=Math.max(90,Math.floor((typeof window!=='undefined'?window.innerHeight-290:580)/rows))
+    // Job popup
+    const [cj,setCj]=useState<Job|null>(null),[ejMode,setEjMode]=useState(false)
+    const [ej,setEj]=useState({address:'',sqft:'',beds:'',baths:'',notes:'',customerName:'',worth:''}),[sjSav,setSjSav]=useState(false)
+    function openCJ(j:Job,e:React.MouseEvent){e.stopPropagation();setCj(j);setEjMode(false);setEj({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})}
+    async function saveCJ(){if(!cj)return;setSjSav(true);await fetch(`/api/jobs/${cj.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:ej.address||null,sqft:ej.sqft?parseInt(ej.sqft):null,beds:ej.beds?parseInt(ej.beds):null,baths:ej.baths?parseFloat(ej.baths):null,notes:ej.notes||null,customerName:ej.customerName||null,worth:ej.worth?parseFloat(ej.worth):null})});await load();setSjSav(false);setEjMode(false);showToast('Updated')}
 
-    return(<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:'calc(100vh - 80px)'}}>
+    const MAX=3
+
+    return(<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:'calc(100vh - 72px)'}}>
       {/* Header */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-        <div>
-          <h1 style={{fontFamily:'"DM Sans",sans-serif',fontSize:24,fontWeight:700,color:T.text,letterSpacing:-0.4}}>{calDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h1>
-          <div style={{fontSize:12,color:T.muted,marginTop:4}}>{upcoming.length} upcoming · {allProps.length} properties</div>
-        </div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexShrink:0}}>
+        <div><h1 style={{fontSize:24,fontWeight:700,color:T.text,letterSpacing:-0.4}}>{calDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h1><div style={{fontSize:12,color:T.muted,marginTop:3}}>{upcoming.length} upcoming · {allProps.length} properties</div></div>
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          <button onClick={()=>setShowSettings(!showSettings)} style={{height:34,padding:'0 14px',borderRadius:9,border:`1px solid ${showSettings?T.accentBorder:T.border}`,background:showSettings?T.accentBg:'transparent',color:showSettings?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"DM Sans",sans-serif',transition:'all .15s'}}>⚙ Colors</button>
-          <div style={{width:1,height:20,background:T.border,margin:'0 4px'}}/>
-          <button onClick={()=>setCalDate(new Date(yr,mo-1,1))} style={{width:34,height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
-          <button onClick={()=>setCalDate(new Date())} style={{padding:'0 16px',height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>Today</button>
-          <button onClick={()=>setCalDate(new Date(yr,mo+1,1))} style={{width:34,height:34,borderRadius:9,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+          <button onClick={()=>setShowCfg(!showCfg)} style={{height:34,padding:'0 14px',borderRadius:8,border:`1px solid ${showCfg?T.accentBorder:T.border}`,background:showCfg?T.accentBg:'transparent',color:showCfg?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"Inter",sans-serif'}}>⚙ Colors</button>
+          <div style={{width:1,height:18,background:T.border}}/>
+          <button onClick={()=>setCalDate(new Date(yr,mo-1,1))} style={{width:34,height:34,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+          <button onClick={()=>setCalDate(new Date())} style={{padding:'0 16px',height:34,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.accent,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"Inter",sans-serif'}}>Today</button>
+          <button onClick={()=>setCalDate(new Date(yr,mo+1,1))} style={{width:34,height:34,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.sub,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
         </div>
       </div>
 
-      {/* Settings Panel */}
-      {showSettings&&(
-        <div style={{...card,padding:'22px',marginBottom:16}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Property Colors & Names</div>
-            <button onClick={()=>setShowSettings(false)} style={{width:26,height:26,borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:12}}>×</button>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:8,marginBottom:18,maxHeight:220,overflowY:'auto'}}>
-            {allProps.map(p=>{const currentColor=propColors[p]||(colorRules.find(r=>p.toLowerCase().includes(r.keyword.toLowerCase()))?.color)||'#6366f1';const isRenaming=renameKey===p;return(
-              <div key={p} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`}}>
-                <div style={{width:22,height:22,borderRadius:6,background:currentColor,cursor:'pointer',border:'2px solid rgba(255,255,255,0.08)',flexShrink:0,transition:'transform .1s'}} onClick={()=>{const idx=PALETTE.indexOf(currentColor);savePropColors({...propColors,[p]:PALETTE[(idx+1)%PALETTE.length]})}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.transform='scale(1.15)'}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.transform='scale(1)'}} title="Click to change color"/>
-                {isRenaming?(
-                  <div style={{flex:1,display:'flex',gap:4}}>
-                    <input value={renameTo} onChange={e=>setRenameTo(e.target.value)} style={{...inp,padding:'5px 10px',fontSize:12,flex:1}} autoFocus onKeyDown={e=>{if(e.key==='Enter'){savePropNames({...propNames,[p]:renameTo});setRenameKey(null)}if(e.key==='Escape')setRenameKey(null)}}/>
-                    <button onClick={()=>{savePropNames({...propNames,[p]:renameTo});setRenameKey(null)}} style={{padding:'5px 10px',borderRadius:6,border:'none',background:T.accent,color:dark?'#030d1c':'#fff',cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button>
-                  </div>
-                ):(
-                  <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>{setRenameKey(p);setRenameTo(propNames[p]||p)}}>
-                    <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{propNames[p]||p}</div>
-                    {propNames[p]&&propNames[p]!==p&&<div style={{fontSize:9,color:T.dim,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p}</div>}
-                  </div>
-                )}
-              </div>
-            )})}
-            {allProps.length===0&&<div style={{fontSize:12,color:T.dim,padding:12}}>No properties yet.</div>}
-          </div>
-          {/* Rules */}
-          <div style={{fontSize:11,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.muted,marginBottom:10}}>Color Rules</div>
-          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:12}}>
-            {colorRules.map((r,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`}}>
-                <div style={{width:16,height:16,borderRadius:4,background:r.color,flexShrink:0}}/>
-                <span style={{fontSize:12,color:T.text,flex:1}}>Contains "<span style={{fontWeight:600}}>{r.keyword}</span>"</span>
-                <button onClick={()=>saveColorRules(colorRules.filter((_,j)=>j!==i))} style={{fontSize:11,color:T.dim,background:'none',border:'none',cursor:'pointer',padding:'2px 4px'}}>×</button>
-              </div>
-            ))}
-          </div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <input value={newRule.keyword} onChange={e=>setNewRule({...newRule,keyword:e.target.value})} placeholder='Keyword, e.g. "Mike"' style={{...inp,flex:1,padding:'8px 12px',fontSize:12}}/>
-            <div style={{display:'flex',gap:3,flexShrink:0}}>
-              {PALETTE.slice(0,8).map(c=><div key={c} onClick={()=>setNewRule({...newRule,color:c})} style={{width:20,height:20,borderRadius:5,background:c,cursor:'pointer',border:newRule.color===c?'2px solid #fff':`2px solid transparent`,transition:'border .1s'}}/>)}
+      {/* Config Panel */}
+      {showCfg&&<div style={{...card,padding:'20px',marginBottom:14,flexShrink:0}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}><span style={{fontSize:15,fontWeight:700,color:T.text}}>Property Colors</span><button onClick={()=>setShowCfg(false)} style={{width:24,height:24,borderRadius:6,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:11}}>×</button></div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:6,marginBottom:14,maxHeight:180,overflowY:'auto'}}>
+          {allProps.map(p=>{const cc=propColors[p]||(colorRules.find(r=>p.toLowerCase().includes(r.keyword.toLowerCase()))?.color)||'#6366f1';const isR=renKey===p;return(
+            <div key={p} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`}}>
+              <div style={{width:20,height:20,borderRadius:5,background:cc,cursor:'pointer',border:'2px solid rgba(255,255,255,0.1)',flexShrink:0}} onClick={()=>{const i=PAL.indexOf(cc);sPC({...propColors,[p]:PAL[(i+1)%PAL.length]})}} title="Change color"/>
+              {isR?<div style={{flex:1,display:'flex',gap:3}}><input value={renVal} onChange={e=>setRenVal(e.target.value)} style={{...inp,padding:'4px 8px',fontSize:12,flex:1}} autoFocus onKeyDown={e=>{if(e.key==='Enter'){sPN({...propNames,[p]:renVal});setRenKey(null)}if(e.key==='Escape')setRenKey(null)}}/><button onClick={()=>{sPN({...propNames,[p]:renVal});setRenKey(null)}} style={{padding:'4px 8px',borderRadius:5,border:'none',background:T.accent,color:'#fff',cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button></div>:(
+                <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>{setRenKey(p);setRenVal(propNames[p]||p)}}><div style={{fontSize:12,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{propNames[p]||p}</div>{propNames[p]&&propNames[p]!==p&&<div style={{fontSize:9,color:T.dim,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p}</div>}</div>
+              )}
             </div>
-            <button onClick={()=>{if(newRule.keyword.trim()){saveColorRules([...colorRules,{keyword:newRule.keyword.trim(),color:newRule.color}]);setNewRule({keyword:'',color:'#f59e0b'})}}} style={{padding:'8px 16px',borderRadius:8,border:'none',background:T.accent,color:dark?'#030d1c':'#fff',cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0}}>Add</button>
-          </div>
+          )})}
         </div>
-      )}
+        <div style={{fontSize:11,fontWeight:600,color:T.dim,marginBottom:8}}>Rules</div>
+        {colorRules.map((r,i)=><div key={i} style={{display:'inline-flex',alignItems:'center',gap:4,padding:'4px 8px',background:T.surf,borderRadius:6,border:`1px solid ${T.border}`,marginRight:4,marginBottom:4}}><div style={{width:12,height:12,borderRadius:3,background:r.color}}/><span style={{fontSize:11,color:T.text}}>"{r.keyword}"</span><button onClick={()=>sCR(colorRules.filter((_,j)=>j!==i))} style={{fontSize:10,color:T.dim,background:'none',border:'none',cursor:'pointer',marginLeft:2}}>×</button></div>)}
+        <div style={{display:'flex',gap:6,marginTop:8}}><input value={newRule.keyword} onChange={e=>setNewRule({...newRule,keyword:e.target.value})} placeholder='e.g. "Mike"' style={{...inp,flex:1,padding:'7px 10px',fontSize:12}}/><div style={{display:'flex',gap:2,alignItems:'center'}}>{PAL.slice(0,6).map(c=><div key={c} onClick={()=>setNewRule({...newRule,color:c})} style={{width:18,height:18,borderRadius:4,background:c,cursor:'pointer',border:newRule.color===c?'2px solid #fff':'2px solid transparent'}}/>)}</div><button onClick={()=>{if(newRule.keyword.trim()){sCR([...colorRules,{keyword:newRule.keyword.trim(),color:newRule.color}]);setNewRule({keyword:'',color:'#f59e0b'})}}} style={{padding:'7px 14px',borderRadius:6,border:'none',background:T.accent,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600}}>Add</button></div>
+      </div>}
 
-      {/* Calendar Table */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',border:`1px solid ${T.border}`,borderRadius:16,overflow:'hidden',background:dark?'rgba(3,10,28,0.5)':'#fff'}}>
-        {/* Day headers - INSIDE the table border */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',borderBottom:`1px solid ${T.border}`}}>
-          {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d=>(
-            <div key={d} style={{padding:'10px 0',textAlign:'center',fontSize:11,fontWeight:600,letterSpacing:0.8,color:T.muted,background:dark?'rgba(255,255,255,0.015)':'rgba(0,0,0,0.02)'}}>{d}</div>
-          ))}
+      {/* Calendar grid — scrollable */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',border:`1px solid ${T.border}`,borderRadius:12,overflow:'hidden',boxShadow:T.shadow,minHeight:0}}>
+        {/* Day headers */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{padding:'10px 0',textAlign:'center',fontSize:12,fontWeight:600,color:T.muted,background:dark?'rgba(255,255,255,0.015)':'rgba(0,0,0,0.015)'}}>{d}</div>)}
         </div>
-
-        {/* Grid */}
-        <div style={{flex:1,display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridTemplateRows:`repeat(${rows},minmax(${cellH}px,1fr))`}}>
+        {/* Scrollable rows */}
+        <div style={{flex:1,overflowY:'auto',display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridTemplateRows:`repeat(${rows},minmax(100px,1fr))`}}>
           {cells.map((cell,idx)=>{
-            const isLast=idx===cells.length-1
-            const colIdx=idx%7
-            const rowIdx=Math.floor(idx/7)
-            const borderR=colIdx<6?`1px solid ${T.border}`:'none'
-            const borderB=rowIdx<rows-1?`1px solid ${T.border}`:'none'
-
-            if(cell.type==='pad'){
-              return <div key={`p${idx}`} style={{borderRight:borderR,borderBottom:borderB,padding:'8px',background:dark?'rgba(255,255,255,0.008)':'rgba(0,0,0,0.01)'}}>
-                <span style={{fontSize:13,color:T.dim,opacity:0.35,fontWeight:500}}>{cell.n}</span>
-              </div>
-            }
-
-            const{day,date}=cell,isT=sameDay(date,today)
-            const dj=jobsOn(date),dq=quotesOn(date)
+            const col=idx%7,row=Math.floor(idx/7)
+            const bR=col<6?`1px solid ${T.border}`:'none'
+            const bB=row<rows-1?`1px solid ${T.border}`:'none'
+            const isT=sameDay(cell.date,today)
+            const dj=jobsOn(cell.date),dq=quotesOn(cell.date)
             const allEv=[...dj.map(j=>({t:'j' as const,j})),...dq.map(q=>({t:'q' as const,q}))]
-            const isExp=expandedDay===day
-            const vis=isExp?allEv:allEv.slice(0,MAX_VIS)
-            const overflow=allEv.length-MAX_VIS
+            const dk=cell.date.toISOString().split('T')[0]
+            const isExp=expandDay===dk
+            const vis=isExp?allEv:allEv.slice(0,MAX)
+            const over=allEv.length-MAX
+            const padOpacity=cell.isPad?0.4:1
 
             return(
-              <div key={day} style={{borderRight:borderR,borderBottom:borderB,padding:'6px 7px',display:'flex',flexDirection:'column',background:isT?(dark?'rgba(93,216,224,0.04)':'rgba(8,145,178,0.03)'):'transparent',position:'relative',overflow:isExp?'visible':'hidden'}}>
-                {/* Day number */}
-                <div style={{marginBottom:5,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <span style={{fontSize:isT?14:13,fontWeight:isT?700:500,color:isT?T.accent:T.sub,width:26,height:26,display:'inline-flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?(dark?'rgba(93,216,224,0.12)':'rgba(8,145,178,0.1)'):'transparent'}}>{day}</span>
-                  {allEv.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:500}}>{allEv.length}</span>}
+              <div key={idx} style={{borderRight:bR,borderBottom:bB,padding:'6px 8px',display:'flex',flexDirection:'column',background:isT&&!cell.isPad?(dark?'rgba(56,189,248,0.04)':'rgba(2,132,199,0.03)'):'transparent',opacity:padOpacity,minHeight:100}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                  <span style={{fontSize:14,fontWeight:isT?700:cell.isPad?400:500,color:isT?T.accent:cell.isPad?T.dim:T.sub,width:28,height:28,display:'inline-flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT&&!cell.isPad?(dark?'rgba(56,189,248,0.1)':'rgba(2,132,199,0.08)'):'transparent'}}>{cell.day}</span>
+                  {allEv.length>0&&!cell.isPad&&<span style={{fontSize:10,color:T.dim}}>{allEv.length}</span>}
                 </div>
-
-                {/* Events */}
-                <div style={{display:'flex',flexDirection:'column',gap:3,flex:1}}>
+                <div style={{display:'flex',flexDirection:'column',gap:2,flex:1}}>
                   {vis.map((ev,vi)=>{
-                    if(ev.t==='j'){
-                      const j=ev.j,c=getJobColor(j)
-                      return <div key={j.id} onClick={e=>openCalJob(j,e)} style={{padding:'3px 7px',borderRadius:5,background:`${c}15`,borderLeft:`3px solid ${c}`,cursor:'pointer',display:'flex',alignItems:'center',gap:4,minWidth:0,transition:'background .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}25`}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}15`}}>
-                        <span style={{fontSize:10,fontWeight:600,color:c,opacity:0.8,flexShrink:0}}>{fmtTime(j.checkoutTime)}</span>
-                        <span style={{fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{getDisplayName(j)}</span>
+                    if(ev.t==='j'){const j=ev.j,c=jColor(j);return(
+                      <div key={j.id} onClick={e=>openCJ(j,e)} style={{padding:'3px 6px',borderRadius:5,background:`${c}18`,borderLeft:`3px solid ${c}`,cursor:'pointer',display:'flex',alignItems:'center',gap:5,overflow:'hidden',transition:'background .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}28`}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}18`}}>
+                        <span style={{fontSize:10,fontWeight:600,color:c,opacity:.7,flexShrink:0}}>{fmtTime(j.checkoutTime)}</span>
+                        <span style={{fontSize:11,fontWeight:600,color:cell.isPad?T.dim:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{jName(j)}</span>
                       </div>
-                    }
-                    if(ev.t==='q'){
-                      const q=ev.q
-                      return <div key={q.id} onClick={e=>{e.stopPropagation();openQuote(q)}} style={{padding:'3px 7px',borderRadius:5,background:T.greenBg,borderLeft:`3px solid ${T.green}`,cursor:'pointer',display:'flex',alignItems:'center',gap:4,minWidth:0}}>
-                        <span style={{fontSize:11,fontWeight:600,color:T.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{q.client.firstName} {q.client.lastName.charAt(0)}.</span>
+                    )}
+                    if(ev.t==='q'){const q=ev.q;return(
+                      <div key={q.id} onClick={e=>{e.stopPropagation();openQuote(q)}} style={{padding:'3px 6px',borderRadius:5,background:T.greenBg,borderLeft:`3px solid ${T.green}`,cursor:'pointer',overflow:'hidden'}}>
+                        <span style={{fontSize:11,fontWeight:600,color:T.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.client.firstName} {q.client.lastName.charAt(0)}.</span>
                       </div>
-                    }
+                    )}
                     return null
                   })}
-
-                  {!isExp&&overflow>0&&(
-                    <button onClick={e=>{e.stopPropagation();setExpandedDay(day)}} style={{fontSize:10,color:T.accent,fontWeight:600,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px',fontFamily:'"DM Sans",sans-serif'}}>+{overflow} more</button>
-                  )}
-                  {isExp&&allEv.length>MAX_VIS&&(
-                    <button onClick={e=>{e.stopPropagation();setExpandedDay(null)}} style={{fontSize:10,color:T.dim,fontWeight:500,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px',fontFamily:'"DM Sans",sans-serif'}}>less</button>
-                  )}
+                  {!isExp&&over>0&&<button onClick={e=>{e.stopPropagation();setExpandDay(dk)}} style={{fontSize:10,color:T.accent,fontWeight:600,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px'}}>+{over} more</button>}
+                  {isExp&&allEv.length>MAX&&<button onClick={e=>{e.stopPropagation();setExpandDay(null)}} style={{fontSize:10,color:T.dim,fontWeight:500,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px'}}>less</button>}
                 </div>
               </div>
             )
@@ -1247,334 +781,169 @@ export default function CleanerDashboard() {
       </div>
 
       {/* Job Detail Popup */}
-      {calJob&&(()=>{
-        const j=calJob,c=getJobColor(j)
-        let duties:{title?:string;description?:string}[]=[];try{duties=JSON.parse(j.duties||'[]')}catch{}
-        const jInp=editingCJ?{...inp,padding:'8px 11px',fontSize:12,background:dark?'rgba(255,255,255,0.04)':'#f5f9fd',border:`1px solid ${T.borderB}`} as React.CSSProperties:{} as React.CSSProperties
-        return(
-          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',backdropFilter:'blur(10px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setCalJob(null)}>
-            <div style={{background:dark?'rgba(4,14,32,0.98)':'#ffffff',border:`1px solid ${dark?'rgba(148,210,225,0.15)':'rgba(14,100,150,0.15)'}`,borderRadius:20,width:'100%',maxWidth:540,boxShadow:dark?'0 40px 100px rgba(0,0,0,0.6)':'0 30px 80px rgba(0,0,0,0.12)',maxHeight:'88vh',overflowY:'auto',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
-              {/* Color bar */}
-              <div style={{height:4,background:c,borderRadius:'20px 20px 0 0',flexShrink:0}}/>
-              <div style={{padding:'24px 28px'}}>
-                {/* Header */}
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:20,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{getDisplayName(j)}</div>
-                    <div style={{fontSize:13,color:T.muted,marginTop:4}}>{j.propertyLabel}</div>
-                    <div style={{display:'flex',gap:6,marginTop:10}}>
-                      {badge(j.platform,c,`${c}15`)}
-                      {sameDay(new Date(j.checkoutTime),today)&&badge('Today',T.accent,T.accentBg)}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:6,flexShrink:0}}>
-                    <button onClick={()=>{if(editingCJ){saveCalJob()}else{setEditingCJ(true)}}} style={{padding:'7px 16px',borderRadius:8,border:`1px solid ${editingCJ?T.accentBorder:T.border}`,background:editingCJ?T.accentBg:'transparent',color:editingCJ?T.accent:T.muted,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>{savingCJ?'Saving…':editingCJ?'Save':'Edit'}</button>
-                    <button onClick={()=>setCalJob(null)} style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
-                  </div>
-                </div>
-
-                {/* Schedule */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20,padding:'16px',background:T.surf,borderRadius:12,border:`1px solid ${T.border}`}}>
-                  <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Checkout</div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{fmtDate(j.checkoutTime)}</div><div style={{fontSize:12,color:T.muted,marginTop:1}}>{fmtTime(j.checkoutTime)}</div></div>
-                  <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Check-in</div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{j.checkinTime?fmtDate(j.checkinTime):'—'}</div>{j.checkinTime&&<div style={{fontSize:12,color:T.muted,marginTop:1}}>{fmtTime(j.checkinTime)}</div>}</div>
-                </div>
-
-                {/* Property Details */}
-                <div style={{fontSize:11,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.muted,marginBottom:12}}>Property Details</div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:20}}>
-                  {[{l:'Address',k:'address',span:true},{l:'Guest',k:'customerName'},{l:'Worth',k:'worth'},{l:'Sq Ft',k:'sqft'},{l:'Beds',k:'beds'},{l:'Baths',k:'baths'}].map(f=>(
-                    <div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}>
-                      <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>{f.l}</div>
-                      {editingCJ?<input value={(eCJ as any)[f.k]||''} onChange={e=>setECJ({...eCJ,[f.k]:e.target.value})} style={jInp}/>:<div style={{fontSize:13,fontWeight:500,color:T.text}}>{f.k==='worth'&&j.worth?fmtMoney(j.worth):(j as any)[f.k]||'—'}</div>}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Duties */}
-                {duties.length>0&&<div style={{marginBottom:20}}>
-                  <div style={{fontSize:11,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.muted,marginBottom:10}}>Job Duties</div>
-                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                    {duties.map((d,i)=>(
-                      <div key={i} style={{padding:'10px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`}}>
-                        <div style={{fontSize:13,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>
-                        {d.description&&<div style={{fontSize:12,color:T.muted,marginTop:3,lineHeight:1.5}}>{d.description}</div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>}
-
-                {/* Notes */}
-                {editingCJ?(
-                  <div style={{marginBottom:16}}>
-                    <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Notes</div>
-                    <textarea value={eCJ.notes} onChange={e=>setECJ({...eCJ,notes:e.target.value})} rows={3} style={{...jInp,width:'100%',resize:'vertical'}}/>
-                  </div>
-                ):j.notes&&<div style={{padding:'12px 16px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:13,color:T.muted,lineHeight:1.6,marginBottom:16}}>{j.notes}</div>}
-
-                {editingCJ&&<div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>setEditingCJ(false)} style={{...btnS,flex:1}}>Cancel</button>
-                  <button onClick={saveCalJob} disabled={savingCJ} style={{...btnP,flex:1,textAlign:'center',opacity:savingCJ?.6:1}}>{savingCJ?'Saving…':'Save Changes'}</button>
-                </div>}
+      {cj&&(()=>{const j=cj,c=jColor(j);let duties:{title?:string;description?:string}[]=[];try{duties=JSON.parse(j.duties||'[]')}catch{};const jI=ejMode?{...inp,padding:'8px 10px',fontSize:12} as React.CSSProperties:{} as React.CSSProperties;return(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(10px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setCj(null)}>
+          <div style={{background:dark?'rgba(15,17,23,0.98)':'#fff',border:`1px solid ${T.borderB}`,borderRadius:16,width:'100%',maxWidth:520,boxShadow:T.shadowLg,maxHeight:'88vh',overflowY:'auto',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
+            <div style={{height:4,background:c,borderRadius:'16px 16px 0 0',flexShrink:0}}/>
+            <div style={{padding:'22px 26px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+                <div style={{flex:1}}><div style={{fontSize:18,fontWeight:700,color:T.text}}>{jName(j)}</div><div style={{fontSize:12,color:T.muted,marginTop:3}}>{j.propertyLabel}</div><div style={{display:'flex',gap:6,marginTop:8}}>{badge(j.platform,c,`${c}18`)}{sameDay(new Date(j.checkoutTime),today)&&badge('Today',T.accent,T.accentBg)}</div></div>
+                <div style={{display:'flex',gap:6}}><button onClick={()=>{if(ejMode){saveCJ()}else setEjMode(true)}} style={{padding:'6px 14px',borderRadius:8,border:`1px solid ${ejMode?T.accentBorder:T.border}`,background:ejMode?T.accentBg:'transparent',color:ejMode?T.accent:T.muted,cursor:'pointer',fontSize:11,fontWeight:600}}>{sjSav?'…':ejMode?'Save':'Edit'}</button><button onClick={()=>setCj(null)} style={{width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button></div>
               </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:'14px',background:T.surf,borderRadius:10,marginBottom:16}}>
+                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Checkout</div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{fmtDate(j.checkoutTime)}</div><div style={{fontSize:12,color:T.muted,marginTop:1}}>{fmtTime(j.checkoutTime)}</div></div>
+                <div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.8,marginBottom:3}}>Check-in</div><div style={{fontSize:14,fontWeight:600,color:T.text}}>{j.checkinTime?fmtDate(j.checkinTime):'—'}</div>{j.checkinTime&&<div style={{fontSize:12,color:T.muted,marginTop:1}}>{fmtTime(j.checkinTime)}</div>}</div>
+              </div>
+              <div style={{fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.8,marginBottom:10}}>Property</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:16}}>
+                {[{l:'Address',k:'address',span:true},{l:'Guest',k:'customerName'},{l:'Worth',k:'worth'},{l:'Sq Ft',k:'sqft'},{l:'Beds',k:'beds'},{l:'Baths',k:'baths'}].map(f=><div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}><div style={{fontSize:10,fontWeight:500,color:T.dim,marginBottom:3}}>{f.l}</div>{ejMode?<input value={(ej as any)[f.k]||''} onChange={e=>setEj({...ej,[f.k]:e.target.value})} style={jI}/>:<div style={{fontSize:13,fontWeight:500,color:T.text}}>{f.k==='worth'&&j.worth?fmtMoney(j.worth):(j as any)[f.k]||'—'}</div>}</div>)}
+              </div>
+              {duties.length>0&&<div style={{marginBottom:16}}><div style={{fontSize:11,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:.8,marginBottom:8}}>Duties</div>{duties.map((d,i)=><div key={i} style={{padding:'8px 12px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:4}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>{d.description&&<div style={{fontSize:11,color:T.muted,marginTop:2,lineHeight:1.5}}>{d.description}</div>}</div>)}</div>}
+              {ejMode?<div style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:500,color:T.dim,marginBottom:3}}>Notes</div><textarea value={ej.notes} onChange={e=>setEj({...ej,notes:e.target.value})} rows={3} style={{...jI,width:'100%',resize:'vertical'}}/></div>:j.notes&&<div style={{padding:'10px 14px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.muted,lineHeight:1.5,marginBottom:14}}>{j.notes}</div>}
+              {ejMode&&<div style={{display:'flex',gap:6}}><button onClick={()=>setEjMode(false)} style={{...btnS,flex:1}}>Cancel</button><button onClick={saveCJ} disabled={sjSav} style={{...btnP,flex:1,textAlign:'center'}}>{sjSav?'…':'Save'}</button></div>}
             </div>
           </div>
-        )
-      })()}
+        </div>
+      )})()}
     </div>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   // REPORTS
-  // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   function ReportsPage(){
-    const months:string[]=[],mRev:number[]=[],mQ:number[]=[]
-    for(let i=5;i>=0;i--){const d=new Date();d.setMonth(d.getMonth()-i);months.push(d.toLocaleDateString('en-US',{month:'short'}));const mq=quotes.filter(q=>{const qd=new Date(q.createdAt);return qd.getMonth()===d.getMonth()&&qd.getFullYear()===d.getFullYear()});mQ.push(mq.length);mRev.push(mq.filter(q=>q.status==='completed'||q.status==='booked').reduce((s,q)=>s+q.totalPrice,0))}
-    const mx=Math.max(...mRev,1)
-    const topC=clients.map(c=>{const cq=quotes.filter(q=>q.clientId===c.id&&['completed','booked'].includes(q.status));return{c,rev:cq.reduce((s,q)=>s+q.totalPrice,0),n:cq.length}}).sort((a,b)=>b.rev-a.rev).slice(0,5)
-    const svcs:Record<string,{n:number;r:number}>={};quotes.forEach(q=>{if(!svcs[q.serviceType])svcs[q.serviceType]={n:0,r:0};svcs[q.serviceType].n++;if(['completed','booked'].includes(q.status))svcs[q.serviceType].r+=q.totalPrice})
-    const sArr=Object.entries(svcs).sort((a,b)=>b[1].r-a[1].r)
-    return(<div style={{maxWidth:1000,margin:'0 auto'}}>
-      {pageTitle('Reports','Business performance overview')}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:24}}>
-        {[{l:'Revenue',v:fmtMoney(totalRevenue),c:T.green},{l:'Avg Quote',v:fmtMoney(avgQuote),c:T.accent},{l:'Conversion',v:`${conversionRate}%`,c:T.amber},{l:'Active Clients',v:String(clients.filter(c=>quotes.some(q=>q.clientId===c.id)).length),c:T.violet}].map(s=><div key={s.l} style={{...card,padding:'18px'}}><div style={{fontSize:10,fontWeight:600,letterSpacing:1.2,textTransform:'uppercase',color:T.dim,marginBottom:5}}>{s.l}</div><div style={{fontSize:24,fontWeight:700,color:s.c,letterSpacing:-0.5}}>{s.v}</div></div>)}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 340px',gap:16}}>
-        <div style={{...card,padding:'24px'}}>{hdr('Monthly Revenue','📊')}
-          <div style={{display:'flex',gap:10,alignItems:'flex-end',height:200,paddingTop:10}}>
-            {months.map((m,i)=><div key={m} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
-              <div style={{fontSize:10,fontWeight:600,color:T.accent,opacity:mRev[i]>0?1:0}}>{mRev[i]>0?fmtMoney(mRev[i]):''}</div>
-              <div style={{width:'100%',maxWidth:48,borderRadius:'8px 8px 0 0',background:`linear-gradient(180deg,${T.accent}cc,${T.accentSoft}aa)`,height:`${Math.max(6,(mRev[i]/mx)*160)}px`,transition:'height .4s ease'}}/>
-              <div style={{fontSize:10,fontWeight:600,color:T.dim}}>{m}</div>
-              <div style={{fontSize:9,color:T.dim}}>{mQ[i]}q</div>
-            </div>)}
-          </div>
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
-          <div style={{...card,padding:'22px'}}>{hdr('Top Clients','👥')}
-            {topC.length===0?<div style={{color:T.dim,fontSize:12}}>No data.</div>:(
-              <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                {topC.map((x,i)=><div key={x.c.id} onClick={()=>openClient(x.c)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:9,background:T.surf,border:`1px solid ${T.border}`,cursor:'pointer',transition:'border-color .12s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.borderHover}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=T.border}}>
-                  <span style={{fontSize:12,fontWeight:700,color:T.dim,width:18}}>{i+1}</span>
-                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{x.c.firstName} {x.c.lastName}</div><div style={{fontSize:10,color:T.dim}}>{x.n} job{x.n!==1?'s':''}</div></div>
-                  <span style={{fontSize:14,fontWeight:700,color:T.green,letterSpacing:-0.3}}>{fmtMoney(x.rev)}</span>
-                </div>)}
-              </div>
-            )}
-          </div>
-          <div style={{...card,padding:'22px'}}>{hdr('Services','🏠')}
-            {sArr.length===0?<div style={{color:T.dim,fontSize:12}}>No data.</div>:(
-              <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                {sArr.map(([n,d])=><div key={n} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 10px',borderRadius:9,background:T.surf,border:`1px solid ${T.border}`}}><div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{n}</div><div style={{fontSize:10,color:T.dim}}>{d.n} quote{d.n!==1?'s':''}</div></div><span style={{fontSize:13,fontWeight:700,color:T.accent,letterSpacing:-0.3}}>{fmtMoney(d.r)}</span></div>)}
-              </div>
-            )}
-          </div>
+    const months:string[]=[],mR:number[]=[],mQ:number[]=[];for(let i=5;i>=0;i--){const d=new Date();d.setMonth(d.getMonth()-i);months.push(d.toLocaleDateString('en-US',{month:'short'}));const mq=quotes.filter(q=>{const qd=new Date(q.createdAt);return qd.getMonth()===d.getMonth()&&qd.getFullYear()===d.getFullYear()});mQ.push(mq.length);mR.push(mq.filter(q=>['completed','booked'].includes(q.status)).reduce((s,q)=>s+q.totalPrice,0))};const mx=Math.max(...mR,1)
+    const topC=clients.map(c=>{const cq=quotes.filter(q=>q.clientId===c.id&&['completed','booked'].includes(q.status));return{c,r:cq.reduce((s,q)=>s+q.totalPrice,0),n:cq.length}}).sort((a,b)=>b.r-a.r).slice(0,5)
+    const svcs:Record<string,{n:number;r:number}>={};quotes.forEach(q=>{if(!svcs[q.serviceType])svcs[q.serviceType]={n:0,r:0};svcs[q.serviceType].n++;if(['completed','booked'].includes(q.status))svcs[q.serviceType].r+=q.totalPrice});const sArr=Object.entries(svcs).sort((a,b)=>b[1].r-a[1].r)
+    return(<div style={{maxWidth:960,margin:'0 auto'}}>{pageTitle('Reports','Business overview')}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:24}}>{[{l:'Revenue',v:fmtMoney(totalRevenue),c:T.green},{l:'Avg Quote',v:fmtMoney(avgQuote),c:T.accent},{l:'Conversion',v:`${conversionRate}%`,c:T.amber},{l:'Clients',v:String(clients.filter(c=>quotes.some(q=>q.clientId===c.id)).length),c:T.violet}].map(s=><div key={s.l} style={{...card,padding:'16px'}}><div style={{fontSize:11,fontWeight:500,color:T.muted,marginBottom:5}}>{s.l}</div><div style={{fontSize:22,fontWeight:700,color:s.c}}>{s.v}</div></div>)}</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:14}}>
+        <div style={{...card,padding:'22px'}}>{hdr('Monthly Revenue')}<div style={{display:'flex',gap:10,alignItems:'flex-end',height:180,paddingTop:10}}>{months.map((m,i)=><div key={m} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div style={{fontSize:10,fontWeight:600,color:T.accent,opacity:mR[i]>0?1:0}}>{mR[i]>0?fmtMoney(mR[i]):''}</div><div style={{width:'100%',maxWidth:44,borderRadius:'6px 6px 0 0',background:T.accent,height:`${Math.max(4,(mR[i]/mx)*140)}px`,transition:'height .3s',opacity:.85}}/><div style={{fontSize:10,fontWeight:600,color:T.muted}}>{m}</div><div style={{fontSize:9,color:T.dim}}>{mQ[i]}q</div></div>)}</div></div>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{...card,padding:'20px'}}>{hdr('Top Clients')}{topC.length===0?<div style={{color:T.dim,fontSize:12}}>No data.</div>:topC.map((x,i)=><div key={x.c.id} onClick={()=>openClient(x.c)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px',borderRadius:8,cursor:'pointer',transition:'background .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=T.surf}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background='transparent'}}><span style={{fontSize:12,fontWeight:700,color:T.dim,width:16}}>{i+1}</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.text}}>{x.c.firstName} {x.c.lastName}</div><div style={{fontSize:10,color:T.dim}}>{x.n} job{x.n!==1?'s':''}</div></div><span style={{fontSize:13,fontWeight:700,color:T.green}}>{fmtMoney(x.r)}</span></div>)}</div>
+          <div style={{...card,padding:'20px'}}>{hdr('Services')}{sArr.length===0?<div style={{color:T.dim,fontSize:12}}>No data.</div>:sArr.map(([n,d])=><div key={n} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:`1px solid ${T.border}`}}><div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{n}</div><div style={{fontSize:10,color:T.dim}}>{d.n}q</div></div><span style={{fontSize:13,fontWeight:600,color:T.accent}}>{fmtMoney(d.r)}</span></div>)}</div>
         </div>
       </div>
     </div>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
   // ACTIVITY
-  // ══════════════════════════════════════════════════════════════════════════
   function ActivityPage(){
     const [f,setF]=useState<'all'|'quote'|'invoice'>('all')
     type Ev={id:string;type:'quote'|'invoice';title:string;desc:string;time:string;color:string;status:string}
-    const evs:Ev[]=[
-      ...quotes.map(q=>({id:q.id,type:'quote' as const,title:`${q.client.firstName} ${q.client.lastName}`,desc:`${q.serviceType} · ${fmtMoney(q.totalPrice)}`,time:q.createdAt,color:(STATUS[q.status]||STATUS.pending).color,status:q.status})),
-      ...invoices.map(i=>({id:i.id,type:'invoice' as const,title:`Invoice #${i.id.slice(-6)}`,desc:fmtMoney(i.amount),time:i.createdAt,color:(INV_STATUS[i.status]||INV_STATUS.draft).color,status:i.status})),
-    ].filter(e=>f==='all'||e.type===f).sort((a,b)=>new Date(b.time).getTime()-new Date(a.time).getTime())
-
-    return(<div style={{maxWidth:700,margin:'0 auto'}}>
-      {pageTitle('Activity','Timeline of all business events')}
-      <div style={{display:'flex',gap:2,background:T.surf,borderRadius:10,padding:3,border:`1px solid ${T.border}`,marginBottom:24,width:'fit-content'}}>
-        {([['all','All'],['quote','Quotes'],['invoice','Invoices']] as const).map(([k,l])=><button key={k} onClick={()=>setF(k)} style={{padding:'6px 14px',borderRadius:8,border:'none',cursor:'pointer',fontSize:11,fontWeight:f===k?600:400,background:f===k?T.accentBg:'transparent',color:f===k?T.accent:T.dim,fontFamily:'"DM Sans",sans-serif'}}>{l}</button>)}
-      </div>
-      {evs.length===0?<div style={{textAlign:'center',padding:'60px 0',color:T.dim}}>No activity.</div>:(
-        <div style={{position:'relative',paddingLeft:28}}>
-          <div style={{position:'absolute',left:8,top:10,bottom:10,width:1.5,background:T.border,borderRadius:1}}/>
-          {evs.map(ev=>(
-            <div key={ev.id+ev.type} onClick={()=>ev.type==='quote'?openQuote(quotes.find(q=>q.id===ev.id)!):openInvoice(ev.id)} style={{display:'flex',gap:14,padding:'14px 0',cursor:'pointer',position:'relative'}}>
-              <div style={{width:14,height:14,borderRadius:'50%',background:ev.color,border:`3px solid ${dark?D.bg:L.bg}`,flexShrink:0,position:'absolute',left:-28,top:18,zIndex:1}}/>
-              <div style={{flex:1,paddingLeft:6}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-                  <span style={{fontSize:13,fontWeight:600,color:T.text}}>{ev.title}</span>
-                  {badge(ev.type==='quote'?'Quote':'Invoice',ev.type==='quote'?T.accent:T.amber,ev.type==='quote'?T.accentBg:T.amberBg)}
-                  {badge(ev.status,ev.color,`${ev.color}15`)}
-                </div>
-                <div style={{fontSize:12,color:T.muted}}>{ev.desc}</div>
-                <div style={{fontSize:10,color:T.dim,marginTop:3}}>{fmtRel(ev.time)} · {fmtDate(ev.time)}</div>
-              </div>
-            </div>
-          ))}
+    const evs:Ev[]=[...quotes.map(q=>({id:q.id,type:'quote' as const,title:`${q.client.firstName} ${q.client.lastName}`,desc:`${q.serviceType} · ${fmtMoney(q.totalPrice)}`,time:q.createdAt,color:(STATUS[q.status]||STATUS.pending).color,status:q.status})),...invoices.map(i=>({id:i.id,type:'invoice' as const,title:`Invoice #${i.id.slice(-6)}`,desc:fmtMoney(i.amount),time:i.createdAt,color:(INV_STATUS[i.status]||INV_STATUS.draft).color,status:i.status}))].filter(e=>f==='all'||e.type===f).sort((a,b)=>new Date(b.time).getTime()-new Date(a.time).getTime())
+    return(<div style={{maxWidth:660,margin:'0 auto'}}>{pageTitle('Activity','Timeline')}
+      <div style={{display:'flex',gap:2,background:T.surf,borderRadius:8,padding:2,border:`1px solid ${T.border}`,marginBottom:20,width:'fit-content'}}>{([['all','All'],['quote','Quotes'],['invoice','Invoices']] as const).map(([k,l])=><button key={k} onClick={()=>setF(k)} style={{padding:'6px 12px',borderRadius:6,border:'none',cursor:'pointer',fontSize:12,fontWeight:f===k?600:400,background:f===k?T.card:'transparent',color:f===k?T.text:T.muted,boxShadow:f===k?T.shadow:'none'}}>{l}</button>)}</div>
+      {evs.length===0?<div style={{textAlign:'center',padding:'48px 0',color:T.dim}}>No activity.</div>:(
+        <div style={{position:'relative',paddingLeft:24}}><div style={{position:'absolute',left:7,top:8,bottom:8,width:1.5,background:T.border}}/>
+          {evs.map(ev=><div key={ev.id+ev.type} onClick={()=>ev.type==='quote'?openQuote(quotes.find(q=>q.id===ev.id)!):openInvoice(ev.id)} style={{display:'flex',gap:12,padding:'12px 0',cursor:'pointer',position:'relative'}}>
+            <div style={{width:12,height:12,borderRadius:'50%',background:ev.color,border:`3px solid ${T.bg}`,position:'absolute',left:-24,top:16,zIndex:1}}/>
+            <div style={{flex:1,paddingLeft:4}}><div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{ev.title}</span>{badge(ev.type==='quote'?'Quote':'Invoice',ev.type==='quote'?T.accent:T.amber,ev.type==='quote'?T.accentBg:T.amberBg)}{badge(ev.status,ev.color,`${ev.color}18`)}</div><div style={{fontSize:12,color:T.muted}}>{ev.desc}</div><div style={{fontSize:10,color:T.dim,marginTop:2}}>{fmtRel(ev.time)} · {fmtDate(ev.time)}</div></div>
+          </div>)}
         </div>
       )}
     </div>)
   }
-  // ══════════════════════════════════════════════════════════════════════════
+
   // INTEGRATIONS
-  // ══════════════════════════════════════════════════════════════════════════
   function IntegrationsPage(){
-    const [ja,setJa]=useState<any[]>([]);const [ha,setHa]=useState<any[]>([]);const [ga,setGa]=useState<any[]>([])
-    const [syncing,setSyncing]=useState<string|null>(null);const [msg,setMsg]=useState<string|null>(null)
+    const [ja,setJa]=useState<any[]>([]),[ha,setHa]=useState<any[]>([]),[ga,setGa]=useState<any[]>([]),[syncing,setSyncing]=useState<string|null>(null),[msg,setMsg]=useState<string|null>(null)
     useEffect(()=>{fetch('/api/jobber/accounts').then(r=>r.json()).then(d=>setJa(Array.isArray(d)?d:[])).catch(()=>{});fetch('/api/hostaway/accounts').then(r=>r.json()).then(d=>setHa(Array.isArray(d)?d:[])).catch(()=>{});fetch('/api/gmail/accounts').then(r=>r.json()).then(d=>setGa(Array.isArray(d)?d:[])).catch(()=>{})},[])
-    async function syncJ(){setSyncing('j');setMsg(null);const r=await fetch('/api/jobber/sync',{method:'POST'});const d=await r.json();if(d.error?.includes('NEEDS_RECONNECT'))setMsg('⚠ Reconnect Jobber');else{setMsg(`✓ ${d.imported??0} new jobs`);load()};setSyncing(null)}
-    async function syncH(){setSyncing('h');setMsg(null);const r=await fetch('/api/hostaway/sync',{method:'POST'});const d=await r.json();const t=Array.isArray(d)?d.reduce((s:number,x:any)=>s+(x.imported||0),0):0;setMsg(`✓ ${t} new jobs`);load();setSyncing(null)}
-    async function conJ(){const r=await fetch('/api/jobber/accounts',{method:'POST'});const d=await r.json();window.location.href=d.url}
-    async function conG(){const r=await fetch('/api/gmail/accounts',{method:'POST'});const d=await r.json();window.location.href=d.url}
-    const intgs=[
-      {n:'Booking Form',i:'🧹',d:'Auto-sync from client submissions',s:'live',c:T.accent,t:'bk'},
-      {n:'Hostaway',i:'🔑',d:'iCal calendar sync',s:ha.length>0?'on':'off',c:'#fb8500',t:'ha'},
-      {n:'Jobber',i:'💼',d:'Scheduled visits & events',s:ja.length>0?'on':'off',c:'#00c4ff',t:'jo'},
-      {n:'Gmail',i:'✉️',d:'Email integration',s:ga.length>0?'on':'off',c:'#ea4335',t:'gm'},
-      {n:'Stripe',i:'💳',d:'Payment processing (Test Mode)',s:'on',c:'#635bff',t:'st'},
-      {n:'QuickBooks',i:'📊',d:'Accounting sync',s:'soon',c:'#2ca01c',t:'qb'},
-      {n:'Google Calendar',i:'📅',d:'Two-way sync',s:'soon',c:'#4285f4',t:'gc'},
-      {n:'Zapier',i:'⚡',d:'Automate workflows',s:'soon',c:'#ff4a00',t:'za'},
-    ]
-    return(<div>
-      {pageTitle('Integrations','Connect your platforms and tools')}
-      {msg&&<div style={{marginBottom:16,padding:'10px 16px',borderRadius:10,fontSize:12,fontWeight:500,background:msg.startsWith('✓')?T.greenBg:T.amberBg,color:msg.startsWith('✓')?T.green:T.amber,border:`1px solid ${msg.startsWith('✓')?`${T.green}20`:`${T.amber}20`}`}}>{msg}</div>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:12}}>
-        {intgs.map(ig=>(
-          <div key={ig.n} style={{...card,padding:'20px'}}>
-            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-              <div style={{width:42,height:42,borderRadius:11,background:`${ig.c}10`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,border:`1px solid ${ig.c}18`,flexShrink:0}}>{ig.i}</div>
-              <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{ig.n}</div><div style={{fontSize:11,color:T.muted,marginTop:1}}>{ig.d}</div></div>
-              {badge(ig.s==='on'||ig.s==='live'?ig.s==='live'?'Live':'Connected':ig.s==='soon'?'Soon':'Available',ig.s==='on'||ig.s==='live'?T.green:ig.s==='soon'?T.dim:T.accent,ig.s==='on'||ig.s==='live'?T.greenBg:ig.s==='soon'?T.accentBg:T.accentBg)}
-            </div>
-            {ig.t==='ha'&&ha.length>0&&<div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:3}}>{ha.map((a:any)=><div key={a.id} style={{display:'flex',justifyContent:'space-between',padding:'7px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12}}><span style={{color:T.text,fontWeight:500}}>{a.name}</span><span style={{color:T.dim}}>#{a.listingId}</span></div>)}</div>}
-            {ig.t==='jo'&&ja.length>0&&<div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:3}}>{ja.map((a:any)=><div key={a.id} style={{display:'flex',justifyContent:'space-between',padding:'7px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12}}><span style={{color:T.text,fontWeight:500}}>{a.companyName||a.email}</span><span style={{color:T.dim}}>{fmtRel(a.lastSynced)}</span></div>)}</div>}
-            {ig.t==='gm'&&ga.length>0&&<div style={{marginBottom:10}}>{ga.map((a:any)=><div key={a.id} style={{padding:'7px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.text}}>{a.email}</div>)}</div>}
-            {ig.t==='bk'&&<div style={{fontSize:12,color:T.muted,padding:'10px 12px',background:T.surf,borderRadius:9,border:`1px solid ${T.border}`}}>{quotes.length} received · {pending.length} pending</div>}
-            {ig.t==='ha'&&<button onClick={syncH} disabled={syncing==='h'} style={{width:'100%',padding:'9px',borderRadius:9,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>{syncing==='h'?'Syncing…':'Sync'}</button>}
-            {ig.t==='jo'&&<div style={{display:'flex',gap:6}}>{ja.length>0&&<button onClick={syncJ} disabled={!!syncing} style={{flex:1,padding:'9px',borderRadius:9,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>{syncing==='j'?'…':'Sync'}</button>}<button onClick={conJ} style={{flex:1,padding:'9px',borderRadius:9,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>{ja.length>0?'+ Add':'Connect'}</button></div>}
-            {ig.t==='gm'&&<button onClick={conG} style={{width:'100%',padding:'9px',borderRadius:9,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>{ga.length>0?'+ Add':'Connect'}</button>}
-            {ig.s==='soon'&&<div style={{padding:'8px',textAlign:'center',fontSize:11,color:T.dim,fontWeight:500}}>Coming Soon</div>}
-          </div>
-        ))}
+    async function sJ(){setSyncing('j');setMsg(null);const r=await fetch('/api/jobber/sync',{method:'POST'});const d=await r.json();if(d.error?.includes('NEEDS_RECONNECT'))setMsg('⚠ Reconnect Jobber');else{setMsg(`✓ ${d.imported??0} new`);load()};setSyncing(null)}
+    async function sH(){setSyncing('h');setMsg(null);const r=await fetch('/api/hostaway/sync',{method:'POST'});const d=await r.json();const t=Array.isArray(d)?d.reduce((s:number,x:any)=>s+(x.imported||0),0):0;setMsg(`✓ ${t} new`);load();setSyncing(null)}
+    async function cJ(){const r=await fetch('/api/jobber/accounts',{method:'POST'});const d=await r.json();window.location.href=d.url}
+    async function cG(){const r=await fetch('/api/gmail/accounts',{method:'POST'});const d=await r.json();window.location.href=d.url}
+    const intgs=[{n:'Booking Form',i:'🧹',d:'Auto-sync submissions',s:'live',c:T.accent,t:'bk'},{n:'Hostaway',i:'🔑',d:'iCal sync',s:ha.length>0?'on':'off',c:'#f59e0b',t:'ha'},{n:'Jobber',i:'💼',d:'Visits & events',s:ja.length>0?'on':'off',c:'#3b82f6',t:'jo'},{n:'Gmail',i:'✉️',d:'Email',s:ga.length>0?'on':'off',c:'#ef4444',t:'gm'},{n:'Stripe',i:'💳',d:'Payments (Test)',s:'on',c:'#6366f1',t:'st'},{n:'QuickBooks',i:'📊',d:'Accounting',s:'soon',c:'#10b981',t:'qb'},{n:'Google Cal',i:'📅',d:'Two-way sync',s:'soon',c:'#3b82f6',t:'gc'},{n:'Zapier',i:'⚡',d:'Automations',s:'soon',c:'#f97316',t:'za'}]
+    return(<div>{pageTitle('Integrations','Connect your platforms')}
+      {msg&&<div style={{marginBottom:14,padding:'10px 14px',borderRadius:8,fontSize:12,background:msg.startsWith('✓')?T.greenBg:T.amberBg,color:msg.startsWith('✓')?T.green:T.amber,border:`1px solid ${msg.startsWith('✓')?`${T.green}20`:`${T.amber}20`}`}}>{msg}</div>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:10}}>
+        {intgs.map(ig=><div key={ig.n} style={{...card,padding:'18px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><div style={{width:38,height:38,borderRadius:10,background:`${ig.c}12`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,border:`1px solid ${ig.c}20`,flexShrink:0}}>{ig.i}</div><div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{ig.n}</div><div style={{fontSize:11,color:T.muted,marginTop:1}}>{ig.d}</div></div>{badge(ig.s==='on'||ig.s==='live'?ig.s==='live'?'Live':'Connected':ig.s==='soon'?'Soon':'—',ig.s==='on'||ig.s==='live'?T.green:ig.s==='soon'?T.dim:T.muted,ig.s==='on'||ig.s==='live'?T.greenBg:T.accentBg)}</div>
+          {ig.t==='ha'&&ha.length>0&&<div style={{marginBottom:8}}>{ha.map((a:any)=><div key={a.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 8px',background:T.surf,borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,marginBottom:3}}><span style={{color:T.text}}>{a.name}</span><span style={{color:T.dim}}>#{a.listingId}</span></div>)}</div>}
+          {ig.t==='jo'&&ja.length>0&&<div style={{marginBottom:8}}>{ja.map((a:any)=><div key={a.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 8px',background:T.surf,borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,marginBottom:3}}><span style={{color:T.text}}>{a.companyName||a.email}</span><span style={{color:T.dim}}>{fmtRel(a.lastSynced)}</span></div>)}</div>}
+          {ig.t==='gm'&&ga.length>0&&<div style={{marginBottom:8}}>{ga.map((a:any)=><div key={a.id} style={{padding:'6px 8px',background:T.surf,borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,color:T.text,marginBottom:3}}>{a.email}</div>)}</div>}
+          {ig.t==='bk'&&<div style={{fontSize:12,color:T.muted,padding:'8px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`}}>{quotes.length} received · {pending.length} pending</div>}
+          {ig.t==='ha'&&<button onClick={sH} disabled={syncing==='h'} style={{width:'100%',padding:'8px',borderRadius:8,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer'}}>{syncing==='h'?'Syncing…':'Sync'}</button>}
+          {ig.t==='jo'&&<div style={{display:'flex',gap:4}}>{ja.length>0&&<button onClick={sJ} disabled={!!syncing} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer'}}>{syncing==='j'?'…':'Sync'}</button>}<button onClick={cJ} style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer'}}>{ja.length>0?'+ Add':'Connect'}</button></div>}
+          {ig.t==='gm'&&<button onClick={cG} style={{width:'100%',padding:'8px',borderRadius:8,border:`1px solid ${ig.c}30`,background:`${ig.c}08`,color:ig.c,fontSize:12,fontWeight:600,cursor:'pointer'}}>{ga.length>0?'+ Add':'Connect'}</button>}
+          {ig.s==='soon'&&<div style={{padding:'6px',textAlign:'center',fontSize:11,color:T.dim}}>Coming Soon</div>}
+        </div>)}
       </div>
     </div>)
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
   // SETTINGS
-  // ══════════════════════════════════════════════════════════════════════════
-  function SettingsPage(){
-    return pageWrap(660,<>
-      {pageTitle('Settings')}
-      <div style={{display:'flex',flexDirection:'column',gap:14}}>
-        <div style={{...card,padding:'22px'}}>{hdr('Account','👤')}
-          {[{l:'Name',v:user!.name},{l:'Email',v:user!.email},{l:'Role',v:'Cleaner'},{l:'Phone',v:user!.phone||'Not set'},{l:'Company',v:user!.company||'Not set'}].map(f=>(
-            <div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'11px 0',borderBottom:`1px solid ${T.border}`}}>
-              <span style={{fontSize:12,color:T.dim,fontWeight:500}}>{f.l}</span><span style={{fontSize:12,color:T.text,fontWeight:600}}>{f.v}</span>
-            </div>
-          ))}
-        </div>
-        <div style={{...card,padding:'22px'}}>{hdr('Notifications','🔔')}
-          {['New quote received','Quote status changes','Invoice payment received','Daily summary email'].map(it=>(
-            <div key={it} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 0',borderBottom:`1px solid ${T.border}`}}>
-              <span style={{fontSize:13,color:T.sub}}>{it}</span>
-              <div style={{width:36,height:20,borderRadius:10,background:T.accentBg,border:`1px solid ${T.accentBorder}`,position:'relative',cursor:'pointer'}}><div style={{width:14,height:14,borderRadius:'50%',background:T.accent,position:'absolute',right:2,top:2}}/></div>
-            </div>
-          ))}
-        </div>
-        <div style={{...card,padding:'22px'}}>{hdr('Business','🏢')}<div style={{padding:'14px',background:T.accentBg,borderRadius:10,border:`1px solid ${T.accentBorder}`,fontSize:12,color:T.muted}}>Profile editing, branding, and more coming soon.</div></div>
-        <div style={{...card,padding:'22px'}}><button onClick={logout} style={{padding:'10px 22px',borderRadius:10,background:T.redBg,color:T.red,border:`1px solid ${T.red}20`,fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'"DM Sans",sans-serif'}}>Sign Out</button></div>
-      </div>
-    </>)
-  }
+  function SettingsPage(){return pageWrap(620,<>{pageTitle('Settings')}
+    <div style={{display:'flex',flexDirection:'column',gap:12}}>
+      <div style={{...card,padding:'20px'}}>{hdr('Account')}{[{l:'Name',v:user!.name},{l:'Email',v:user!.email},{l:'Role',v:'Cleaner'},{l:'Phone',v:user!.phone||'—'},{l:'Company',v:user!.company||'—'}].map(f=><div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'10px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:12,color:T.muted}}>{f.l}</span><span style={{fontSize:12,fontWeight:600,color:T.text}}>{f.v}</span></div>)}</div>
+      <div style={{...card,padding:'20px'}}>{hdr('Notifications')}{['New quote received','Status changes','Payment received','Daily summary'].map(it=><div key={it} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:13,color:T.sub}}>{it}</span><div style={{width:34,height:18,borderRadius:9,background:T.accentBg,border:`1px solid ${T.accentBorder}`,position:'relative',cursor:'pointer'}}><div style={{width:12,height:12,borderRadius:'50%',background:T.accent,position:'absolute',right:2,top:2}}/></div></div>)}</div>
+      <div style={{...card,padding:'20px'}}><button onClick={logout} style={{padding:'10px 20px',borderRadius:8,background:T.redBg,color:T.red,border:'none',fontSize:13,fontWeight:600,cursor:'pointer'}}>Sign Out</button></div>
+    </div>
+  </>)}
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // JOB MODAL
-  // ══════════════════════════════════════════════════════════════════════════
+  // JOB MODAL (from Jobs page / Dashboard)
   function JobModal(){
     if(!selectedJob)return null;const j=selectedJob
-    const [editM,setEditM]=useState(false)
-    const [em,setEm]=useState({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})
-    const [savM,setSavM]=useState(false)
-    async function saveM(){setSavM(true);await fetch(`/api/jobs/${j.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:em.address||null,sqft:em.sqft?parseInt(em.sqft):null,beds:em.beds?parseInt(em.beds):null,baths:em.baths?parseFloat(em.baths):null,notes:em.notes||null,customerName:em.customerName||null,worth:em.worth?parseFloat(em.worth):null})});await load();setSavM(false);setEditM(false);showToast('Job updated')}
+    const [eM,setEM]=useState(false),[em,setEm]=useState({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''}),[sv,setSv]=useState(false)
+    async function sav(){setSv(true);await fetch(`/api/jobs/${j.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:em.address||null,sqft:em.sqft?parseInt(em.sqft):null,beds:em.beds?parseInt(em.beds):null,baths:em.baths?parseFloat(em.baths):null,notes:em.notes||null,customerName:em.customerName||null,worth:em.worth?parseFloat(em.worth):null})});await load();setSv(false);setEM(false);showToast('Updated')}
     let duties:{title?:string;description?:string}[]=[];try{duties=JSON.parse(j.duties||'[]')}catch{}
-    const mInp=editM?{...inp,padding:'7px 10px',fontSize:12,background:dark?'rgba(255,255,255,0.04)':'#f5f9fd',border:`1px solid ${T.borderB}`} as React.CSSProperties:{} as React.CSSProperties
+    const mI=eM?{...inp,padding:'7px 10px',fontSize:12} as React.CSSProperties:{} as React.CSSProperties
     return(
-      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(8px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setSelectedJob(null)}>
-        <div style={{background:dark?'rgba(3,13,28,0.98)':'#ffffff',border:`1px solid ${T.borderB}`,borderRadius:20,width:'100%',maxWidth:500,boxShadow:'0 32px 80px rgba(0,0,0,0.5)',padding:'28px',maxHeight:'90vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
-            <div><div style={{fontSize:18,fontWeight:700,color:T.text,letterSpacing:-0.3}}>{j.displayName}</div><div style={{fontSize:12,color:T.muted,marginTop:3}}>{j.propertyLabel}</div></div>
-            <div style={{display:'flex',gap:6}}>
-              <button onClick={()=>{if(editM){saveM()}else{setEditM(true);setEm({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})}}} style={{padding:'5px 12px',borderRadius:7,border:`1px solid ${editM?T.accentBorder:T.border}`,background:editM?T.accentBg:'transparent',color:editM?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:'"DM Sans",sans-serif'}}>{savM?'…':editM?'Save':'Edit'}</button>
-              <button onClick={()=>setSelectedJob(null)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
-            </div>
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(10px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={()=>setSelectedJob(null)}>
+        <div style={{background:dark?'rgba(15,17,23,0.98)':'#fff',border:`1px solid ${T.borderB}`,borderRadius:16,width:'100%',maxWidth:480,boxShadow:T.shadowLg,padding:'24px',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+            <div><div style={{fontSize:17,fontWeight:700,color:T.text}}>{j.displayName}</div><div style={{fontSize:12,color:T.muted,marginTop:3}}>{j.propertyLabel}</div></div>
+            <div style={{display:'flex',gap:4}}><button onClick={()=>{if(eM){sav()}else{setEM(true);setEm({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})}}} style={{padding:'5px 12px',borderRadius:7,border:`1px solid ${eM?T.accentBorder:T.border}`,background:eM?T.accentBg:'transparent',color:eM?T.accent:T.muted,cursor:'pointer',fontSize:10,fontWeight:600}}>{sv?'…':eM?'Save':'Edit'}</button><button onClick={()=>setSelectedJob(null)} style={{width:28,height:28,borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',color:T.dim,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button></div>
           </div>
-          {[{l:'Platform',v:j.platform,i:'🔌'},{l:'Checkout',v:`${fmtDate(j.checkoutTime)} · ${fmtTime(j.checkoutTime)}`,i:'📅'},{l:'Check-in',v:j.checkinTime?`${fmtDate(j.checkinTime)} · ${fmtTime(j.checkinTime)}`:'—',i:'🏠'}].map(f=>(
-            <div key={f.l} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:`1px solid ${T.border}`}}>
-              <span style={{fontSize:13}}>{f.i}</span><div style={{flex:1}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1}}>{f.l}</div><div style={{fontSize:13,fontWeight:500,color:T.text,marginTop:2}}>{f.v}</div></div>
-            </div>
-          ))}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:14,marginBottom:14}}>
-            {[{l:'Address',k:'address',span:true},{l:'Guest',k:'customerName'},{l:'Worth',k:'worth'},{l:'Sq Ft',k:'sqft'},{l:'Beds',k:'beds'},{l:'Baths',k:'baths'}].map(f=>(
-              <div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}>
-                <div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:3}}>{f.l}</div>
-                {editM?<input value={(em as any)[f.k]||''} onChange={e=>setEm({...em,[f.k]:e.target.value})} style={mInp}/>:<div style={{fontSize:12,fontWeight:500,color:T.text}}>{(j as any)[f.k]||(f.k==='worth'&&j.worth?fmtMoney(j.worth):'—')}</div>}
-              </div>
-            ))}
+          {[{l:'Platform',v:j.platform},{l:'Checkout',v:`${fmtDate(j.checkoutTime)} · ${fmtTime(j.checkoutTime)}`},{l:'Check-in',v:j.checkinTime?`${fmtDate(j.checkinTime)} · ${fmtTime(j.checkinTime)}`:'—'}].map(f=><div key={f.l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:11,color:T.muted}}>{f.l}</span><span style={{fontSize:12,fontWeight:500,color:T.text}}>{f.v}</span></div>)}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:12,marginBottom:12}}>
+            {[{l:'Address',k:'address',span:true},{l:'Guest',k:'customerName'},{l:'Worth',k:'worth'},{l:'Sq Ft',k:'sqft'},{l:'Beds',k:'beds'},{l:'Baths',k:'baths'}].map(f=><div key={f.k} style={(f as any).span?{gridColumn:'1/-1'}:{}}><div style={{fontSize:10,fontWeight:500,color:T.dim,marginBottom:2}}>{f.l}</div>{eM?<input value={(em as any)[f.k]||''} onChange={e=>setEm({...em,[f.k]:e.target.value})} style={mI}/>:<div style={{fontSize:12,color:T.text}}>{f.k==='worth'&&j.worth?fmtMoney(j.worth):(j as any)[f.k]||'—'}</div>}</div>)}
           </div>
-          {duties.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:8}}>Duties</div>{duties.map((d,i)=><div key={i} style={{padding:'6px 10px',background:T.surf,borderRadius:6,border:`1px solid ${T.border}`,marginBottom:3}}><div style={{fontSize:11,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>{d.description&&<div style={{fontSize:10,color:T.muted,marginTop:1}}>{d.description}</div>}</div>)}</div>}
-          {editM?<div><div style={{fontSize:10,fontWeight:600,color:T.dim,textTransform:'uppercase',letterSpacing:1,marginBottom:3}}>Notes</div><textarea value={em.notes} onChange={e=>setEm({...em,notes:e.target.value})} rows={3} style={{...mInp,width:'100%',resize:'vertical'}}/></div>:j.notes&&<div style={{padding:'10px 14px',background:T.surf,borderRadius:10,border:`1px solid ${T.border}`,fontSize:12,color:T.muted}}>{j.notes}</div>}
+          {duties.length>0&&<div style={{marginBottom:10}}><div style={{fontSize:10,fontWeight:500,color:T.dim,marginBottom:6}}>Duties</div>{duties.map((d,i)=><div key={i} style={{padding:'6px 8px',background:T.surf,borderRadius:6,border:`1px solid ${T.border}`,marginBottom:3}}><div style={{fontSize:11,fontWeight:600,color:T.text}}>{d.title||`Task ${i+1}`}</div>{d.description&&<div style={{fontSize:10,color:T.muted,marginTop:1}}>{d.description}</div>}</div>)}</div>}
+          {eM?<div><div style={{fontSize:10,fontWeight:500,color:T.dim,marginBottom:2}}>Notes</div><textarea value={em.notes} onChange={e=>setEm({...em,notes:e.target.value})} rows={3} style={{...mI,width:'100%',resize:'vertical'}}/></div>:j.notes&&<div style={{padding:'8px 10px',background:T.surf,borderRadius:8,border:`1px solid ${T.border}`,fontSize:11,color:T.muted}}>{j.notes}</div>}
         </div>
       </div>
     )
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // NAVIGATION & LAYOUT — Calendar moved to #2
-  // ══════════════════════════════════════════════════════════════════════════
-  const NAV:[Page,string,string,number?][]=[
-    ['dashboard','◉','Dashboard'],
-    ['calendar','📅','Calendar'],
-    ['quotes','📋','Quotes',pending.length||undefined],
-    ['jobs','🗓','Jobs',upcoming.length||undefined],
-    ['clients','👤','Clients'],
-    ['invoices','💰','Invoices',invoices.filter(i=>i.status==='sent').length||undefined],
-    ['reports','📊','Reports'],
-    ['activity','⏱','Activity'],
-    ['integrations','🔗','Integrations'],
-    ['settings','⚙️','Settings'],
-  ]
+  // ══════════════════════════════════════════════════════════════════════
+  // LAYOUT & NAV
+  // ══════════════════════════════════════════════════════════════════════
+  const NAV:[Page,string,string,number?][]=[['dashboard','◉','Dashboard'],['calendar','📅','Calendar'],['quotes','📋','Quotes',pending.length||undefined],['jobs','🗓','Jobs',upcoming.length||undefined],['clients','👤','Clients'],['invoices','💰','Invoices',invoices.filter(i=>i.status==='sent').length||undefined],['reports','📊','Reports'],['activity','⏱','Activity'],['integrations','🔗','Integrations'],['settings','⚙️','Settings']]
   const activeNav=(['quote-detail','create-quote','convert-to-job'].includes(page)?'quotes':['create-job'].includes(page)?'jobs':['create-client','client-detail'].includes(page)?'clients':['create-invoice','invoice-detail'].includes(page)?'invoices':page) as Page
 
   return(
-    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:T.bg,fontFamily:'"DM Sans",-apple-system,sans-serif',backgroundImage:dark?'radial-gradient(ellipse at 20% 30%,rgba(5,48,100,0.35) 0%,transparent 50%),radial-gradient(ellipse at 80% 70%,rgba(8,64,130,0.25) 0%,transparent 40%)':'none'}}>
-      <nav style={{width:collapsed?60:210,minWidth:collapsed?60:210,background:T.nav,borderRight:`1px solid ${T.border}`,display:'flex',flexDirection:'column',transition:'width .2s,min-width .2s',overflow:'hidden',flexShrink:0,backdropFilter:'blur(16px)'}}>
-        <div style={{padding:'16px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:10,minWidth:210}}>
-          <div style={{width:32,height:32,borderRadius:9,background:'linear-gradient(135deg,#0ea5e9,#06b6d4)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="white" opacity=".9"/><rect x="13" y="3" width="8" height="8" rx="2" fill="white" opacity=".55"/><rect x="3" y="13" width="8" height="8" rx="2" fill="white" opacity=".55"/><rect x="13" y="13" width="8" height="8" rx="2" fill="white" opacity=".25"/></svg>
+    <div style={{display:'flex',height:'100vh',overflow:'hidden',background:T.bg,fontFamily:'"Inter",-apple-system,BlinkMacSystemFont,sans-serif'}}>
+      {/* Sidebar */}
+      <nav style={{width:collapsed?56:200,minWidth:collapsed?56:200,background:T.nav,borderRight:`1px solid ${T.border}`,display:'flex',flexDirection:'column',transition:'width .15s,min-width .15s',overflow:'hidden',flexShrink:0}}>
+        <div style={{padding:'14px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:9,minWidth:200}}>
+          <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#38bdf8,#0ea5e9)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="white" opacity=".9"/><rect x="13" y="3" width="8" height="8" rx="2" fill="white" opacity=".5"/><rect x="3" y="13" width="8" height="8" rx="2" fill="white" opacity=".5"/><rect x="13" y="13" width="8" height="8" rx="2" fill="white" opacity=".2"/></svg>
           </div>
-          {!collapsed&&<div><div style={{fontSize:14,fontWeight:700,color:'#fff',letterSpacing:.3}}>CleanSync</div><div style={{fontSize:8.5,color:'rgba(93,216,224,0.6)',fontWeight:600,letterSpacing:2,textTransform:'uppercase' as const}}>Cleaner</div></div>}
+          {!collapsed&&<div><div style={{fontSize:14,fontWeight:700,color:T.text}}>CleanSync</div><div style={{fontSize:9,color:T.dim,fontWeight:500,letterSpacing:1.5,textTransform:'uppercase' as const}}>Cleaner</div></div>}
         </div>
         <div style={{flex:1,padding:'8px 6px',display:'flex',flexDirection:'column',gap:1,overflowY:'auto'}}>
-          {NAV.map(([id,icon,label,badgeN])=>{const act=activeNav===id;return(
-            <button key={id} onClick={()=>setPage(id)} style={{display:'flex',alignItems:'center',gap:10,padding:collapsed?'9px':'8px 10px',borderRadius:9,border:'none',cursor:'pointer',background:act?'rgba(93,216,224,0.08)':'transparent',color:act?'#5dd8e0':'rgba(255,255,255,0.4)',fontFamily:'"DM Sans",sans-serif',fontSize:12.5,fontWeight:act?600:450,transition:'all .12s',textAlign:'left',width:'100%',justifyContent:collapsed?'center':'flex-start',position:'relative',letterSpacing:0.1}}>
-              <span style={{fontSize:14,flexShrink:0,opacity:act?1:0.7}}>{icon}</span>
-              {!collapsed&&<span style={{flex:1,whiteSpace:'nowrap'}}>{label}</span>}
-              {!collapsed&&badgeN!=null&&badgeN>0&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:6,background:'rgba(251,191,36,0.2)',color:'#fbbf24',fontWeight:700,minWidth:16,textAlign:'center'}}>{badgeN}</span>}
-              {act&&<div style={{position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',width:2.5,height:18,borderRadius:'0 2px 2px 0',background:'#5dd8e0'}}/>}
+          {NAV.map(([id,icon,lbl,bdg])=>{const act=activeNav===id;return(
+            <button key={id} onClick={()=>setPage(id)} style={{display:'flex',alignItems:'center',gap:9,padding:collapsed?'8px':'8px 10px',borderRadius:8,border:'none',cursor:'pointer',background:act?T.accentBg:'transparent',color:act?T.accent:T.muted,fontFamily:'"Inter",sans-serif',fontSize:13,fontWeight:act?600:450,transition:'all .1s',textAlign:'left',width:'100%',justifyContent:collapsed?'center':'flex-start',position:'relative'}}>
+              <span style={{fontSize:14,flexShrink:0,opacity:act?1:.65}}>{icon}</span>
+              {!collapsed&&<span style={{flex:1,whiteSpace:'nowrap'}}>{lbl}</span>}
+              {!collapsed&&bdg!=null&&bdg>0&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:5,background:T.amberBg,color:T.amber,fontWeight:700,minWidth:14,textAlign:'center'}}>{bdg}</span>}
+              {act&&<div style={{position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',width:2.5,height:16,borderRadius:'0 2px 2px 0',background:T.accent}}/>}
             </button>
           )})}
         </div>
         <div style={{padding:'8px 6px',borderTop:`1px solid ${T.border}`,display:'flex',flexDirection:'column',gap:3}}>
-          <button onClick={()=>setDark(d=>!d)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:'rgba(255,255,255,0.4)',fontSize:11,fontFamily:'"DM Sans",sans-serif',fontWeight:500,justifyContent:collapsed?'center':'flex-start'}}>
+          <button onClick={()=>setDark(d=>!d)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 10px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'"Inter",sans-serif',fontWeight:500,justifyContent:collapsed?'center':'flex-start'}}>
             <span style={{fontSize:12}}>{dark?'☀️':'🌙'}</span>{!collapsed&&<span>{dark?'Light':'Dark'}</span>}
           </button>
-          {!collapsed&&<div style={{padding:'7px 10px',borderRadius:8,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
-            <div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.7)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.name}</div>
-            <div style={{fontSize:9,color:'rgba(255,255,255,0.3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.email}</div>
-          </div>}
-          <button onClick={logout} style={{width:'100%',padding:'7px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:'rgba(255,255,255,0.3)',fontSize:10.5,fontFamily:'"DM Sans",sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>{collapsed?'↩':'Sign out'}</button>
-          <button onClick={()=>setCollapsed(p=>!p)} style={{width:'100%',padding:'7px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:'rgba(255,255,255,0.3)',fontSize:10.5,fontFamily:'"DM Sans",sans-serif',display:'flex',alignItems:'center',justifyContent:'center'}}>{collapsed?'→':'←'}</button>
+          {!collapsed&&<div style={{padding:'6px 10px',borderRadius:7,background:T.surf}}><div style={{fontSize:11,fontWeight:600,color:T.sub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.name}</div><div style={{fontSize:9,color:T.dim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.email}</div></div>}
+          <button onClick={logout} style={{width:'100%',padding:'6px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:T.dim,fontSize:10,fontFamily:'"Inter",sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>{collapsed?'↩':'Sign out'}</button>
+          <button onClick={()=>setCollapsed(p=>!p)} style={{width:'100%',padding:'6px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:T.dim,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>{collapsed?'→':'←'}</button>
         </div>
       </nav>
 
-      <main style={{flex:1,overflowY:'auto',padding:'20px 28px'}}>
+      {/* Main */}
+      <main style={{flex:1,overflowY:'auto',padding:'18px 24px'}}>
         {page==='dashboard'&&<DashboardPage/>}{page==='quotes'&&<QuotesPage/>}{page==='quote-detail'&&<QuoteDetailPage/>}{page==='create-quote'&&<CreateQuotePage/>}{page==='convert-to-job'&&<ConvertToJobPage/>}
         {page==='jobs'&&<JobsPage/>}{page==='create-job'&&<CreateJobPage/>}
         {page==='clients'&&<ClientsPage/>}{page==='create-client'&&<CreateClientPage/>}{page==='client-detail'&&<ClientDetailPage/>}
@@ -1585,22 +954,19 @@ export default function CleanerDashboard() {
 
       {selectedJob&&<JobModal/>}
 
-      {toast&&(
-        <div style={{position:'fixed',bottom:28,right:28,padding:'12px 22px',borderRadius:12,background:toast.type==='ok'?'rgba(52,211,153,0.92)':'rgba(248,113,113,0.92)',color:dark?'#030d1c':'#fff',fontSize:13,fontWeight:600,fontFamily:'"DM Sans",sans-serif',boxShadow:'0 8px 32px rgba(0,0,0,0.3)',zIndex:300,backdropFilter:'blur(8px)',animation:'slideUp .25s ease-out',letterSpacing:0.2}}>
-          {toast.type==='ok'?'✓ ':'✗ '}{toast.msg}
-        </div>
-      )}
+      {toast&&<div style={{position:'fixed',bottom:24,right:24,padding:'10px 20px',borderRadius:10,background:toast.type==='ok'?'rgba(52,211,153,0.9)':'rgba(248,113,113,0.9)',color:'#fff',fontSize:13,fontWeight:600,boxShadow:T.shadowLg,zIndex:300,backdropFilter:'blur(8px)',animation:'slideUp .2s ease-out'}}>{toast.type==='ok'?'✓ ':'✗ '}{toast.msg}</div>}
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
-        ::-webkit-scrollbar{width:3px;height:3px;}
-        ::-webkit-scrollbar-track{background:transparent;}
-        ::-webkit-scrollbar-thumb{background:rgba(93,216,224,0.12);border-radius:2px;}
-        ::-webkit-scrollbar-thumb:hover{background:rgba(93,216,224,0.25);}
+        ::-webkit-scrollbar{width:3px;height:3px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
+        ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-        input:focus,textarea:focus,select:focus{border-color:rgba(93,216,224,0.3)!important;outline:none;}
+        @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        input:focus,textarea:focus,select:focus{border-color:rgba(56,189,248,0.3)!important;outline:none}
+        button:active{transform:scale(0.98)}
       `}</style>
     </div>
   )
