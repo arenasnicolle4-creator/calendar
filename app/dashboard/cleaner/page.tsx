@@ -780,6 +780,7 @@ export default function CleanerDashboard() {
     const client=clientId?clients.find(c=>c.id===clientId):null
 
     async function sendInvoice(){
+      if(!inv)return
       setSending(true)
       // Update status to sent
       await updateInvoice(inv.id,{status:'sent'})
