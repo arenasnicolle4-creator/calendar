@@ -56,18 +56,18 @@ const D = {
   shadowLg:'0 4px 24px rgba(0,0,0,0.4)',
 }
 const L = {
-  bg:'#f8f9fb', nav:'#ffffff', card:'#ffffff', cardHover:'#f4f6f8',
-  surf:'#f1f3f5', surfHover:'#e8ebee',
-  border:'rgba(0,0,0,0.06)', borderB:'rgba(0,0,0,0.1)', borderHover:'rgba(0,0,0,0.14)',
-  text:'#111827', sub:'#374151', muted:'#6b7280', dim:'#9ca3af',
-  accent:'#0284c7', accentSoft:'#0369a1', accentBg:'rgba(2,132,199,0.06)', accentBorder:'rgba(2,132,199,0.18)',
-  green:'#059669', greenBg:'rgba(5,150,105,0.07)',
-  amber:'#d97706', amberBg:'rgba(217,119,6,0.07)',
-  red:'#dc2626', redBg:'rgba(220,38,38,0.06)',
-  violet:'#7c3aed', violetBg:'rgba(124,58,237,0.06)',
-  rose:'#e11d48', roseBg:'rgba(225,29,72,0.06)',
+  bg:'#f5f7fa', nav:'#0f2b42', card:'#ffffff', cardHover:'#f7f9fc',
+  surf:'#f0f2f5', surfHover:'#e6e9ee',
+  border:'rgba(0,0,0,0.07)', borderB:'rgba(0,0,0,0.12)', borderHover:'rgba(2,132,199,0.3)',
+  text:'#111827', sub:'#1e3a5f', muted:'#5b7083', dim:'#94a3b8',
+  accent:'#0284c7', accentSoft:'#0369a1', accentBg:'rgba(2,132,199,0.07)', accentBorder:'rgba(2,132,199,0.2)',
+  green:'#059669', greenBg:'rgba(5,150,105,0.08)',
+  amber:'#d97706', amberBg:'rgba(217,119,6,0.08)',
+  red:'#dc2626', redBg:'rgba(220,38,38,0.07)',
+  violet:'#7c3aed', violetBg:'rgba(124,58,237,0.07)',
+  rose:'#e11d48', roseBg:'rgba(225,29,72,0.07)',
   shadow:'0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04)',
-  shadowLg:'0 4px 20px rgba(0,0,0,0.08)',
+  shadowLg:'0 4px 20px rgba(0,0,0,0.1)',
 }
 
 const STATUS: Record<string,{label:string;color:string;bg:string}> = {
@@ -172,10 +172,10 @@ export default function CleanerDashboard() {
     const PLAT:Record<string,string>={hostaway:'#f59e0b',jobber:'#3b82f6',manual:'#6366f1',airbnb:'#ef4444'}
     return(<div style={{maxWidth:1060,margin:'0 auto'}}>
       {/* Welcome */}
-      <div style={{...card,padding:'24px 28px',marginBottom:24,background:dark?'linear-gradient(135deg,#161a24,#1a1e28)':T.card}}>
+      <div style={{...card,padding:'24px 28px',marginBottom:24,background:dark?'linear-gradient(135deg,#161a24,#1a1e28)':'linear-gradient(135deg,#e8f4fd,#dbeafe)',borderColor:dark?T.border:'rgba(2,132,199,0.15)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
           <div>
-            <div style={{fontSize:22,fontWeight:700,color:T.text}}>Welcome back, {user!.name.split(' ')[0]}</div>
+            <div style={{fontSize:22,fontWeight:700,color:dark?T.text:'#0c4a6e'}}>Welcome back, {user!.name.split(' ')[0]}</div>
             <div style={{fontSize:13,color:T.muted,marginTop:4}}>{pending.length>0?`${pending.length} pending quote${pending.length>1?'s':''} · `:''}Today is {new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
           </div>
           <div style={{display:'flex',gap:8}}><button onClick={()=>setPage('create-quote')} style={btnP}>New Quote</button><button onClick={()=>setPage('create-invoice')} style={{...btnP,background:T.green}}>New Invoice</button></div>
@@ -696,8 +696,6 @@ export default function CleanerDashboard() {
     function openCJ(j:Job,e:React.MouseEvent){e.stopPropagation();setCj(j);setEjMode(false);setEj({address:j.address||'',sqft:j.sqft?.toString()||'',beds:j.beds?.toString()||'',baths:j.baths?.toString()||'',notes:j.notes||'',customerName:j.customerName||'',worth:j.worth?.toString()||''})}
     async function saveCJ(){if(!cj)return;setSjSav(true);await fetch(`/api/jobs/${cj.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:ej.address||null,sqft:ej.sqft?parseInt(ej.sqft):null,beds:ej.beds?parseInt(ej.beds):null,baths:ej.baths?parseFloat(ej.baths):null,notes:ej.notes||null,customerName:ej.customerName||null,worth:ej.worth?parseFloat(ej.worth):null})});await load();setSjSav(false);setEjMode(false);showToast('Updated')}
 
-    const MAX=3
-
     return(<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:'calc(100vh - 72px)'}}>
       {/* Header */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexShrink:0}}>
@@ -729,54 +727,64 @@ export default function CleanerDashboard() {
         <div style={{display:'flex',gap:6,marginTop:8}}><input value={newRule.keyword} onChange={e=>setNewRule({...newRule,keyword:e.target.value})} placeholder='e.g. "Mike"' style={{...inp,flex:1,padding:'7px 10px',fontSize:12}}/><div style={{display:'flex',gap:2,alignItems:'center'}}>{PAL.slice(0,6).map(c=><div key={c} onClick={()=>setNewRule({...newRule,color:c})} style={{width:18,height:18,borderRadius:4,background:c,cursor:'pointer',border:newRule.color===c?'2px solid #fff':'2px solid transparent'}}/>)}</div><button onClick={()=>{if(newRule.keyword.trim()){sCR([...colorRules,{keyword:newRule.keyword.trim(),color:newRule.color}]);setNewRule({keyword:'',color:'#f59e0b'})}}} style={{padding:'7px 14px',borderRadius:6,border:'none',background:T.accent,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600}}>Add</button></div>
       </div>}
 
-      {/* Calendar grid — scrollable */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',border:`1px solid ${T.border}`,borderRadius:12,overflow:'hidden',boxShadow:T.shadow,minHeight:0}}>
-        {/* Day headers */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{padding:'10px 0',textAlign:'center',fontSize:12,fontWeight:600,color:T.muted,background:dark?'rgba(255,255,255,0.015)':'rgba(0,0,0,0.015)'}}>{d}</div>)}
-        </div>
-        {/* Scrollable rows */}
-        <div style={{flex:1,overflowY:'auto',display:'grid',gridTemplateColumns:'repeat(7,1fr)',gridTemplateRows:`repeat(${rows},minmax(100px,1fr))`}}>
-          {cells.map((cell,idx)=>{
-            const col=idx%7,row=Math.floor(idx/7)
-            const bR=col<6?`1px solid ${T.border}`:'none'
-            const bB=row<rows-1?`1px solid ${T.border}`:'none'
-            const isT=sameDay(cell.date,today)
-            const dj=jobsOn(cell.date),dq=quotesOn(cell.date)
-            const allEv=[...dj.map(j=>({t:'j' as const,j})),...dq.map(q=>({t:'q' as const,q}))]
-            const dk=cell.date.toISOString().split('T')[0]
-            const isExp=expandDay===dk
-            const vis=isExp?allEv:allEv.slice(0,MAX)
-            const over=allEv.length-MAX
-            const padOpacity=cell.isPad?0.4:1
+      {/* Calendar grid — table-based for equal columns */}
+      <div style={{flex:1,border:`1px solid ${T.border}`,borderRadius:12,overflow:'hidden',boxShadow:T.shadow,minHeight:0,display:'flex',flexDirection:'column'}}>
+        <div style={{flex:1,overflowY:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
+            <thead>
+              <tr>{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><th key={d} style={{padding:'10px 0',textAlign:'center',fontSize:12,fontWeight:600,color:T.muted,background:dark?'rgba(255,255,255,0.015)':'rgba(0,0,0,0.02)',borderBottom:`1px solid ${T.border}`,position:'sticky',top:0,zIndex:2}}>{d}</th>)}</tr>
+            </thead>
+            <tbody>
+              {Array.from({length:rows},(_,rowIdx)=>{
+                const rowCells=cells.slice(rowIdx*7,(rowIdx+1)*7)
+                const rowKey=rowCells.map(c=>c.date.toISOString().split('T')[0]).join(',')
+                // Check if any cell in this row is expanded
+                const rowExpanded=rowCells.some(c=>expandDay===c.date.toISOString().split('T')[0])
+                return(
+                  <tr key={rowIdx}>
+                    {rowCells.map((cell,ci)=>{
+                      const isT=sameDay(cell.date,today)
+                      const dj=jobsOn(cell.date),dq=quotesOn(cell.date)
+                      const allEv=[...dj.map(j=>({t:'j' as const,j})),...dq.map(q=>({t:'q' as const,q}))]
+                      const dk=cell.date.toISOString().split('T')[0]
+                      const isExp=expandDay===dk
+                      const vis=isExp?allEv:allEv.slice(0,5)
+                      const over=allEv.length-5
+                      const padOp=cell.isPad?0.4:1
 
-            return(
-              <div key={idx} style={{borderRight:bR,borderBottom:bB,padding:'6px 8px',display:'flex',flexDirection:'column',background:isT&&!cell.isPad?(dark?'rgba(56,189,248,0.04)':'rgba(2,132,199,0.03)'):'transparent',opacity:padOpacity,minHeight:100}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                  <span style={{fontSize:14,fontWeight:isT?700:cell.isPad?400:500,color:isT?T.accent:cell.isPad?T.dim:T.sub,width:28,height:28,display:'inline-flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT&&!cell.isPad?(dark?'rgba(56,189,248,0.1)':'rgba(2,132,199,0.08)'):'transparent'}}>{cell.day}</span>
-                  {allEv.length>0&&!cell.isPad&&<span style={{fontSize:10,color:T.dim}}>{allEv.length}</span>}
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:2,flex:1}}>
-                  {vis.map((ev,vi)=>{
-                    if(ev.t==='j'){const j=ev.j,c=jColor(j);return(
-                      <div key={j.id} onClick={e=>openCJ(j,e)} style={{padding:'3px 6px',borderRadius:5,background:`${c}18`,borderLeft:`3px solid ${c}`,cursor:'pointer',display:'flex',alignItems:'center',gap:5,overflow:'hidden',transition:'background .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}28`}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}18`}}>
-                        <span style={{fontSize:10,fontWeight:600,color:c,opacity:.7,flexShrink:0}}>{fmtTime(j.checkoutTime)}</span>
-                        <span style={{fontSize:11,fontWeight:600,color:cell.isPad?T.dim:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{jName(j)}</span>
-                      </div>
-                    )}
-                    if(ev.t==='q'){const q=ev.q;return(
-                      <div key={q.id} onClick={e=>{e.stopPropagation();openQuote(q)}} style={{padding:'3px 6px',borderRadius:5,background:T.greenBg,borderLeft:`3px solid ${T.green}`,cursor:'pointer',overflow:'hidden'}}>
-                        <span style={{fontSize:11,fontWeight:600,color:T.green,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.client.firstName} {q.client.lastName.charAt(0)}.</span>
-                      </div>
-                    )}
-                    return null
-                  })}
-                  {!isExp&&over>0&&<button onClick={e=>{e.stopPropagation();setExpandDay(dk)}} style={{fontSize:10,color:T.accent,fontWeight:600,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px'}}>+{over} more</button>}
-                  {isExp&&allEv.length>MAX&&<button onClick={e=>{e.stopPropagation();setExpandDay(null)}} style={{fontSize:10,color:T.dim,fontWeight:500,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px'}}>less</button>}
-                </div>
-              </div>
-            )
-          })}
+                      return(
+                        <td key={ci} style={{borderRight:ci<6?`1px solid ${T.border}`:'none',borderBottom:rowIdx<rows-1?`1px solid ${T.border}`:'none',padding:'5px 6px',verticalAlign:'top',background:isT&&!cell.isPad?(dark?'rgba(56,189,248,0.04)':'rgba(2,132,199,0.04)'):'transparent',opacity:padOp,height:rowExpanded?'auto':'100px',overflow:'hidden',position:'relative'}}>
+                          {/* Day number */}
+                          <div style={{marginBottom:3}}>
+                            <span style={{fontSize:13,fontWeight:isT?700:cell.isPad?400:500,color:isT?T.accent:cell.isPad?T.dim:T.sub,width:26,height:26,display:'inline-flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT&&!cell.isPad?(dark?'rgba(56,189,248,0.1)':'rgba(2,132,199,0.08)'):'transparent'}}>{cell.day}</span>
+                          </div>
+                          {/* Events */}
+                          <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                            {vis.map(ev=>{
+                              if(ev.t==='j'){const j=ev.j,c=jColor(j);return(
+                                <div key={j.id} onClick={e=>openCJ(j,e)} style={{padding:'2px 5px',borderRadius:4,background:`${c}18`,borderLeft:`3px solid ${c}`,cursor:'pointer',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis',transition:'background .1s'}} onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}28`}} onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=`${c}18`}}>
+                                  <span style={{fontSize:10,fontWeight:600,color:c,opacity:.7}}>{fmtTime(j.checkoutTime)} </span>
+                                  <span style={{fontSize:11,fontWeight:600,color:cell.isPad?T.dim:T.text}}>{jName(j)}</span>
+                                </div>
+                              )}
+                              if(ev.t==='q'){const q=ev.q;return(
+                                <div key={q.id} onClick={e=>{e.stopPropagation();openQuote(q)}} style={{padding:'2px 5px',borderRadius:4,background:T.greenBg,borderLeft:`3px solid ${T.green}`,cursor:'pointer',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>
+                                  <span style={{fontSize:11,fontWeight:600,color:T.green}}>{q.client.firstName} {q.client.lastName.charAt(0)}.</span>
+                                </div>
+                              )}
+                              return null
+                            })}
+                            {!isExp&&over>0&&<button onClick={e=>{e.stopPropagation();setExpandDay(dk)}} style={{fontSize:10,color:T.accent,fontWeight:600,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px'}}>+{over} more</button>}
+                            {isExp&&allEv.length>5&&<button onClick={e=>{e.stopPropagation();setExpandDay(null)}} style={{fontSize:10,color:T.dim,fontWeight:500,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 4px'}}>less</button>}
+                          </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -914,31 +922,31 @@ export default function CleanerDashboard() {
 
   return(
     <div style={{display:'flex',height:'100vh',overflow:'hidden',background:T.bg,fontFamily:'"Inter",-apple-system,BlinkMacSystemFont,sans-serif'}}>
-      {/* Sidebar */}
-      <nav style={{width:collapsed?56:200,minWidth:collapsed?56:200,background:T.nav,borderRight:`1px solid ${T.border}`,display:'flex',flexDirection:'column',transition:'width .15s,min-width .15s',overflow:'hidden',flexShrink:0}}>
-        <div style={{padding:'14px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:9,minWidth:200}}>
+      {/* Sidebar — always dark */}
+      <nav style={{width:collapsed?56:200,minWidth:collapsed?56:200,background:dark?'#0b0e14':'#0f2b42',borderRight:`1px solid rgba(255,255,255,0.06)`,display:'flex',flexDirection:'column',transition:'width .15s,min-width .15s',overflow:'hidden',flexShrink:0}}>
+        <div style={{padding:'14px 12px',borderBottom:'1px solid rgba(255,255,255,0.06)',display:'flex',alignItems:'center',gap:9,minWidth:200}}>
           <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#38bdf8,#0ea5e9)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" fill="white" opacity=".9"/><rect x="13" y="3" width="8" height="8" rx="2" fill="white" opacity=".5"/><rect x="3" y="13" width="8" height="8" rx="2" fill="white" opacity=".5"/><rect x="13" y="13" width="8" height="8" rx="2" fill="white" opacity=".2"/></svg>
           </div>
-          {!collapsed&&<div><div style={{fontSize:14,fontWeight:700,color:T.text}}>CleanSync</div><div style={{fontSize:9,color:T.dim,fontWeight:500,letterSpacing:1.5,textTransform:'uppercase' as const}}>Cleaner</div></div>}
+          {!collapsed&&<div><div style={{fontSize:14,fontWeight:700,color:'#eceef2'}}>CleanSync</div><div style={{fontSize:9,color:'rgba(255,255,255,0.35)',fontWeight:500,letterSpacing:1.5,textTransform:'uppercase' as const}}>Cleaner</div></div>}
         </div>
         <div style={{flex:1,padding:'8px 6px',display:'flex',flexDirection:'column',gap:1,overflowY:'auto'}}>
           {NAV.map(([id,icon,lbl,bdg])=>{const act=activeNav===id;return(
-            <button key={id} onClick={()=>setPage(id)} style={{display:'flex',alignItems:'center',gap:9,padding:collapsed?'8px':'8px 10px',borderRadius:8,border:'none',cursor:'pointer',background:act?T.accentBg:'transparent',color:act?T.accent:T.muted,fontFamily:'"Inter",sans-serif',fontSize:13,fontWeight:act?600:450,transition:'all .1s',textAlign:'left',width:'100%',justifyContent:collapsed?'center':'flex-start',position:'relative'}}>
+            <button key={id} onClick={()=>setPage(id)} style={{display:'flex',alignItems:'center',gap:9,padding:collapsed?'8px':'8px 10px',borderRadius:8,border:'none',cursor:'pointer',background:act?'rgba(56,189,248,0.1)':'transparent',color:act?'#38bdf8':'rgba(255,255,255,0.45)',fontFamily:'"Inter",sans-serif',fontSize:13,fontWeight:act?600:450,transition:'all .1s',textAlign:'left',width:'100%',justifyContent:collapsed?'center':'flex-start',position:'relative'}}>
               <span style={{fontSize:14,flexShrink:0,opacity:act?1:.65}}>{icon}</span>
               {!collapsed&&<span style={{flex:1,whiteSpace:'nowrap'}}>{lbl}</span>}
-              {!collapsed&&bdg!=null&&bdg>0&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:5,background:T.amberBg,color:T.amber,fontWeight:700,minWidth:14,textAlign:'center'}}>{bdg}</span>}
-              {act&&<div style={{position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',width:2.5,height:16,borderRadius:'0 2px 2px 0',background:T.accent}}/>}
+              {!collapsed&&bdg!=null&&bdg>0&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:5,background:'rgba(251,191,36,0.15)',color:'#fbbf24',fontWeight:700,minWidth:14,textAlign:'center'}}>{bdg}</span>}
+              {act&&<div style={{position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',width:2.5,height:16,borderRadius:'0 2px 2px 0',background:'#38bdf8'}}/>}
             </button>
           )})}
         </div>
-        <div style={{padding:'8px 6px',borderTop:`1px solid ${T.border}`,display:'flex',flexDirection:'column',gap:3}}>
-          <button onClick={()=>setDark(d=>!d)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 10px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:T.muted,fontSize:11,fontFamily:'"Inter",sans-serif',fontWeight:500,justifyContent:collapsed?'center':'flex-start'}}>
+        <div style={{padding:'8px 6px',borderTop:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',gap:3}}>
+          <button onClick={()=>setDark(d=>!d)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 10px',borderRadius:7,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',cursor:'pointer',color:'rgba(255,255,255,0.45)',fontSize:11,fontFamily:'"Inter",sans-serif',fontWeight:500,justifyContent:collapsed?'center':'flex-start'}}>
             <span style={{fontSize:12}}>{dark?'☀️':'🌙'}</span>{!collapsed&&<span>{dark?'Light':'Dark'}</span>}
           </button>
-          {!collapsed&&<div style={{padding:'6px 10px',borderRadius:7,background:T.surf}}><div style={{fontSize:11,fontWeight:600,color:T.sub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.name}</div><div style={{fontSize:9,color:T.dim,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.email}</div></div>}
-          <button onClick={logout} style={{width:'100%',padding:'6px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:T.dim,fontSize:10,fontFamily:'"Inter",sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>{collapsed?'↩':'Sign out'}</button>
-          <button onClick={()=>setCollapsed(p=>!p)} style={{width:'100%',padding:'6px',borderRadius:7,border:`1px solid ${T.border}`,background:'transparent',cursor:'pointer',color:T.dim,fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>{collapsed?'→':'←'}</button>
+          {!collapsed&&<div style={{padding:'6px 10px',borderRadius:7,background:'rgba(255,255,255,0.04)'}}><div style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.7)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.name}</div><div style={{fontSize:9,color:'rgba(255,255,255,0.3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{user!.email}</div></div>}
+          <button onClick={logout} style={{width:'100%',padding:'6px',borderRadius:7,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',cursor:'pointer',color:'rgba(255,255,255,0.3)',fontSize:10,fontFamily:'"Inter",sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>{collapsed?'↩':'Sign out'}</button>
+          <button onClick={()=>setCollapsed(p=>!p)} style={{width:'100%',padding:'6px',borderRadius:7,border:'1px solid rgba(255,255,255,0.06)',background:'transparent',cursor:'pointer',color:'rgba(255,255,255,0.3)',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>{collapsed?'→':'←'}</button>
         </div>
       </nav>
 
